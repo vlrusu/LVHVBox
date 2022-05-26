@@ -6,8 +6,15 @@ import struct
 import time
 import threading
 import readline
-#import matplotlib
-#import matplotlib.pyplot as plt
+
+from PyQt4.QtGui import *
+from PyQt4.QtCore import *
+
+from matplotlib.backends.backend_qt4agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.backends.backend_qt4agg import NavigationToolbar2QT as NavigationToolbar
+from matplotlib.figure import Figure
+from matplotlib.figure import *
+
 import math
 import rlcompleter
 from pprint import pprint
@@ -23,13 +30,11 @@ from grafana_api.grafana_face import GrafanaFace
 import signal
 signal.signal(signal.SIGINT, signal.SIG_DFL)
 
-from PyQt4.QtGui import *
-from PyQt4.QtCore import *
-
 
 os.environ["DISPLAY"] = ':0'
 background_color='background-color: blue;'
 button_color='background-color: white;'
+
 
 
 class Session():
@@ -119,15 +124,19 @@ class Window(QMainWindow,Session):
         # initialize control buttons
         self.controls_setup()
 
-        # initialize plotting Window
+        # initialize blade plotting Window
         self.plotting_setup()
+
+        # initialize board plotting Window
+        self.readMon_setup()
 
         # initialize diagnostics Window
         self.diagnostics_setup()
 
         self.tabs.addTab(self.tab1,"Controls")
-        self.tabs.addTab(self.tab2,"Plots")
-        self.tabs.addTab(self.tab3,"Diagnostics")
+        self.tabs.addTab(self.tab2,"Raw Blade Plots")
+        self.tabs.addTab(self.tab3,"Board Plots")
+        self.tabs.addTab(self.tab4,"Diagnostics")
 
         self.setWindowTitle("LVHV GUI")
         self.setCentralWidget(self.tabs)
@@ -137,9 +146,48 @@ class Window(QMainWindow,Session):
 
     def plotting_setup(self):
         self.tab2=QWidget()
+        self.tab2.layout=QGridLayout()
+
+        # set up the primary plot
+        self.main_plot=Figure()
+        self.main_plot_canvas=FigureCanvas(self.main_plot)
+        self.main_plot_axes=self.main_plot.add_subplot(111)
+
+        self.main_plot_axes.set_xlim([0,50])
+        self.main_plot_axes.set_ylim([0,100])
+        self.main_plot_axes.set_title('Channel 1 Blade Voltage')
+        self.main_plot_axes.set_ylabel('Voltage (V)')
+        self.main_plot_axes.set_xlabel('Iterative Age of Datapoint')
+
+        # initialize data (placed outside of bounds, so that it doesn't show up initially)
+        self.main_plot_data_y=[500]*50
+        self.main_plot_data_x=[*range(0,50,1)]
+
+        self.main_plot_data=self.main_plot_axes.plot(self.main_plot_data_x,self.main_plot_data_y,marker='o',linestyle='None',markersize=2,color='k')[0]
+
+
+        # add dropdown menus to select what's plotted
+        self.channel_selector=QComboBox()
+        self.channel_selector.addItems(["Channel 1","Channel 2","Channel 3","Channel 4","Channel 5","Channel 6"])
+        self.channel_selector.setStyleSheet(button_color)
+        self.channel_selector.currentIndexChanged.connect(self.change_main_plot)
+
+        self.measurement_selector=QComboBox()
+        self.measurement_selector.addItems(["Voltage","Current","Temperature"])
+        self.measurement_selector.setStyleSheet(button_color)
+        self.measurement_selector.currentIndexChanged.connect(self.change_main_plot)
+
+        # add widgets and set layout
+        self.tab2.layout.addWidget(self.channel_selector,0,0)
+        self.tab2.layout.addWidget(self.measurement_selector,1,0)
+        self.tab2.layout.addWidget(self.main_plot_canvas,0,1)
+        self.tab2.setLayout(self.tab2.layout)
+
+    def readMon_setup(self):
+        self.tab3=QWidget()
 
     def diagnostics_setup(self):
-        self.tab3=QWidget()
+        self.tab4=QWidget()
 
 
     def controls_setup(self):
@@ -147,9 +195,43 @@ class Window(QMainWindow,Session):
         self.tab1.layout=QGridLayout()
         self.tab1.layout.setContentsMargins(20,20,20,20)
 
-        # define buttons
-        self.power_button=QPushButton("On")
-        self.power_button.setStyleSheet(button_color)
+        # define buttons and indicators
+
+        self.power_button_1=QPushButton("Blade 1 Power")
+        self.power_button_1.setStyleSheet(button_color)
+        self.power_indicator_1=QCheckBox()
+        self.power_indicator_1.setStyleSheet('background-color: red')
+        self.power_indicator_1.setDisabled(True)
+
+        self.power_button_2=QPushButton("Blade 2 Power")
+        self.power_button_2.setStyleSheet(button_color)
+        self.power_indicator_2=QCheckBox()
+        self.power_indicator_2.setStyleSheet('background-color: red')
+        self.power_indicator_2.setDisabled(True)
+
+        self.power_button_3=QPushButton("Blade 3 Power")
+        self.power_button_3.setStyleSheet(button_color)
+        self.power_indicator_3=QCheckBox()
+        self.power_indicator_3.setStyleSheet('background-color: red')
+        self.power_indicator_3.setDisabled(True)
+
+        self.power_button_4=QPushButton("Blade 4 Power")
+        self.power_button_4.setStyleSheet(button_color)
+        self.power_indicator_4=QCheckBox()
+        self.power_indicator_4.setStyleSheet('background-color: red')
+        self.power_indicator_4.setDisabled(True)
+
+        self.power_button_5=QPushButton("Blade 5 Power")
+        self.power_button_5.setStyleSheet(button_color)
+        self.power_indicator_5=QCheckBox()
+        self.power_indicator_5.setStyleSheet('background-color: red')
+        self.power_indicator_5.setDisabled(True)
+
+        self.power_button_6=QPushButton("Blade 6 Power")
+        self.power_button_6.setStyleSheet(button_color)
+        self.power_indicator_6=QCheckBox()
+        self.power_indicator_6.setStyleSheet('background-color: red')
+        self.power_indicator_6.setDisabled(True)
 
 
         # create label for blade table
@@ -196,9 +278,33 @@ class Window(QMainWindow,Session):
             self.control_table.setCellWidget(i,2,current_entry)
 
         # add items to tab 1 layout
-        self.tab1.layout.addWidget(self.power_button,0,0)
-        self.tab1.layout.addWidget(self.control_table,1,1)
-        self.tab1.layout.addWidget(self.blade_table_label,0,1)
+        self.power_button_box=QWidget()
+        self.power_button_box.layout=QGridLayout()
+        self.power_button_box.layout.addWidget(self.power_button_1,0,0)
+        self.power_button_box.layout.addWidget(self.power_button_2,1,0)
+        self.power_button_box.layout.addWidget(self.power_button_3,2,0)
+        self.power_button_box.layout.addWidget(self.power_button_4,3,0)
+        self.power_button_box.layout.addWidget(self.power_button_5,4,0)
+        self.power_button_box.layout.addWidget(self.power_button_6,5,0)
+
+        self.power_button_box.layout.addWidget(self.power_indicator_1,0,1)
+        self.power_button_box.layout.addWidget(self.power_indicator_2,1,1)
+        self.power_button_box.layout.addWidget(self.power_indicator_3,2,1)
+        self.power_button_box.layout.addWidget(self.power_indicator_4,3,1)
+        self.power_button_box.layout.addWidget(self.power_indicator_5,4,1)
+        self.power_button_box.layout.addWidget(self.power_indicator_6,5,1)
+
+        self.power_button_box.setLayout(self.power_button_box.layout)
+
+        self.blade_table_box=QWidget()
+        self.blade_table_box.layout=QGridLayout()
+        self.blade_table_box.layout.addWidget(self.blade_table_label,0,1)
+        self.blade_table_box.layout.addWidget(self.control_table,1,1)
+        self.blade_table_box.setLayout(self.blade_table_box.layout)
+
+        self.tab1.layout.addWidget(self.power_button_box,0,0)
+        self.tab1.layout.addWidget(self.blade_table_box,0,1)
+
         self.tab1.setLayout(self.tab1.layout)
 
     def update_table(self):
@@ -207,15 +313,75 @@ class Window(QMainWindow,Session):
             self.blade_current_entries[j].setText(str(self.current[j]))
             self.blade_temperature_entries[j].setText(str(self.temperature[j]))
 
+    # acquires the channel being measured
+    def get_channel(self):
+        # determine which blade data is to be plotted for
+        channels={"Channel 1": 0,"Channel 2": 1,"Channel 3": 2,"Channel 4": 3,"Channel 5": 4,"Channel 6": 5}
+        channel=channels[self.channel_selector.currentText()]
+        return channel
+
+    # instantly changes what's being displayed on the main plot, depending on the user's selection
+    def change_main_plot(self):
+        channel=self.get_channel()
+        type=self.measurement_selector.currentText()
+
+        # update labels for the main plot
+        self.main_plot_axes.set_title(self.channel_selector.currentText() + ' Blade ' + type)
+        if type=="Voltage":
+            self.main_plot_axes.set_ylabel('Voltage (V)')
+        elif type=="Current":
+            self.main_plot_axes.set_ylabel('Current (A)')
+        else:
+            self.main_plot_axes.set_ylabel('Temperature (C)')
+
+        if type=="Voltage":
+            self.main_plot_data.set_ydata(self.blade_voltage_plot[channel])
+        elif type=="Current":
+            self.main_plot_data.set_ydata(self.blade_current_plot[channel])
+        else:
+            self.main_plot_data.set_ydata(self.blade_temperature_plot[channel])
+        self.main_plot_canvas.draw()
+        self.main_plot_canvas.flush_events()
+
+
+
+    # called by the timer to update the main plot with new data
+    def update_main_plot(self):
+        channel=self.get_channel()
+        type=self.measurement_selector.currentText()
+
+        # rotate plot lists
+        for i in range(len(self.blade_voltage_plot)):
+            self.blade_voltage_plot[i]=[self.voltage[i]]+self.blade_voltage_plot[i][:-1]
+            self.blade_current_plot[i]=[self.current[i]]+self.blade_current_plot[i][:-1]
+            self.blade_temperature_plot[i]=[self.temperature[i]]+self.blade_temperature_plot[i][:-1]
+
+        if type=="Voltage":
+            self.main_plot_data.set_ydata(self.blade_voltage_plot[channel])
+        elif type=="Current":
+            self.main_plot_data.set_ydata(self.blade_current_plot[channel])
+        else:
+            self.main_plot_data.set_ydata(self.blade_temperature_plot[channel])
+        self.main_plot_canvas.draw()
+        self.main_plot_canvas.flush_events()
+
+
     def assorted_update(self):
         self.get_data(True)
         self.update_table()
+        self.update_main_plot()
+
+    def initialize_data(self):
+        self.blade_voltage_plot=[[500]*50]*6
+        self.blade_current_plot=[[500]*50]*6
+        self.blade_temperature_plot=[[500]*50]*6
 
     def run(self):
+        self.initialize_data()
         self.timer = QTimer(self)
         self.timer.setSingleShot(False)
         self.timer.timeout.connect(self.assorted_update)
-        self.timer.start(3000)
+        self.timer.start(200)
 
 if __name__=="__main__":
     try:
