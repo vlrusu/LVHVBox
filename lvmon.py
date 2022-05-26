@@ -61,13 +61,6 @@ class Session():
         else:
             print("Testing Mode Exited")
 
-    def save_txt(self,text,test):
-        file1=open("logfile.txt", "a")
-        file1.write(text)
-        file1.close()
-        if test:
-            print(text)
-
     def get_data(self,test):
         # acquire Voltage
         voltage_values=[]
@@ -139,7 +132,23 @@ class Session():
         self.cond_voltage=cond_voltage
         self.cond_current=cond_current
 
+    def save_txt(self):
+        output=''
+        for i in range(0,6):
+            output+='ch'+str(i)
+            output+=','+str(self.voltage[i])
+            output+=','+str(self.current[i])
+            output+=','+str(self.temperature[i])
+            output+=','+str(self.five_voltage[i])
+            output+=','+str(self.five_current[i])
+            output+=','+str(self.cond_voltage[i])
+            output+=','+str(self.cond_current[i])
+            output+=','+str(time.time())
+        output+='\n'
 
+        file1=open("logfile.txt", "a")
+        file1.write(output)
+        file1.close()
 
 class Window(QMainWindow,Session):
     def __init__(self):
@@ -585,6 +594,7 @@ class Window(QMainWindow,Session):
         self.update_board_table()
         self.update_blade_plot()
         self.update_board_plot()
+        self.save_txt()
 
     def initialize_data(self):
         self.blade_voltage_plot=[[500]*50]*6
@@ -607,19 +617,6 @@ class Window(QMainWindow,Session):
 
 if __name__=="__main__":
     try:
-        """
-        while True:
-            voltage,current,temperature=get_data(True)
-            output=str(time.time())+","
-            for i in range(0,12):
-                output+="ch" + str(i)
-                output+=","+str(voltage[i])
-                output+=","+str(current[i])
-                output+=","+str(temperature[i])
-            output+="\n"
-            save_txt(output,True)
-            time.sleep(5)
-        """
         # create pyqt5 app
         App = QApplication(sys.argv)
         # create the instance of our Window
