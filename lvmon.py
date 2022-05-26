@@ -143,7 +143,7 @@ class Session():
             output+=','+str(self.five_current[i])
             output+=','+str(self.cond_voltage[i])
             output+=','+str(self.cond_current[i])
-            output+=','+str(time.time())
+        output+=','+str(time.time())
         output+='\n'
 
         file1=open("logfile.txt", "a")
@@ -277,41 +277,132 @@ class Window(QMainWindow,Session):
 
         # define buttons and indicators
 
-        self.power_button_1=QPushButton("Blade 1 Power")
-        self.power_button_1.setStyleSheet(button_color)
-        self.power_indicator_1=QCheckBox()
-        self.power_indicator_1.setStyleSheet('background-color: red')
-        self.power_indicator_1.setDisabled(True)
+        self.lv_power_button_1=QPushButton("LV 1")
+        self.lv_power_button_1.setFixedSize(QSize(40, 25))
+        self.lv_power_button_1.setStyleSheet(button_color)
+        self.lv_power_indicator_1=QCheckBox()
+        self.lv_power_indicator_1.setStyleSheet('background-color: red')
+        self.lv_power_indicator_1.setDisabled(True)
 
-        self.power_button_2=QPushButton("Blade 2 Power")
-        self.power_button_2.setStyleSheet(button_color)
-        self.power_indicator_2=QCheckBox()
-        self.power_indicator_2.setStyleSheet('background-color: red')
-        self.power_indicator_2.setDisabled(True)
+        self.lv_power_button_2=QPushButton("LV 2")
+        self.lv_power_button_2.setFixedSize(QSize(40, 25))
+        self.lv_power_button_2.setStyleSheet(button_color)
+        self.lv_power_indicator_2=QCheckBox()
+        self.lv_power_indicator_2.setStyleSheet('background-color: red')
+        self.lv_power_indicator_2.setDisabled(True)
 
-        self.power_button_3=QPushButton("Blade 3 Power")
-        self.power_button_3.setStyleSheet(button_color)
-        self.power_indicator_3=QCheckBox()
-        self.power_indicator_3.setStyleSheet('background-color: red')
-        self.power_indicator_3.setDisabled(True)
+        self.lv_power_button_3=QPushButton("LV 3")
+        self.lv_power_button_3.setFixedSize(QSize(40, 25))
+        self.lv_power_button_3.setStyleSheet(button_color)
+        self.lv_power_indicator_3=QCheckBox()
+        self.lv_power_indicator_3.setStyleSheet('background-color: red')
+        self.lv_power_indicator_3.setDisabled(True)
 
-        self.power_button_4=QPushButton("Blade 4 Power")
-        self.power_button_4.setStyleSheet(button_color)
-        self.power_indicator_4=QCheckBox()
-        self.power_indicator_4.setStyleSheet('background-color: red')
-        self.power_indicator_4.setDisabled(True)
+        self.lv_power_button_4=QPushButton("LV 4")
+        self.lv_power_button_4.setFixedSize(QSize(40, 25))
+        self.lv_power_button_4.setStyleSheet(button_color)
+        self.lv_power_indicator_4=QCheckBox()
+        self.lv_power_indicator_4.setStyleSheet('background-color: red')
+        self.lv_power_indicator_4.setDisabled(True)
 
-        self.power_button_5=QPushButton("Blade 5 Power")
-        self.power_button_5.setStyleSheet(button_color)
-        self.power_indicator_5=QCheckBox()
-        self.power_indicator_5.setStyleSheet('background-color: red')
-        self.power_indicator_5.setDisabled(True)
+        self.lv_power_button_5=QPushButton("LV 5")
+        self.lv_power_button_5.setFixedSize(QSize(40, 25))
+        self.lv_power_button_5.setStyleSheet(button_color)
+        self.lv_power_indicator_5=QCheckBox()
+        self.lv_power_indicator_5.setStyleSheet('background-color: red')
+        self.lv_power_indicator_5.setDisabled(True)
 
-        self.power_button_6=QPushButton("Blade 6 Power")
-        self.power_button_6.setStyleSheet(button_color)
-        self.power_indicator_6=QCheckBox()
-        self.power_indicator_6.setStyleSheet('background-color: red')
-        self.power_indicator_6.setDisabled(True)
+        self.lv_power_button_6=QPushButton("LV 6")
+        self.lv_power_button_6.setFixedSize(QSize(40, 25))
+        self.lv_power_button_6.setStyleSheet(button_color)
+        self.lv_power_indicator_6=QCheckBox()
+        self.lv_power_indicator_6.setStyleSheet('background-color: red')
+        self.lv_power_indicator_6.setDisabled(True)
+
+        self.hv_power_button_1=QPushButton("HV 1")
+        self.hv_power_button_1.setFixedSize(QSize(50, 25))
+        self.hv_power_button_1.setStyleSheet(button_color)
+        self.hv_power_indicator_1=QCheckBox()
+        self.hv_power_indicator_1.setStyleSheet('background-color: red')
+        self.hv_power_indicator_1.setDisabled(True)
+
+        self.hv_power_button_2=QPushButton("HV 2")
+        self.hv_power_button_2.setFixedSize(QSize(50, 25))
+        self.hv_power_button_2.setStyleSheet(button_color)
+        self.hv_power_indicator_2=QCheckBox()
+        self.hv_power_indicator_2.setStyleSheet('background-color: red')
+        self.hv_power_indicator_2.setDisabled(True)
+
+        self.hv_power_button_3=QPushButton("HV 3")
+        self.hv_power_button_3.setFixedSize(QSize(50, 25))
+        self.hv_power_button_3.setStyleSheet(button_color)
+        self.hv_power_indicator_3=QCheckBox()
+        self.hv_power_indicator_3.setStyleSheet('background-color: red')
+        self.hv_power_indicator_3.setDisabled(True)
+
+        self.hv_power_button_4=QPushButton("HV 4")
+        self.hv_power_button_4.setFixedSize(QSize(50, 25))
+        self.hv_power_button_4.setStyleSheet(button_color)
+        self.hv_power_indicator_4=QCheckBox()
+        self.hv_power_indicator_4.setStyleSheet('background-color: red')
+        self.hv_power_indicator_4.setDisabled(True)
+
+        self.hv_power_button_5=QPushButton("HV 5")
+        self.hv_power_button_5.setFixedSize(QSize(50, 25))
+        self.hv_power_button_5.setStyleSheet(button_color)
+        self.hv_power_indicator_5=QCheckBox()
+        self.hv_power_indicator_5.setStyleSheet('background-color: red')
+        self.hv_power_indicator_5.setDisabled(True)
+
+        self.hv_power_button_6=QPushButton("HV 6")
+        self.hv_power_button_6.setFixedSize(QSize(50, 25))
+        self.hv_power_button_6.setStyleSheet(button_color)
+        self.hv_power_indicator_6=QCheckBox()
+        self.hv_power_indicator_6.setStyleSheet('background-color: red')
+        self.hv_power_indicator_6.setDisabled(True)
+
+        self.hv_power_button_7=QPushButton("HV 7")
+        self.hv_power_button_7.setFixedSize(QSize(50, 25))
+        self.hv_power_button_7.setStyleSheet(button_color)
+        self.hv_power_indicator_7=QCheckBox()
+        self.hv_power_indicator_7.setStyleSheet('background-color: red')
+        self.hv_power_indicator_7.setDisabled(True)
+
+        self.hv_power_button_8=QPushButton("HV 8")
+        self.hv_power_button_8.setFixedSize(QSize(50, 25))
+        self.hv_power_button_8.setStyleSheet(button_color)
+        self.hv_power_indicator_8=QCheckBox()
+        self.hv_power_indicator_8.setStyleSheet('background-color: red')
+        self.hv_power_indicator_8.setDisabled(True)
+
+        self.hv_power_button_9=QPushButton("HV 9")
+        self.hv_power_button_9.setFixedSize(QSize(50, 25))
+        self.hv_power_button_9.setStyleSheet(button_color)
+        self.hv_power_indicator_9=QCheckBox()
+        self.hv_power_indicator_9.setStyleSheet('background-color: red')
+        self.hv_power_indicator_9.setDisabled(True)
+
+        self.hv_power_button_10=QPushButton("HV 10")
+        self.hv_power_button_10.setFixedSize(QSize(50, 25))
+        self.hv_power_button_10.setStyleSheet(button_color)
+        self.hv_power_indicator_10=QCheckBox()
+        self.hv_power_indicator_10.setStyleSheet('background-color: red')
+        self.hv_power_indicator_10.setDisabled(True)
+
+        self.hv_power_button_11=QPushButton("HV 11")
+        self.hv_power_button_11.setFixedSize(QSize(50, 25))
+        self.hv_power_button_11.setStyleSheet(button_color)
+        self.hv_power_indicator_11=QCheckBox()
+        self.hv_power_indicator_11.setStyleSheet('background-color: red')
+        self.hv_power_indicator_11.setDisabled(True)
+
+        self.hv_power_button_12=QPushButton("HV 12")
+        self.hv_power_button_12.setFixedSize(QSize(50, 25))
+        self.hv_power_button_12.setStyleSheet(button_color)
+        self.hv_power_indicator_12=QCheckBox()
+        self.hv_power_indicator_12.setStyleSheet('background-color: red')
+        self.hv_power_indicator_12.setDisabled(True)
+
 
         # setup blade table
         self.blade_control_table=QTableWidget()
@@ -320,7 +411,7 @@ class Window(QMainWindow,Session):
         self.blade_control_table.setFixedWidth(550)
         self.blade_control_table.setDisabled(True)
 
-        self.blade_control_table.setHorizontalHeaderLabels(["Voltage (V)","current (A)","Temperature (C)"])
+        self.blade_control_table.setHorizontalHeaderLabels(["Voltage (V)","current (A)","Temp (C)"])
         self.blade_control_table.setVerticalHeaderLabels(["Ch 1","Ch 2","Ch 3","Ch 4","Ch 5","Ch 6"])
         self.blade_control_table.horizontalHeader().setResizeMode(QHeaderView.Stretch)
 
@@ -413,34 +504,81 @@ class Window(QMainWindow,Session):
             self.board_control_table.setCellWidget(i,3,current_entry)
 
         # add items to tab 1 layout
-        self.power_button_box=QWidget()
-        self.power_button_box.layout=QGridLayout()
+        self.lv_power_button_box=QWidget()
+        self.lv_power_button_box.layout=QGridLayout()
+        self.hv_power_button_box=QWidget()
+        self.hv_power_button_box.layout=QGridLayout()
 
-        # add power buttons to layout
-        self.power_button_box.layout.addWidget(self.power_button_1,0,0)
-        self.power_button_box.layout.addWidget(self.power_button_2,1,0)
-        self.power_button_box.layout.addWidget(self.power_button_3,2,0)
-        self.power_button_box.layout.addWidget(self.power_button_4,3,0)
-        self.power_button_box.layout.addWidget(self.power_button_5,4,0)
-        self.power_button_box.layout.addWidget(self.power_button_6,5,0)
+        # add lv power buttons to layout
+        self.lv_power_button_box.layout.addWidget(self.lv_power_button_1,0,0)
+        self.lv_power_button_box.layout.addWidget(self.lv_power_button_2,1,0)
+        self.lv_power_button_box.layout.addWidget(self.lv_power_button_3,2,0)
+        self.lv_power_button_box.layout.addWidget(self.lv_power_button_4,3,0)
+        self.lv_power_button_box.layout.addWidget(self.lv_power_button_5,4,0)
+        self.lv_power_button_box.layout.addWidget(self.lv_power_button_6,5,0)
 
-        # add power indicators to layout
-        self.power_button_box.layout.addWidget(self.power_indicator_1,0,1)
-        self.power_button_box.layout.addWidget(self.power_indicator_2,1,1)
-        self.power_button_box.layout.addWidget(self.power_indicator_3,2,1)
-        self.power_button_box.layout.addWidget(self.power_indicator_4,3,1)
-        self.power_button_box.layout.addWidget(self.power_indicator_5,4,1)
-        self.power_button_box.layout.addWidget(self.power_indicator_6,5,1)
+        # add lv power indicators to layout
+        self.lv_power_button_box.layout.addWidget(self.lv_power_indicator_1,0,1)
+        self.lv_power_button_box.layout.addWidget(self.lv_power_indicator_2,1,1)
+        self.lv_power_button_box.layout.addWidget(self.lv_power_indicator_3,2,1)
+        self.lv_power_button_box.layout.addWidget(self.lv_power_indicator_4,3,1)
+        self.lv_power_button_box.layout.addWidget(self.lv_power_indicator_5,4,1)
+        self.lv_power_button_box.layout.addWidget(self.lv_power_indicator_6,5,1)
 
-        # connect power buttons to actuate_power()
-        self.power_button_1.clicked.connect(lambda: self.actuate_power(0))
-        self.power_button_2.clicked.connect(lambda: self.actuate_power(1))
-        self.power_button_3.clicked.connect(lambda: self.actuate_power(2))
-        self.power_button_4.clicked.connect(lambda: self.actuate_power(3))
-        self.power_button_5.clicked.connect(lambda: self.actuate_power(4))
-        self.power_button_6.clicked.connect(lambda: self.actuate_power(5))
+        # connect lv power buttons to actuate_lv_power()
+        self.lv_power_button_1.clicked.connect(lambda: self.actuate_lv_power(0))
+        self.lv_power_button_2.clicked.connect(lambda: self.actuate_lv_power(1))
+        self.lv_power_button_3.clicked.connect(lambda: self.actuate_lv_power(2))
+        self.lv_power_button_4.clicked.connect(lambda: self.actuate_lv_power(3))
+        self.lv_power_button_5.clicked.connect(lambda: self.actuate_lv_power(4))
+        self.lv_power_button_6.clicked.connect(lambda: self.actuate_lv_power(5))
 
-        self.power_button_box.setLayout(self.power_button_box.layout)
+        self.lv_power_button_box.setLayout(self.lv_power_button_box.layout)
+
+        # add hv power buttons to layout
+        self.hv_power_button_box.layout.addWidget(self.hv_power_button_1,0,0)
+        self.hv_power_button_box.layout.addWidget(self.hv_power_button_2,1,0)
+        self.hv_power_button_box.layout.addWidget(self.hv_power_button_3,2,0)
+        self.hv_power_button_box.layout.addWidget(self.hv_power_button_4,3,0)
+        self.hv_power_button_box.layout.addWidget(self.hv_power_button_5,4,0)
+        self.hv_power_button_box.layout.addWidget(self.hv_power_button_6,5,0)
+        self.hv_power_button_box.layout.addWidget(self.hv_power_button_7,6,0)
+        self.hv_power_button_box.layout.addWidget(self.hv_power_button_8,7,0)
+        self.hv_power_button_box.layout.addWidget(self.hv_power_button_9,8,0)
+        self.hv_power_button_box.layout.addWidget(self.hv_power_button_10,9,0)
+        self.hv_power_button_box.layout.addWidget(self.hv_power_button_11,10,0)
+        self.hv_power_button_box.layout.addWidget(self.hv_power_button_12,11,0)
+
+        # add hv power indicators to layout
+        self.hv_power_button_box.layout.addWidget(self.hv_power_indicator_1,0,1)
+        self.hv_power_button_box.layout.addWidget(self.hv_power_indicator_2,1,1)
+        self.hv_power_button_box.layout.addWidget(self.hv_power_indicator_3,2,1)
+        self.hv_power_button_box.layout.addWidget(self.hv_power_indicator_4,3,1)
+        self.hv_power_button_box.layout.addWidget(self.hv_power_indicator_5,4,1)
+        self.hv_power_button_box.layout.addWidget(self.hv_power_indicator_6,5,1)
+        self.hv_power_button_box.layout.addWidget(self.hv_power_indicator_7,6,1)
+        self.hv_power_button_box.layout.addWidget(self.hv_power_indicator_8,7,1)
+        self.hv_power_button_box.layout.addWidget(self.hv_power_indicator_9,8,1)
+        self.hv_power_button_box.layout.addWidget(self.hv_power_indicator_10,9,1)
+        self.hv_power_button_box.layout.addWidget(self.hv_power_indicator_11,10,1)
+        self.hv_power_button_box.layout.addWidget(self.hv_power_indicator_12,11,1)
+
+        #connect hv power buttons to actuate_hv_power
+        self.hv_power_button_1.clicked.connect(lambda: self.actuate_hv_power(0))
+        self.hv_power_button_2.clicked.connect(lambda: self.actuate_hv_power(1))
+        self.hv_power_button_3.clicked.connect(lambda: self.actuate_hv_power(2))
+        self.hv_power_button_4.clicked.connect(lambda: self.actuate_hv_power(3))
+        self.hv_power_button_5.clicked.connect(lambda: self.actuate_hv_power(4))
+        self.hv_power_button_6.clicked.connect(lambda: self.actuate_hv_power(5))
+        self.hv_power_button_7.clicked.connect(lambda: self.actuate_hv_power(6))
+        self.hv_power_button_8.clicked.connect(lambda: self.actuate_hv_power(7))
+        self.hv_power_button_9.clicked.connect(lambda: self.actuate_hv_power(8))
+        self.hv_power_button_10.clicked.connect(lambda: self.actuate_hv_power(9))
+        self.hv_power_button_11.clicked.connect(lambda: self.actuate_hv_power(10))
+        self.hv_power_button_12.clicked.connect(lambda: self.actuate_hv_power(11))
+
+        self.hv_power_button_box.setLayout(self.hv_power_button_box.layout)
+
 
         # add tab container to table_box
         self.table_box=QWidget()
@@ -448,15 +586,16 @@ class Window(QMainWindow,Session):
         self.table_box.layout.addWidget(self.table_tabs,0,1)
         self.table_box.setLayout(self.table_box.layout)
 
-        self.tab1.layout.addWidget(self.power_button_box,0,0)
-        self.tab1.layout.addWidget(self.table_box,0,1)
+        self.tab1.layout.addWidget(self.lv_power_button_box,0,0)
+        self.tab1.layout.addWidget(self.hv_power_button_box,0,1)
+        self.tab1.layout.addWidget(self.table_box,0,2)
 
         self.tab1.setLayout(self.tab1.layout)
 
-    # called when one of the power buttons is pressed
-    def actuate_power(self,number):
-        indicators=[self.power_indicator_1,self.power_indicator_2,self.power_indicator_3,
-        self.power_indicator_4,self.power_indicator_5,self.power_indicator_6]
+    # called when one of the lv power buttons is pressed
+    def actuate_lv_power(self,number):
+        indicators=[self.lv_power_indicator_1,self.lv_power_indicator_2,self.lv_power_indicator_3,
+        self.lv_power_indicator_4,self.lv_power_indicator_5,self.lv_power_indicator_6]
 
         if self.blade_power[number]==True:
             indicators[number].setStyleSheet('background-color: red')
@@ -465,6 +604,19 @@ class Window(QMainWindow,Session):
             indicators[number].setStyleSheet('background-color: green')
             self.blade_power[number]=True
 
+    # called when one of the hv power buttons is pressed
+    def actuate_hv_power(self,number):
+        indicators=[self.hv_power_indicator_1,self.hv_power_indicator_2,self.hv_power_indicator_3,
+        self.hv_power_indicator_4,self.hv_power_indicator_5,self.hv_power_indicator_6,
+        self.hv_power_indicator_7,self.hv_power_indicator_8,self.hv_power_indicator_9,
+        self.hv_power_indicator_10,self.hv_power_indicator_11,self.hv_power_indicator_12]
+
+        if self.hv_power[number]==True:
+            indicators[number].setStyleSheet('background-color: red')
+            self.hv_power[number]=False
+        else:
+            indicators[number].setStyleSheet('background-color: green')
+            self.hv_power[number]=True
 
     def update_blade_table(self):
         for j in range(6):
@@ -608,6 +760,9 @@ class Window(QMainWindow,Session):
 
         # keeps track of blade power statuses
         self.blade_power=[False]*6
+
+        # keeps track of hv power statuses
+        self.hv_power=[False]*12
 
     def run(self):
         self.timer = QTimer(self)
