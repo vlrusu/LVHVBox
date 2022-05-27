@@ -1,3 +1,6 @@
+# GUI/Monitoring Software for the LVHV Boxes
+# Coded by Isaiah Wardlaw
+
 import sys
 import glob
 import os
@@ -121,6 +124,22 @@ class Session():
             for i in range(0,6):
                 cond_current.append(round(random.uniform(10,20),3))
 
+        # acquire hv voltage
+        hv_voltage=[]
+        if not test:
+            pass
+        else:
+            for i in range(0,12):
+                hv_voltage.append(round(random.uniform(1450,1550),3))
+
+        # acquire hv current
+        hv_current=[]
+        if not test:
+            pass
+        else:
+            for i in range(0,12):
+                hv_current.append(round(random.uniform(30,40),3))
+
         # save data lists for blades
         self.voltage=voltage_values
         self.current=current_values
@@ -131,6 +150,10 @@ class Session():
         self.five_current=five_current
         self.cond_voltage=cond_voltage
         self.cond_current=cond_current
+
+        # save data lists for hv
+        self.hv_voltage=hv_voltage
+        self.hv_current=hv_current
 
     def save_txt(self):
         output=''
@@ -426,20 +449,39 @@ class Window(QMainWindow,Session):
         self.board_control_table.setVerticalHeaderLabels(["Ch 1","Ch 2","Ch 3","Ch 4","Ch 5","Ch 6"])
         self.board_control_table.horizontalHeader().setResizeMode(QHeaderView.Stretch)
 
+        # setup hv table
+        self.hv_control_table=QTableWidget()
+        self.hv_control_table.setRowCount(12)
+        self.hv_control_table.setColumnCount(2)
+        self.hv_control_table.setFixedWidth(550)
+        self.hv_control_table.setDisabled(True)
+        for i in range(0,12):
+            self.hv_control_table.setRowHeight(i,24)
+
+        self.hv_control_table.setVerticalHeaderLabels(["Ch 1","Ch 2","Ch 3","Ch 4","Ch 5","Ch 6","Ch 7","Ch 8","Ch 9","Ch 10","Ch 11","Ch 12"])
+        self.hv_control_table.setHorizontalHeaderLabels(["Voltage (V)","Current (A)"])
+
+
+
         # set up tabs to select whether to view blade data or board data
         self.table_tabs=QTabWidget()
         self.table_tab1=QWidget()
         self.table_tab1.layout=QGridLayout()
         self.table_tab2=QWidget()
         self.table_tab2.layout=QGridLayout()
+        self.table_tab3=QWidget()
+        self.table_tab3.layout=QGridLayout()
         self.table_tabs.addTab(self.table_tab1,"Blade Data")
         self.table_tabs.addTab(self.table_tab2,"Board Data")
+        self.table_tabs.addTab(self.table_tab3,"HV Data")
 
         # add table widgets to tab container
         self.table_tab1.layout.addWidget(self.blade_control_table,0,0)
         self.table_tab1.setLayout(self.table_tab1.layout)
         self.table_tab2.layout.addWidget(self.board_control_table,0,0)
         self.table_tab2.setLayout(self.table_tab2.layout)
+        self.table_tab3.layout.addWidget(self.hv_control_table,0,0)
+        self.table_tab3.setLayout(self.table_tab3.layout)
 
         # fill blade table with entries and set background color
         self.blade_voltage_entries=[]
@@ -502,6 +544,25 @@ class Window(QMainWindow,Session):
             current_entry.setStyleSheet(button_color)
             self.board_cond_current_entries.append(current_entry)
             self.board_control_table.setCellWidget(i,3,current_entry)
+
+        # fill board table with entries and set background color
+        self.hv_voltage_entries=[]
+        self.hv_current_entries=[]
+
+        for i in range(12):
+            # fill with hv voltage entries
+            current_entry=QLabel("N/A")
+            current_entry.setAlignment(Qt.AlignCenter)
+            current_entry.setStyleSheet(button_color)
+            self.hv_voltage_entries.append(current_entry)
+            self.hv_control_table.setCellWidget(i,0,current_entry)
+
+            # fill with hv current entries
+            current_entry=QLabel("N/A")
+            current_entry.setAlignment(Qt.AlignCenter)
+            current_entry.setStyleSheet(button_color)
+            self.hv_current_entries.append(current_entry)
+            self.hv_control_table.setCellWidget(i,1,current_entry)
 
         # add items to tab 1 layout
         self.lv_power_button_box=QWidget()
@@ -631,6 +692,11 @@ class Window(QMainWindow,Session):
             self.board_cond_voltage_entries[j].setText(str(self.cond_voltage[j]))
             self.board_cond_current_entries[j].setText(str(self.cond_current[j]))
 
+    def update_hv_table(self):
+        for j in range(12):
+            self.hv_voltage_entries[j].setText(str(self.hv_voltage[j]))
+            self.hv_current_entries[j].setText(str(self.hv_current[j]))
+
     # acquires the channel being measured
     def get_blade_channel(self):
         # determine which blade data is to be plotted for
@@ -744,6 +810,7 @@ class Window(QMainWindow,Session):
         self.get_data(True)
         self.update_blade_table()
         self.update_board_table()
+        self.update_hv_table()
         self.update_blade_plot()
         self.update_board_plot()
         self.save_txt()
