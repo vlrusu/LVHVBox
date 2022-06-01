@@ -38,6 +38,8 @@ os.environ["DISPLAY"] = ':0'
 background_color='background-color: white;'
 button_color='background-color: white;'
 
+# serial to acquire hv data
+import serial
 
 
 class Session():
@@ -65,10 +67,28 @@ class Session():
             print("Testing Mode Exited")
 
     def get_data(self,test):
+        if not test:
+
+            try:
+                ser = serial.Serial('/dev/ttyACM0', 115200, timeout=1.5)
+                line = ser.readline().decode('ascii')
+                print("line: "+str(line))
+
+                processed_line = line.split(" ")
+                print("processed line: " + str(processed_line) +"\n\n")
+
+                current=[]
+                voltage=[]
+
+            except:
+                print("improper communication with pico")
+
+
         # acquire Voltage
         voltage_values=[]
         if not test:
-            pass
+            for i in range(0,6):
+                voltage_values.append(round(random.uniform(35,45),3))
         else:
             for i in range(0,6):
                 voltage_values.append(round(random.uniform(35,45),3))
@@ -77,7 +97,8 @@ class Session():
         # acquire Current
         current_values=[]
         if not test:
-            pass
+            for i in range(0,6):
+                current_values.append(round(random.uniform(10,15),3))
         else:
             for i in range(0,6):
                 current_values.append(round(random.uniform(10,15),3))
@@ -86,7 +107,8 @@ class Session():
         # acquire Temperature
         temperature_values=[]
         if not test:
-            pass
+            for i in range(0,6):
+                temperature_values.append(round(random.uniform(28,35),3))
         else:
             for i in range(0,6):
                 temperature_values.append(round(random.uniform(28,35),3))
@@ -95,7 +117,8 @@ class Session():
         # acquire 5v voltage
         five_voltage=[]
         if not test:
-            pass
+            for i in range(0,6):
+                five_voltage.append(round(random.uniform(45,52),3))
         else:
             for i in range(0,6):
                 five_voltage.append(round(random.uniform(45,52),3))
@@ -103,7 +126,8 @@ class Session():
         # acquire 5v current
         five_current=[]
         if not test:
-            pass
+            for i in range(0,6):
+                five_current.append(round(random.uniform(10,20),3))
         else:
             for i in range(0,6):
                 five_current.append(round(random.uniform(10,20),3))
@@ -111,7 +135,8 @@ class Session():
         # acquire conditioned voltage
         cond_voltage=[]
         if not test:
-            pass
+            for i in range(0,6):
+                cond_voltage.append(round(random.uniform(45,52),3))
         else:
             for i in range(0,6):
                 cond_voltage.append(round(random.uniform(45,52),3))
@@ -119,7 +144,8 @@ class Session():
         # acquire conditioned current
         cond_current=[]
         if not test:
-            pass
+            for i in range(0,6):
+                cond_current.append(round(random.uniform(10,20),3))
         else:
             for i in range(0,6):
                 cond_current.append(round(random.uniform(10,20),3))
@@ -127,7 +153,8 @@ class Session():
         # acquire hv voltage
         hv_voltage=[]
         if not test:
-            pass
+            for i in range(0,12):
+                hv_voltage.append(round(random.uniform(1450,1550),3))
         else:
             for i in range(0,12):
                 hv_voltage.append(round(random.uniform(1450,1550),3))
@@ -135,7 +162,8 @@ class Session():
         # acquire hv current
         hv_current=[]
         if not test:
-            pass
+            for i in range(0,12):
+                hv_current.append(round(random.uniform(30,40),3))
         else:
             for i in range(0,12):
                 hv_current.append(round(random.uniform(30,40),3))
@@ -886,7 +914,7 @@ class Window(QMainWindow,Session):
         self.hv_plot_canvas.flush_events()
 
     def assorted_update(self):
-        self.get_data(True)
+        self.get_data(False)
         self.update_blade_table()
         self.update_board_table()
         self.update_hv_table()
