@@ -457,19 +457,70 @@ class Window(QMainWindow,Session):
         self.hv_power_button_12.setStyleSheet('background-color: red')
         self.hv_power_button_12.setFont(QFont("Arial", 30))
 
+        # initialize hv ramp up bars
+        self.hv_bar_1=QProgressBar()
+        self.hv_bar_1.setFixedSize(QSize(130, 20))
+
+        self.hv_bar_2=QProgressBar()
+        self.hv_bar_2.setFixedSize(QSize(130, 20))
+
+        self.hv_bar_3=QProgressBar()
+        self.hv_bar_3.setFixedSize(QSize(130, 20))
+
+        self.hv_bar_4=QProgressBar()
+        self.hv_bar_4.setFixedSize(QSize(130, 20))
+
+        self.hv_bar_5=QProgressBar()
+        self.hv_bar_5.setFixedSize(QSize(130, 20))
+
+        self.hv_bar_6=QProgressBar()
+        self.hv_bar_6.setFixedSize(QSize(130, 20))
+
+        self.hv_bar_7=QProgressBar()
+        self.hv_bar_7.setFixedSize(QSize(130, 20))
+
+        self.hv_bar_8=QProgressBar()
+        self.hv_bar_8.setFixedSize(QSize(130, 20))
+
+        self.hv_bar_9=QProgressBar()
+        self.hv_bar_9.setFixedSize(QSize(130, 20))
+
+        self.hv_bar_10=QProgressBar()
+        self.hv_bar_10.setFixedSize(QSize(130, 20))
+
+        self.hv_bar_11=QProgressBar()
+        self.hv_bar_11.setFixedSize(QSize(130, 20))
+
+        self.hv_bar_12=QProgressBar()
+        self.hv_bar_12.setFixedSize(QSize(130, 20))
+
         # add hv power buttons to layout
-        self.tab3.layout.addWidget(self.hv_power_button_1,0,0)
-        self.tab3.layout.addWidget(self.hv_power_button_2,0,1)
-        self.tab3.layout.addWidget(self.hv_power_button_3,0,2)
-        self.tab3.layout.addWidget(self.hv_power_button_4,0,3)
-        self.tab3.layout.addWidget(self.hv_power_button_5,1,0)
-        self.tab3.layout.addWidget(self.hv_power_button_6,1,1)
-        self.tab3.layout.addWidget(self.hv_power_button_7,1,2)
-        self.tab3.layout.addWidget(self.hv_power_button_8,1,3)
-        self.tab3.layout.addWidget(self.hv_power_button_9,2,0)
-        self.tab3.layout.addWidget(self.hv_power_button_10,2,1)
-        self.tab3.layout.addWidget(self.hv_power_button_11,2,2)
-        self.tab3.layout.addWidget(self.hv_power_button_12,2,3)
+        self.tab3.layout.addWidget(self.hv_power_button_1,1,0)
+        self.tab3.layout.addWidget(self.hv_power_button_2,1,1)
+        self.tab3.layout.addWidget(self.hv_power_button_3,1,2)
+        self.tab3.layout.addWidget(self.hv_power_button_4,1,3)
+        self.tab3.layout.addWidget(self.hv_power_button_5,3,0)
+        self.tab3.layout.addWidget(self.hv_power_button_6,3,1)
+        self.tab3.layout.addWidget(self.hv_power_button_7,3,2)
+        self.tab3.layout.addWidget(self.hv_power_button_8,3,3)
+        self.tab3.layout.addWidget(self.hv_power_button_9,5,0)
+        self.tab3.layout.addWidget(self.hv_power_button_10,5,1)
+        self.tab3.layout.addWidget(self.hv_power_button_11,5,2)
+        self.tab3.layout.addWidget(self.hv_power_button_12,5,3)
+
+        # add hv progress bars to layout
+        self.tab3.layout.addWidget(self.hv_bar_1,0,0)
+        self.tab3.layout.addWidget(self.hv_bar_2,0,1)
+        self.tab3.layout.addWidget(self.hv_bar_3,0,2)
+        self.tab3.layout.addWidget(self.hv_bar_4,0,3)
+        self.tab3.layout.addWidget(self.hv_bar_5,2,0)
+        self.tab3.layout.addWidget(self.hv_bar_6,2,1)
+        self.tab3.layout.addWidget(self.hv_bar_7,2,2)
+        self.tab3.layout.addWidget(self.hv_bar_8,2,3)
+        self.tab3.layout.addWidget(self.hv_bar_9,4,0)
+        self.tab3.layout.addWidget(self.hv_bar_10,4,1)
+        self.tab3.layout.addWidget(self.hv_bar_11,4,2)
+        self.tab3.layout.addWidget(self.hv_bar_12,4,3)
 
         #connect hv power buttons to actuate_hv_power
         self.hv_power_button_1.clicked.connect(lambda: self.actuate_hv_power(0))
