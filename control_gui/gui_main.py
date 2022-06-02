@@ -831,7 +831,7 @@ class Window(QMainWindow,Session):
 
             # if gui isn't in test mode, power up hv channel
             if self.test is False:
-                self.rampup.set_hv(number,100)
+                self.rampup.set_hv(number,1500)
 
     def update_blade_table(self):
         for j in range(6):
@@ -1048,13 +1048,14 @@ if __name__=="__main__":
         # run the lv initialization function
         window.initialize_lv(True)
 
+
         # import c functions for lv
         rampup = "/home/pi/working_proto/rampup.so"
         window.rampup=CDLL(rampup)
-        window.test = True
+        window.test = False
 
         # run the hv initialization program
-        window.initialize_hv(True)
+        window.initialize_hv(False)
 
         window.run()
 
