@@ -27,12 +27,15 @@ from smbus import SMBus
 import RPi.GPIO as GPIO
 from RPiMCP23S17.MCP23S17 import MCP23S17
 import random
-from grafana_api.grafana_face import GrafanaFace
 
 # ensure that the window closes on control c
 import signal
 signal.signal(signal.SIGINT, signal.SIG_DFL)
 
+import wiringpi
+
+# import c functions for lv
+from ctypes import *
 
 os.environ["DISPLAY"] = ':0'
 background_color='background-color: white;'
@@ -89,6 +92,12 @@ class Session():
 
             if "libedit" in readline.__doc__:
                 self.readline.parse_and_bind("bind ^I rl_complete")
+        else:
+            pass
+
+    def initialize_hv(self,test):
+        if not test:
+            self.rampup.initialize_hv()
         else:
             pass
 
@@ -231,7 +240,6 @@ class Session():
                 # todo ensure proper length of hv current and voltage
 
             except:
-                print("improper communication")
                 return False
         else:
             for i in range(0,12):
@@ -813,9 +821,17 @@ class Window(QMainWindow,Session):
         if self.hv_power[number]==True:
             indicators[number].setStyleSheet('background-color: red')
             self.hv_power[number]=False
+
+            # if gui isn't in test mode, power down hv channel
+            if self.test is False:
+                self.rampup.set_hv(number,0)
         else:
             indicators[number].setStyleSheet('background-color: green')
             self.hv_power[number]=True
+
+            # if gui isn't in test mode, power up hv channel
+            if self.test is False:
+                self.rampup.set_hv(number,1500)
 
     def update_blade_table(self):
         for j in range(6):
@@ -1031,6 +1047,15 @@ if __name__=="__main__":
 
         # run the lv initialization function
         window.initialize_lv(True)
+
+
+        # import c functions for lv
+        rampup = "/home/pi/working_proto/rampup.so"
+        window.rampup=CDLL(rampup)
+        window.test = False
+
+        # run the hv initialization program
+        window.initialize_hv(False)
 
         window.run()
 
