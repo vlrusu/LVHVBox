@@ -222,10 +222,16 @@ class Session():
                         else:
                             end = True
 
+                # temporary measure because only one pico is connected
+                hv_current=hv_current+hv_current
+                hv_voltage=hv_voltage+hv_voltage
+
+                assert len(hv_current) == 12
+                assert len(hv_voltage) == 12
                 # todo ensure proper length of hv current and voltage
 
             except:
-                print("improper communication with pico")
+                print("improper communication")
                 return False
         else:
             for i in range(0,12):
@@ -980,14 +986,15 @@ class Window(QMainWindow,Session):
         self.hv_plot_canvas.flush_events()
 
     def assorted_update(self):
-        self.get_data(True)
-        self.update_blade_table()
-        self.update_board_table()
-        self.update_hv_table()
-        self.update_blade_plot()
-        self.update_board_plot()
-        self.update_hv_plot()
-        self.save_txt()
+        update=self.get_data(False)
+        if update:
+            self.update_blade_table()
+            self.update_board_table()
+            self.update_hv_table()
+            self.update_blade_plot()
+            self.update_board_plot()
+            self.update_hv_plot()
+            self.save_txt()
 
     def initialize_data(self):
         self.blade_voltage_plot=[[500]*50]*6
