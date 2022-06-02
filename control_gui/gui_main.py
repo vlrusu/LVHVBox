@@ -821,9 +821,17 @@ class Window(QMainWindow,Session):
         if self.hv_power[number]==True:
             indicators[number].setStyleSheet('background-color: red')
             self.hv_power[number]=False
+
+            # if gui isn't in test mode, power down hv channel
+            if self.test is False:
+                self.rampup.set_hv(number,0)
         else:
             indicators[number].setStyleSheet('background-color: green')
             self.hv_power[number]=True
+
+            # if gui isn't in test mode, power up hv channel
+            if self.test is False:
+                self.rampup.set_hv(number,100)
 
     def update_blade_table(self):
         for j in range(6):
@@ -1043,6 +1051,7 @@ if __name__=="__main__":
         # import c functions for lv
         rampup = "/home/pi/working_proto/rampup.so"
         window.rampup=CDLL(rampup)
+        window.test = True
 
         # run the hv initialization program
         window.initialize_hv(True)
