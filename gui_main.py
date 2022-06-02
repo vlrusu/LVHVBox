@@ -66,27 +66,47 @@ class Session():
         else:
             print("Testing Mode Exited")
 
-    def get_data(self,test):
+    def initialize_lv(self,test):
         if not test:
+            self.mcp1 = MCP23S17(bus=0x00, pin_cs=0x00, device_id=0x00)
 
-            try:
-                ser = serial.Serial('/dev/ttyACM0', 115200, timeout=1.5)
-                line = ser.readline().decode('ascii')
-                print("line: "+str(line))
+            self.mcp1.open()
+            self.mcp1._spi.max_speed_hz = 10000000
 
-                processed_line = line.split(" ")
-                print("processed line: " + str(processed_line) +"\n\n")
+            for x in range(8, 16):
+                self.mcp1.setDirection(x, mcp1.DIR_OUTPUT)
+                self.mcp1.digitalWrite(x, MCP23S17.LEVEL_LOW)
 
-                current=[]
-                voltage=[]
+            self.I2C_sleep_time = 0.2 # seconds to sleep between each channel reading
+            self.bus = SMBus(1)
 
-            except:
-                print("improper communication with pico")
+            self.max_reading = 8388608.0
+            self.vref = 2.048
 
+            self.pins = ["P9_15","P9_15","P9_15","P9_27","P9_41","P9_12"]
+            self.GLOBAL_ENABLE_PIN =  15
+            self.RESET_PIN = 32
+
+            if "libedit" in readline.__doc__:
+                self.readline.parse_and_bind("bind ^I rl_complete")
+        else:
+            pass
+
+    def get_data(self,test):
 
         # acquire Voltage
         voltage_values=[]
         if not test:
+            """
+            for i in range(0,6):
+                # acquire the voltage measurement for each of the six blades
+                self.bus.write_byte_data(0x50,0x0,i+1)
+                reading=self.bus.read_byte_data(0x50,0xD0)
+                value=float(reading[0]+256*reading[1])/256.
+
+                # append acquired voltage measurement to output list
+                voltage_values.append(round(value,3))
+            """
             for i in range(0,6):
                 voltage_values.append(round(random.uniform(35,45),3))
         else:
@@ -97,6 +117,21 @@ class Session():
         # acquire Current
         current_values=[]
         if not test:
+            """
+            for i in range(0,6):
+                # acquire the current measurement for each of the six blades
+                self.bus.write_byte_data(0x50,0x0,i+1)
+                reading=self.bus.read_byte_data(0x50,0xD0)
+                reading=self.bus.read_i2c_block_data(0x50,0x8C,2)
+                value=reading[0]+256*reading[1]
+                exponent=(value >> 11) & 0x1f
+                exponent=exponent-32
+                mantissa=value & 0x7ff
+                current=mantissa*2**exponent
+
+                # append acquired current measurement to output list
+                current_values.append(round(current,3))
+            """
             for i in range(0,6):
                 current_values.append(round(random.uniform(10,15),3))
         else:
@@ -107,6 +142,19 @@ class Session():
         # acquire Temperature
         temperature_values=[]
         if not test:
+            """
+            for i in range(0,6):
+                # acquire the temperature measurement for each of the six blades
+                self.bus.write_byte_data(0x50,0x0,i+1)
+                reading=self.bus.read_byte_data(0x50,0xD0)
+                reading=self.bus.read_i2c_block_data(0x50,0x8D,2)
+                value-reading[0]+256*reading[1]
+                exponent=(value >> 11) & 0x1f
+                temp=mantissa*2**exponent
+
+                # append acquired temperature measurement to output list
+                temperature_values.append(round(temp,3))
+            """
             for i in range(0,6):
                 temperature_values.append(round(random.uniform(28,35),3))
         else:
@@ -150,23 +198,39 @@ class Session():
             for i in range(0,6):
                 cond_current.append(round(random.uniform(10,20),3))
 
-        # acquire hv voltage
+
+        # acquire hv current and voltage
+        hv_current=[]
         hv_voltage=[]
         if not test:
-            for i in range(0,12):
-                hv_voltage.append(round(random.uniform(1450,1550),3))
-        else:
-            for i in range(0,12):
-                hv_voltage.append(round(random.uniform(1450,1550),3))
+            try:
+                ser = serial.Serial('/dev/ttyACM0', 115200, timeout=1)
+                line = ser.readline().decode('ascii')
 
-        # acquire hv current
-        hv_current=[]
-        if not test:
-            for i in range(0,12):
-                hv_current.append(round(random.uniform(30,40),3))
+                processed_line = line.split(" ")
+
+                on_voltage=False
+                end=False
+                for i in processed_line:
+                    if i != '' and i != '|' and on_voltage is False:
+                        hv_current.append(float(i))
+                    elif i != '' and i != '|' and on_voltage is True and end is False:
+                        hv_voltage.append(float(i))
+                    elif end is False and i == '|':
+                        if on_voltage is False:
+                            on_voltage = True
+                        else:
+                            end = True
+
+                # todo ensure proper length of hv current and voltage
+
+            except:
+                print("improper communication with pico")
+                return False
         else:
             for i in range(0,12):
-                hv_current.append(round(random.uniform(30,40),3))
+                hv_voltage.append(round(random.uniform(1450,1550),3))
+                hv_current.append(round(random.uniform(20,30),3))
 
         # save data lists for blades
         self.voltage=voltage_values
@@ -182,6 +246,8 @@ class Session():
         # save data lists for hv
         self.hv_voltage=hv_voltage
         self.hv_current=hv_current
+
+        return True
 
     def save_txt(self):
         output=''
@@ -914,7 +980,7 @@ class Window(QMainWindow,Session):
         self.hv_plot_canvas.flush_events()
 
     def assorted_update(self):
-        self.get_data(False)
+        self.get_data(True)
         self.update_blade_table()
         self.update_board_table()
         self.update_hv_table()
@@ -952,8 +1018,12 @@ if __name__=="__main__":
     try:
         # create pyqt5 app
         App = QApplication(sys.argv)
+
         # create the instance of our Window
         window = Window()
+
+        # run the lv initialization function
+        window.initialize_lv(True)
 
         window.run()
 
