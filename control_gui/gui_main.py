@@ -107,39 +107,62 @@ class Session():
         self.hv_power_button_7,self.hv_power_button_8,self.hv_power_button_9,
         self.hv_power_button_10,self.hv_power_button_11,self.hv_power_button_12]
 
-
+        # disable the hv controls in order to prevent simultaneous interactions from calling issues
         for i in indicators:
             i.setDisabled(True)
 
+        # depending on the "on" arg, actuate the hv channel
         if on == True:
             self.rampup.rampup_hv(channel,1500)
         else:
             self.rampup.rampup_hv(channel,0)
 
-        for i in range(len(indicators)):
-            indicators[i].setDisabled(False)
+        # enable the hv controls, now that interaction with hv channel
+        for i in indicators:
+            i.setDisabled(False)
 
 
 
 
 
     def get_data(self,test):
+        # initialize lv data acquisition
+        # TODO remove and put in initialization function
+        mcp1 = MCP23S17(bus=0x00, pin_cs=0x01, device_id=0x00)
+
+        mcp1.open()
+        mcp1._spi.max_speed_hz = 10000000
+
+        for x in range(8, 16):
+            mcp1.setDirection(x, mcp1.DIR_OUTPUT)
+            mcp1.digitalWrite(x, MCP23S17.LEVEL_LOW)
+
+        I2C_sleep_time = 0.5 # seconds to sleep between each channel reading
+        self.bus = SMBus(1)
+
+        max_reading = 8388608.0
+        vref = 2.048
+
+        pins = ["P9_15","P9_15","P9_15","P9_27","P9_41","P9_12"]
+        GLOBAL_ENABLE_PIN =  15
+        RESET_PIN = 32
+
+        addresses = [0x14,0x16,0x26]
+
+
+
 
         # acquire Voltage
         voltage_values=[]
         if not test:
-            """
             for i in range(0,6):
                 # acquire the voltage measurement for each of the six blades
                 self.bus.write_byte_data(0x50,0x0,i+1)
-                reading=self.bus.read_byte_data(0x50,0xD0)
+                reading=self.bus.read_i2c_block_data(0x50,0x8B,2)
                 value=float(reading[0]+256*reading[1])/256.
 
                 # append acquired voltage measurement to output list
                 voltage_values.append(round(value,3))
-            """
-            for i in range(0,6):
-                voltage_values.append(round(random.uniform(35,45),3))
         else:
             for i in range(0,6):
                 voltage_values.append(round(random.uniform(35,45),3))
@@ -148,11 +171,9 @@ class Session():
         # acquire Current
         current_values=[]
         if not test:
-            """
             for i in range(0,6):
                 # acquire the current measurement for each of the six blades
                 self.bus.write_byte_data(0x50,0x0,i+1)
-                reading=self.bus.read_byte_data(0x50,0xD0)
                 reading=self.bus.read_i2c_block_data(0x50,0x8C,2)
                 value=reading[0]+256*reading[1]
                 exponent=(value >> 11) & 0x1f
@@ -162,9 +183,6 @@ class Session():
 
                 # append acquired current measurement to output list
                 current_values.append(round(current,3))
-            """
-            for i in range(0,6):
-                current_values.append(round(random.uniform(10,15),3))
         else:
             for i in range(0,6):
                 current_values.append(round(random.uniform(10,15),3))
@@ -256,6 +274,12 @@ class Session():
                 # returned lists are flipped
                 hv_current.reverse()
                 hv_voltage.reverse()
+
+                # round hv voltage
+                temp=[]
+                for i in hv_voltage:
+                    temp.append(round(int(i),1))
+                hv_voltage=temp
 
                 # temporary measure because only one pico is connected
                 hv_current=hv_current+hv_current
@@ -443,7 +467,7 @@ class Window(QMainWindow,Session):
         self.hv_plot_axes=self.hv_plot.add_subplot(111)
 
         self.hv_plot_axes.set_xlim([0,50])
-        self.hv_plot_axes.set_ylim([1000,2000])
+        self.hv_plot_axes.set_ylim([0,1600])
         self.hv_plot_axes.set_title('Channel 1 HV Voltage')
         self.hv_plot_axes.set_ylabel('Voltage (V)')
         self.hv_plot_axes.set_xlabel('Iterative Age of Datapoint')
@@ -934,7 +958,7 @@ class Window(QMainWindow,Session):
         self.hv_plot_axes.set_title(self.hv_channel_selector.currentText() + ' HV ' + type)
         if type=="Voltage":
             self.hv_plot_axes.set_ylabel('Voltage (V)')
-            self.hv_plot_axes.set_ylim([1000,2000])
+            self.hv_plot_axes.set_ylim([0,1600])
         else:
             self.hv_plot_axes.set_ylabel('Current (A)')
             self.hv_plot_axes.set_ylim([0,100])
