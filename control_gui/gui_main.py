@@ -97,9 +97,31 @@ class Session():
 
     def initialize_hv(self,test):
         if not test:
-            self.rampup.initialize_hv()
+            self.rampup.initialization()
         else:
             pass
+
+    def hv_rampup_on_off(self,channel,on):
+        indicators=[self.hv_power_button_1,self.hv_power_button_2,self.hv_power_button_3,
+        self.hv_power_button_4,self.hv_power_button_5,self.hv_power_button_6,
+        self.hv_power_button_7,self.hv_power_button_8,self.hv_power_button_9,
+        self.hv_power_button_10,self.hv_power_button_11,self.hv_power_button_12]
+
+
+        for i in indicators:
+            i.setDisabled(True)
+
+        if on == True:
+            self.rampup.rampup_hv(channel,1500)
+        else:
+            self.rampup.rampup_hv(channel,0)
+
+        for i in range(len(indicators)):
+            indicators[i].setDisabled(False)
+
+
+
+
 
     def get_data(self,test):
 
@@ -230,6 +252,10 @@ class Session():
                             on_voltage = True
                         else:
                             end = True
+
+                # returned lists are flipped
+                hv_current.reverse()
+                hv_voltage.reverse()
 
                 # temporary measure because only one pico is connected
                 hv_current=hv_current+hv_current
@@ -811,6 +837,8 @@ class Window(QMainWindow,Session):
             indicators[number].setStyleSheet('background-color: green')
             self.blade_power[number]=True
 
+
+
     # called when one of the hv power buttons is pressed
     def actuate_hv_power(self,number):
         indicators=[self.hv_power_button_1,self.hv_power_button_2,self.hv_power_button_3,
@@ -824,14 +852,17 @@ class Window(QMainWindow,Session):
 
             # if gui isn't in test mode, power down hv channel
             if self.test is False:
-                self.rampup.set_hv(number,0)
+                # use threading to ensure that the gui doesn't freeze during rampup
+                threading.Thread(target=self.hv_rampup_on_off,args=(number,False)).start()
+
         else:
             indicators[number].setStyleSheet('background-color: green')
             self.hv_power[number]=True
 
             # if gui isn't in test mode, power up hv channel
             if self.test is False:
-                self.rampup.set_hv(number,1500)
+                # use threading to ensure that the gui doesn't freeze during rampup
+                threading.Thread(target=self.hv_rampup_on_off,args=(number,True)).start()
 
     def update_blade_table(self):
         for j in range(6):
@@ -1050,7 +1081,7 @@ if __name__=="__main__":
 
 
         # import c functions for lv
-        rampup = "/home/pi/working_proto/rampup.so"
+        rampup = "/home/pi/working_proto/python_connect.so"
         window.rampup=CDLL(rampup)
         window.test = False
 
