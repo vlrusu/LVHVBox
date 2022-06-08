@@ -169,14 +169,14 @@ class Session():
 
         # acquire Temperature
         temperature_values=[]
-        if test:
+        if not test:
             for i in range(0,6):
                 # acquire the temperature measurement for each of the six blades
                 self.bus.write_byte_data(0x50,0x0,i+1)
-                reading=self.bus.read_byte_data(0x50,0xD0)
                 reading=self.bus.read_i2c_block_data(0x50,0x8D,2)
-                value-reading[0]+256*reading[1]
+                value=reading[0]+256*reading[1]
                 exponent=(value >> 11) & 0x1f
+                mantissa = value & 0x7ff
                 temp=mantissa*2**exponent
 
                 # append acquired temperature measurement to output list
@@ -195,7 +195,6 @@ class Session():
             address=self.addresses[int(channel/2)]
             ch=channel%2
 
-
             temp_vals=[]
             for index in range(4):
                 time.sleep(1) # need this otherwise get bus errors. FIXME!
@@ -204,10 +203,7 @@ class Session():
 
                 time.sleep(self.I2C_sleep_time)
                 reading = self.bus.read_i2c_block_data(address, channelLTC, 3)
-                print("channel LTC: " + str(channelLTC))
-                print("channel: " + str(channel))
-                print("address: " + str(address))
-                print("reading: " + str(reading))
+
      #           print(reading)
                 val = ((((reading[0]&0x3F))<<16))+((reading[1]<<8))+(((reading[2]&0xE0)))
                 volts = val*self.vref/self.max_reading
@@ -219,30 +215,19 @@ class Session():
                 if (ch == 0):
                     if (index%2 == 0):
                         if ( index % 4 == 0):
-                            print ("Voltage on channel " + str(ch) + "=" + str(round(vvolts,3))  + "V")
                             temp_vals.append(round(vvolts,3))
                         else:
-                            print ("Voltage on channel " + str(ch) + "=" + str(round(v12volts,3))  + "V")
                             temp_vals.append(round(v12volts,3))
-
                     else:
-                        print ("Current on channel " + str(ch) + "=" + str(round(ivolts,3))  + "A")
                         temp_vals.append(round(ivolts,3))
-
                 else:
                     if (index%2 == 1):
                         if ( index % 4 == 3):
-                            print ("Voltage on channel " + str(ch) + "=" + str(round(vvolts,3))  + "V")
                             temp_vals.append(round(vvolts,3))
                         else:
-                            print ("Voltage on channel " + str(ch) + "=" + str(round(v12volts,3))  + "V")
                             temp_vals.append(round(v12volts,3))
-
                     else:
-                        print ("Current on channel " + str(ch) + "=" + str(round(ivolts,3))  + "A")
                         temp_vals.append(round(ivolts,3))
-            print(temp_vals)
-
 
             if channel%2 == 0:
                 cond_voltage.append(temp_vals[0])
@@ -254,56 +239,6 @@ class Session():
                 cond_current.append(temp_vals[2])
                 five_voltage.append(temp_vals[1])
                 five_current.append(temp_vals[0])
-
-
-        print('conditioned current: '+ str(cond_current))
-        print('conditioned voltage: ' + str(cond_voltage))
-        print('five current: ' + str(five_current))
-        print('five voltage: ' + str(five_voltage))
-
-        print(len(cond_current))
-        print(len(cond_voltage))
-        print(len(five_current))
-        print(len(five_voltage))
-
-        """
-        # acquire 5v voltage
-        five_voltage=[]
-        if not test:
-            for i in range(0,6):
-                five_voltage.append(round(random.uniform(45,52),3))
-        else:
-            for i in range(0,6):
-                five_voltage.append(round(random.uniform(45,52),3))
-
-        # acquire 5v current
-        five_current=[]
-        if not test:
-            for i in range(0,6):
-                five_current.append(round(random.uniform(10,20),3))
-        else:
-            for i in range(0,6):
-                five_current.append(round(random.uniform(10,20),3))
-
-        # acquire conditioned voltage
-        cond_voltage=[]
-        if not test:
-            for i in range(0,6):
-                cond_voltage.append(round(random.uniform(45,52),3))
-        else:
-            for i in range(0,6):
-                cond_voltage.append(round(random.uniform(45,52),3))
-
-        # acquire conditioned current
-        cond_current=[]
-        if not test:
-            for i in range(0,6):
-                cond_current.append(round(random.uniform(10,20),3))
-        else:
-            for i in range(0,6):
-                cond_current.append(round(random.uniform(10,20),3))
-        """
-
 
         # acquire hv current and voltage
         hv_current=[]
@@ -330,8 +265,6 @@ class Session():
                 # returned lists are flipped
                 hv_current.reverse()
                 hv_voltage.reverse()
-
-                print("length of hv: " + str(len(hv_voltage)))
 
                 # round hv voltage
                 temp=[]
