@@ -52,46 +52,51 @@ class Session():
         self.temperature=None
 
     def power_on(self,test):
-        GPIO.output(GLOBAL_ENABLE_PIN,GPIO.LOW)
+        GPIO.output(self.GLOBAL_ENABLE_PIN,GPIO.HIGH)
         if not test:
-            for ich in range(0,12):
-                mcp1.digitalWrite(ich+8, MCP23S17.LEVEL_LOW)
+            for ich in range(0,6):
+                self.mcp1.digitalWrite(ich+8, MCP23S17.LEVEL_HIGH)
                 print("Channel " + str(ich) + " enabled")
         else:
             print("Testing Mode Enabled")
 
     def power_off(self,test):
-        GPIO.output(GLOBAL_ENABLE_PIN,GPIO.LOW)
+        GPIO.output(self.GLOBAL_ENABLE_PIN,GPIO.LOW)
         if not test:
-            for ich in range(0,12):
-                mcp1.digitalWrite(ich+8, MCP23S17.LEVEL_LOW)
+            for ich in range(0,6):
+                self.mcp1.digitalWrite(ich+8, MCP23S17.LEVEL_LOW)
                 print("Channel " + str(ich) + "disabled")
         else:
             print("Testing Mode Exited")
 
     def initialize_lv(self,test):
         if not test:
-            self.mcp1 = MCP23S17(bus=0x00, pin_cs=0x00, device_id=0x00)
+            self.mcp1 = MCP23S17(bus=0x00, pin_cs=0x01, device_id=0x00)
 
             self.mcp1.open()
             self.mcp1._spi.max_speed_hz = 10000000
 
             for x in range(8, 16):
-                self.mcp1.setDirection(x, mcp1.DIR_OUTPUT)
+                self.mcp1.setDirection(x, self.mcp1.DIR_OUTPUT)
                 self.mcp1.digitalWrite(x, MCP23S17.LEVEL_LOW)
 
-            self.I2C_sleep_time = 0.2 # seconds to sleep between each channel reading
+            self.I2C_sleep_time = 0.5 # seconds to sleep between each channel reading
             self.bus = SMBus(1)
 
             self.max_reading = 8388608.0
-            self.vref = 2.048
+            self.vref = 3.3
 
             self.pins = ["P9_15","P9_15","P9_15","P9_27","P9_41","P9_12"]
             self.GLOBAL_ENABLE_PIN =  15
             self.RESET_PIN = 32
 
+            GPIO.setup(self.GLOBAL_ENABLE_PIN,GPIO.OUT)
+            GPIO.setup(self.RESET_PIN,GPIO.OUT)
+
             if "libedit" in readline.__doc__:
                 self.readline.parse_and_bind("bind ^I rl_complete")
+
+            self.addresses = [0x14,0x16,0x26]
         else:
             pass
 
@@ -122,35 +127,9 @@ class Session():
             i.setDisabled(False)
 
 
-
-
-
     def get_data(self,test):
         # initialize lv data acquisition
         # TODO remove and put in initialization function
-        mcp1 = MCP23S17(bus=0x00, pin_cs=0x01, device_id=0x00)
-
-        mcp1.open()
-        mcp1._spi.max_speed_hz = 10000000
-
-        for x in range(8, 16):
-            mcp1.setDirection(x, mcp1.DIR_OUTPUT)
-            mcp1.digitalWrite(x, MCP23S17.LEVEL_LOW)
-
-        I2C_sleep_time = 0.5 # seconds to sleep between each channel reading
-        self.bus = SMBus(1)
-
-        max_reading = 8388608.0
-        vref = 2.048
-
-        pins = ["P9_15","P9_15","P9_15","P9_27","P9_41","P9_12"]
-        GLOBAL_ENABLE_PIN =  15
-        RESET_PIN = 32
-
-        addresses = [0x14,0x16,0x26]
-
-
-
 
         # acquire Voltage
         voltage_values=[]
@@ -190,8 +169,7 @@ class Session():
 
         # acquire Temperature
         temperature_values=[]
-        if not test:
-            """
+        if test:
             for i in range(0,6):
                 # acquire the temperature measurement for each of the six blades
                 self.bus.write_byte_data(0x50,0x0,i+1)
@@ -203,14 +181,92 @@ class Session():
 
                 # append acquired temperature measurement to output list
                 temperature_values.append(round(temp,3))
-            """
-            for i in range(0,6):
-                temperature_values.append(round(random.uniform(28,35),3))
         else:
             for i in range(0,6):
                 temperature_values.append(round(random.uniform(28,35),3))
                 # ensure delay between channel readings
 
+        # acquire readMon data
+        five_voltage=[]
+        five_current=[]
+        cond_voltage=[]
+        cond_current=[]
+        for channel in reversed(range(0,6)):
+            address=self.addresses[int(channel/2)]
+            ch=channel%2
+
+
+            temp_vals=[]
+            for index in range(4):
+                time.sleep(1) # need this otherwise get bus errors. FIXME!
+                channelLTC = (0b101<<5) + 4*ch + index
+                self.bus.write_byte(address, channelLTC)
+
+                time.sleep(self.I2C_sleep_time)
+                reading = self.bus.read_i2c_block_data(address, channelLTC, 3)
+                print("channel LTC: " + str(channelLTC))
+                print("channel: " + str(channel))
+                print("address: " + str(address))
+                print("reading: " + str(reading))
+     #           print(reading)
+                val = ((((reading[0]&0x3F))<<16))+((reading[1]<<8))+(((reading[2]&0xE0)))
+                volts = val*self.vref/self.max_reading
+     #           print (volts)
+                vvolts = volts / 0.01964
+                ivolts = volts / 0.4
+                v12volts = volts * 10
+
+                if (ch == 0):
+                    if (index%2 == 0):
+                        if ( index % 4 == 0):
+                            print ("Voltage on channel " + str(ch) + "=" + str(round(vvolts,3))  + "V")
+                            temp_vals.append(round(vvolts,3))
+                        else:
+                            print ("Voltage on channel " + str(ch) + "=" + str(round(v12volts,3))  + "V")
+                            temp_vals.append(round(v12volts,3))
+
+                    else:
+                        print ("Current on channel " + str(ch) + "=" + str(round(ivolts,3))  + "A")
+                        temp_vals.append(round(ivolts,3))
+
+                else:
+                    if (index%2 == 1):
+                        if ( index % 4 == 3):
+                            print ("Voltage on channel " + str(ch) + "=" + str(round(vvolts,3))  + "V")
+                            temp_vals.append(round(vvolts,3))
+                        else:
+                            print ("Voltage on channel " + str(ch) + "=" + str(round(v12volts,3))  + "V")
+                            temp_vals.append(round(v12volts,3))
+
+                    else:
+                        print ("Current on channel " + str(ch) + "=" + str(round(ivolts,3))  + "A")
+                        temp_vals.append(round(ivolts,3))
+            print(temp_vals)
+
+
+            if channel%2 == 0:
+                cond_voltage.append(temp_vals[0])
+                cond_current.append(temp_vals[1])
+                five_voltage.append(temp_vals[2])
+                five_current.append(temp_vals[3])
+            else:
+                cond_voltage.append(temp_vals[3])
+                cond_current.append(temp_vals[2])
+                five_voltage.append(temp_vals[1])
+                five_current.append(temp_vals[0])
+
+
+        print('conditioned current: '+ str(cond_current))
+        print('conditioned voltage: ' + str(cond_voltage))
+        print('five current: ' + str(five_current))
+        print('five voltage: ' + str(five_voltage))
+
+        print(len(cond_current))
+        print(len(cond_voltage))
+        print(len(five_current))
+        print(len(five_voltage))
+
+        """
         # acquire 5v voltage
         five_voltage=[]
         if not test:
@@ -246,6 +302,7 @@ class Session():
         else:
             for i in range(0,6):
                 cond_current.append(round(random.uniform(10,20),3))
+        """
 
 
         # acquire hv current and voltage
@@ -274,6 +331,8 @@ class Session():
                 hv_current.reverse()
                 hv_voltage.reverse()
 
+                print("length of hv: " + str(len(hv_voltage)))
+
                 # round hv voltage
                 temp=[]
                 for i in hv_voltage:
@@ -289,7 +348,7 @@ class Session():
                 # todo ensure proper length of hv current and voltage
 
             except:
-                return False
+                pass
         else:
             for i in range(0,12):
                 hv_voltage.append(round(random.uniform(1450,1550),3))
@@ -310,7 +369,7 @@ class Session():
         self.hv_voltage=hv_voltage
         self.hv_current=hv_current
 
-        return True
+        self.assorted_update()
 
     def save_txt(self):
         output=''
@@ -1055,16 +1114,19 @@ class Window(QMainWindow,Session):
         self.hv_plot_canvas.draw()
         self.hv_plot_canvas.flush_events()
 
+    def call_update(self):
+        threading.Thread(target=self.get_data,args=[False]).start()
+
+        #threading.Thread(target=self.hv_rampup_on_off,args=(number,False)).start()
+
     def assorted_update(self):
-        update=self.get_data(False)
-        if update:
-            self.update_blade_table()
-            self.update_board_table()
-            self.update_hv_table()
-            self.update_blade_plot()
-            self.update_board_plot()
-            self.update_hv_plot()
-            self.save_txt()
+        self.update_blade_table()
+        self.update_board_table()
+        self.update_hv_table()
+        self.update_blade_plot()
+        self.update_board_plot()
+        self.update_hv_plot()
+        self.save_txt()
 
     def initialize_data(self):
         self.blade_voltage_plot=[[500]*50]*6
@@ -1088,8 +1150,9 @@ class Window(QMainWindow,Session):
     def run(self):
         self.timer = QTimer(self)
         self.timer.setSingleShot(False)
-        self.timer.timeout.connect(self.assorted_update)
-        self.timer.start(1000)
+        self.call_update()
+        self.timer.timeout.connect(self.call_update)
+        self.timer.start(50000)
 
 if __name__=="__main__":
     try:
@@ -1100,7 +1163,8 @@ if __name__=="__main__":
         window = Window()
 
         # run the lv initialization function
-        window.initialize_lv(True)
+        window.initialize_lv(False)
+        window.power_on(False)
 
 
         # import c functions for lv
