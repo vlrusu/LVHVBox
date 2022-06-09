@@ -52,6 +52,15 @@ class Session():
         self.current=None
         self.temperature=None
 
+        self.max_reading = 8388608.0
+        self.vref = 3.3
+
+        self.pins = ["P9_15","P9_15","P9_15","P9_27","P9_41","P9_12"]
+        self.GLOBAL_ENABLE_PIN =  15
+        self.RESET_PIN = 32
+
+        self.addresses = [0x14,0x16,0x26]
+
     def power_on(self,channel):
         channel=abs(channel-5)
         GPIO.output(self.GLOBAL_ENABLE_PIN,GPIO.HIGH)
@@ -64,7 +73,6 @@ class Session():
     def initialize_lv(self,test):
         if not test:
             self.mcp1 = MCP23S17(bus=0x00, pin_cs=0x01, device_id=0x00)
-
             self.mcp1.open()
             self.mcp1._spi.max_speed_hz = 10000000
 
@@ -78,23 +86,13 @@ class Session():
             # sleep to keep i2c from complaining
             time.sleep(1)
 
-            self.max_reading = 8388608.0
-            self.vref = 3.3
-
-            self.pins = ["P9_15","P9_15","P9_15","P9_27","P9_41","P9_12"]
-            self.GLOBAL_ENABLE_PIN =  15
-            self.RESET_PIN = 32
-
             GPIO.setup(self.GLOBAL_ENABLE_PIN,GPIO.OUT)
             GPIO.setup(self.RESET_PIN,GPIO.OUT)
-
             GPIO.output(self.GLOBAL_ENABLE_PIN,GPIO.LOW)
             GPIO.output(self.RESET_PIN,GPIO.HIGH)
 
             if "libedit" in readline.__doc__:
                 self.readline.parse_and_bind("bind ^I rl_complete")
-
-            self.addresses = [0x14,0x16,0x26]
         else:
             pass
 
@@ -347,6 +345,7 @@ class Window(QMainWindow,Session):
 
         self.showFullScreen()
 
+    # calls all of the tab initialization functions
     def tabs(self):
         self.tabs=QTabWidget()
 
@@ -371,6 +370,7 @@ class Window(QMainWindow,Session):
         # initialize diagnostics Window
         self.diagnostics_setup()
 
+        # adds tabs to the overall GUI
         self.tabs.addTab(self.tab1,"Tables")
         self.tabs.addTab(self.tab2,"LV Controls")
         self.tabs.addTab(self.tab3,"HV Controls")
@@ -379,12 +379,13 @@ class Window(QMainWindow,Session):
         self.tabs.addTab(self.tab6,"HV Plots")
         self.tabs.addTab(self.tab7,"Diagnostics")
 
+        # set title and place tab widget for pyqt
         self.setWindowTitle("LVHV GUI")
         self.setCentralWidget(self.tabs)
 
         self.show()
 
-
+    # initializes blade plotting (exelcys)
     def blade_plotting_setup(self):
         self.tab4=QWidget()
         self.tab4.layout=QGridLayout()
@@ -421,6 +422,7 @@ class Window(QMainWindow,Session):
         self.tab4.layout.addWidget(self.blade_plot_canvas,0,1)
         self.tab4.setLayout(self.tab4.layout)
 
+    # initializes board plotting (readmon)
     def board_plotting_setup(self):
         self.tab5=QWidget()
         self.tab5.layout=QGridLayout()
@@ -457,6 +459,7 @@ class Window(QMainWindow,Session):
         self.tab5.layout.addWidget(self.board_plot_canvas,0,1)
         self.tab5.setLayout(self.tab5.layout)
 
+    # initializes hv plotting
     def hv_plotting_setup(self):
         self.tab6=QWidget()
         self.tab6.layout=QGridLayout()
@@ -494,9 +497,12 @@ class Window(QMainWindow,Session):
         self.tab6.layout.addWidget(self.hv_plot_canvas,0,1)
         self.tab6.setLayout(self.tab6.layout)
 
+    # sets up the diagnostics tab for the GUI
+    # not implemented currently, not sure if it will be needed
     def diagnostics_setup(self):
         self.tab7=QWidget()
 
+    # sets up the lv control tab for the GUI
     def lv_controls_setup(self):
         self.tab2=QWidget()
         self.tab2.layout=QGridLayout()
@@ -550,6 +556,7 @@ class Window(QMainWindow,Session):
 
         self.tab2.setLayout(self.tab2.layout)
 
+    # sets up the hv control tab for the GUI
     def hv_controls_setup(self):
         self.tab3=QWidget()
         self.tab3.layout=QGridLayout()
@@ -696,11 +703,11 @@ class Window(QMainWindow,Session):
 
         self.tab3.setLayout(self.tab3.layout)
 
+    # sets up initial tables with "N/A" values
     def controls_setup(self):
         self.tab1=QWidget()
         self.tab1.layout=QGridLayout()
         self.tab1.layout.setContentsMargins(20,20,20,20)
-
 
         # setup blade table
         self.blade_control_table=QTableWidget()
@@ -735,8 +742,6 @@ class Window(QMainWindow,Session):
 
         self.hv_control_table.setVerticalHeaderLabels(["Ch 1","Ch 2","Ch 3","Ch 4","Ch 5","Ch 6","Ch 7","Ch 8","Ch 9","Ch 10","Ch 11","Ch 12"])
         self.hv_control_table.setHorizontalHeaderLabels(["Voltage (V)","Current (A)"])
-
-
 
         # set up tabs to select whether to view blade data or board data
         self.table_tabs=QTabWidget()
@@ -890,12 +895,14 @@ class Window(QMainWindow,Session):
                 # use threading to ensure that the gui doesn't freeze during rampup
                 self.rampup_list.append([number,True])
 
+    # updates the blade table with recent data
     def update_blade_table(self):
         for j in range(6):
             self.blade_voltage_entries[j].setText(str(self.voltage[j]))
             self.blade_current_entries[j].setText(str(self.current[j]))
             self.blade_temperature_entries[j].setText(str(self.temperature[j]))
 
+    # updates the board table with recent data (readmon data)
     def update_board_table(self):
         for j in range(6):
             self.board_5v_voltage_entries[j].setText(str(self.five_voltage[j]))
@@ -903,6 +910,8 @@ class Window(QMainWindow,Session):
             self.board_cond_voltage_entries[j].setText(str(self.cond_voltage[j]))
             self.board_cond_current_entries[j].setText(str(self.cond_current[j]))
 
+    # updates the hv bars to display current hv rampup level
+    # converts the number to a percent progress
     def update_hv_bars(self):
         percent_progress=[]
         for i in range(12):
@@ -924,6 +933,7 @@ class Window(QMainWindow,Session):
         self.hv_bar_11.setValue(percent_progress[10])
         self.hv_bar_12.setValue(percent_progress[11])
 
+    # updates the hv table with latest available data
     def update_hv_table(self):
         for j in range(12):
             self.hv_voltage_entries[j].setText(str(self.hv_voltage[j]))
@@ -937,12 +947,14 @@ class Window(QMainWindow,Session):
         channel=channels[self.blade_channel_selector.currentText()]
         return channel
 
+    # returns the proper board channel number, based on the current user selection
     def get_board_channel(self):
         # determine which blade data is to be plotted for
         channels={"Channel 1": 0,"Channel 2": 1,"Channel 3": 2,"Channel 4": 3,"Channel 5": 4,"Channel 6": 5}
         channel=channels[self.board_channel_selector.currentText()]
         return channel
 
+    # returns the proper hv channel number, based on the current user selection
     def get_hv_channel(self):
         # determine which hv channel data is to be plotted for
         channels={"Channel 1": 0,"Channel 2": 1,"Channel 3": 2,"Channel 4": 3,"Channel 5": 4,
@@ -952,6 +964,7 @@ class Window(QMainWindow,Session):
         return channel
 
     # instantly changes what's being displayed on the main plot, depending on the user's selection
+    # this function is only used when the TYPE of data that is being plotted changes, as per user input
     def change_blade_plot(self):
         channel=self.get_blade_channel()
         type=self.blade_measurement_selector.currentText()
@@ -965,15 +978,20 @@ class Window(QMainWindow,Session):
         else:
             self.blade_plot_axes.set_ylabel('Temperature (C)')
 
+        # ensure that the proper type of data is plotted
         if type=="Voltage":
             self.blade_plot_data.set_ydata(self.blade_voltage_plot[channel])
         elif type=="Current":
             self.blade_plot_data.set_ydata(self.blade_current_plot[channel])
         else:
             self.blade_plot_data.set_ydata(self.blade_temperature_plot[channel])
+
+        # update the plot
         self.blade_plot_canvas.draw()
         self.blade_plot_canvas.flush_events()
 
+    # called to change the hv plot
+    # this function is only used when the TYPE of data that is being plotted changes, as per user input
     def change_hv_plot(self):
         channel=self.get_hv_channel()
         type=self.hv_measurement_selector.currentText()
@@ -987,13 +1005,18 @@ class Window(QMainWindow,Session):
             self.hv_plot_axes.set_ylabel('Current (A)')
             self.hv_plot_axes.set_ylim([0,100])
 
+        # ensure that the proper type of data is being plotted
         if type=="Voltage":
             self.hv_plot_data.set_ydata(self.hv_voltage_plot[channel])
         else:
             self.hv_plot_data.set_ydata(self.hv_current_plot[channel])
+
+        # update the plot
         self.hv_plot_canvas.draw()
         self.hv_plot_canvas.flush_events()
 
+    # called to change the board plot (readmon data)
+    # this function is only used when the TYPE of data that is being plotted changes, as per user input
     def change_board_plot(self):
         channel=self.get_board_channel()
         type=self.board_measurement_selector.currentText()
@@ -1009,6 +1032,7 @@ class Window(QMainWindow,Session):
         else:
             self.board_plot_axes.set_ylabel('Conditioned Current (A)')
 
+        # update the data, according to what is being plotted
         if type=="5V Voltage":
             self.board_plot_data.set_ydata(self.board_5v_voltage_plot[channel])
         elif type=="5V Current":
@@ -1017,6 +1041,8 @@ class Window(QMainWindow,Session):
             self.board_plot_data.set_ydata(self.board_cond_voltage_plot[channel])
         else:
             self.board_plot_data.set_ydata(self.board_cond_current_plot[channel])
+
+        # actually update the plot
         self.board_plot_canvas.draw()
         self.board_plot_canvas.flush_events()
 
@@ -1033,15 +1059,19 @@ class Window(QMainWindow,Session):
             self.blade_current_plot[i]=[self.current[i]]+self.blade_current_plot[i][:-1]
             self.blade_temperature_plot[i]=[self.temperature[i]]+self.blade_temperature_plot[i][:-1]
 
+        # determine what kind of data is being plotted, and respond accordingly
         if type=="Voltage":
             self.blade_plot_data.set_ydata(self.blade_voltage_plot[channel])
         elif type=="Current":
             self.blade_plot_data.set_ydata(self.blade_current_plot[channel])
         else:
             self.blade_plot_data.set_ydata(self.blade_temperature_plot[channel])
+
+        # update the plot
         self.blade_plot_canvas.draw()
         self.blade_plot_canvas.flush_events()
 
+    # this function updates the board plot (readmon data)
     def update_board_plot(self):
         channel=self.get_board_channel()
         type=self.board_measurement_selector.currentText()
@@ -1053,6 +1083,7 @@ class Window(QMainWindow,Session):
             self.board_cond_voltage_plot[i]=[self.cond_voltage[i]]+self.board_cond_voltage_plot[i][:-1]
             self.board_cond_current_plot[i]=[self.cond_current[i]]+self.board_cond_current_plot[i][:-1]
 
+        # determine which type of data is currently being plotted, and set data accordingly
         if type=="5V Voltage":
             self.board_plot_data.set_ydata(self.board_5v_voltage_plot[channel])
         elif type=="5V Current":
@@ -1061,9 +1092,12 @@ class Window(QMainWindow,Session):
             self.board_plot_data.set_ydata(self.board_cond_voltage_plot[channel])
         else:
             self.board_plot_data.set_ydata(self.board_cond_current_plot[channel])
+
+        # actually update the plot
         self.board_plot_canvas.draw()
         self.board_plot_canvas.flush_events()
 
+    # this function updates the hv plot
     def update_hv_plot(self):
         channel=self.get_hv_channel()
         type=self.hv_measurement_selector.currentText()
@@ -1083,6 +1117,8 @@ class Window(QMainWindow,Session):
     def call_board_data(self):
         threading.Thread(target=self.get_board_data,args=[False]).start()
 
+    # this function updates all of the plots, as well as everything that has to do with readmon data
+    # because readmon also takes the longest, this update function saves data to logfile.txt
     def primary_update(self):
         self.update_board_table()
         self.update_blade_plot()
@@ -1090,9 +1126,11 @@ class Window(QMainWindow,Session):
         self.update_hv_plot()
         self.save_txt()
 
+    # updates the blade table
     def blade_update(self):
         self.update_blade_table()
 
+    # updates the hv table and hv rampup status bars
     def hv_update(self):
         self.update_hv_table()
         self.update_hv_bars()
@@ -1125,6 +1163,7 @@ class Window(QMainWindow,Session):
         self.rampup_list=[]
 
     def run(self):
+        # initialize timers required to update gui/get and log data
         self.save_timer = QTimer(self)
         self.save_timer.setSingleShot(False)
         self.hv_timer = QTimer(self)
@@ -1154,6 +1193,9 @@ if __name__=="__main__":
         window = Window()
 
         # run the lv initialization function
+        # for whatever ungodly reason, it sometimes needs to be run more than once to properly work
+        # TODO FIX
+        window.initialize_lv(False)
         window.initialize_lv(False)
         window.initialize_lv(False)
 
