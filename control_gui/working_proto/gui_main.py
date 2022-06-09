@@ -37,6 +37,7 @@ import wiringpi
 # import c functions for lv
 from ctypes import *
 
+# initialize gui stuff
 os.environ["DISPLAY"] = ':0'
 background_color='background-color: white;'
 button_color='background-color: white;'
@@ -44,7 +45,7 @@ button_color='background-color: white;'
 # serial to acquire hv data
 import serial
 
-
+# session class focuses on interactions with the hardware, providing them to the gui class
 class Session():
     def __init__(self):
         self.voltage=None
@@ -74,6 +75,9 @@ class Session():
             self.I2C_sleep_time = 0.25 # seconds to sleep between each channel reading
             self.bus = SMBus(1)
 
+            # sleep to keep i2c from complaining
+            time.sleep(1)
+
             self.max_reading = 8388608.0
             self.vref = 3.3
 
@@ -83,6 +87,9 @@ class Session():
 
             GPIO.setup(self.GLOBAL_ENABLE_PIN,GPIO.OUT)
             GPIO.setup(self.RESET_PIN,GPIO.OUT)
+
+            GPIO.output(self.GLOBAL_ENABLE_PIN,GPIO.LOW)
+            GPIO.output(self.RESET_PIN,GPIO.HIGH)
 
             if "libedit" in readline.__doc__:
                 self.readline.parse_and_bind("bind ^I rl_complete")
@@ -170,64 +177,67 @@ class Session():
 
     def get_blade_data(self,test):
         # acquire Voltage
-        voltage_values=[]
-        if not test:
-            for i in range(0,6):
-                # acquire the voltage measurement for each of the six blades
-                self.bus.write_byte_data(0x50,0x0,i+1)
-                reading=self.bus.read_i2c_block_data(0x50,0x8B,2)
-                value=float(reading[0]+256*reading[1])/256.
+        try:
+            voltage_values=[]
+            if not test:
+                for i in range(0,6):
+                    # acquire the voltage measurement for each of the six blades
+                    self.bus.write_byte_data(0x50,0x0,i+1)
+                    reading=self.bus.read_i2c_block_data(0x50,0x8B,2)
+                    value=float(reading[0]+256*reading[1])/256.
 
-                # append acquired voltage measurement to output list
-                voltage_values.append(round(value,3))
-        else:
-            for i in range(0,6):
-                voltage_values.append(round(random.uniform(35,45),3))
-                # ensure delay between channel readings
+                    # append acquired voltage measurement to output list
+                    voltage_values.append(round(value,3))
+            else:
+                for i in range(0,6):
+                    voltage_values.append(round(random.uniform(35,45),3))
+                    # ensure delay between channel readings
 
-        # acquire Current
-        current_values=[]
-        if not test:
-            for i in range(0,6):
-                # acquire the current measurement for each of the six blades
-                self.bus.write_byte_data(0x50,0x0,i+1)
-                reading=self.bus.read_i2c_block_data(0x50,0x8C,2)
-                value=reading[0]+256*reading[1]
-                exponent=(value >> 11) & 0x1f
-                exponent=exponent-32
-                mantissa=value & 0x7ff
-                current=mantissa*2**exponent
+            # acquire Current
+            current_values=[]
+            if not test:
+                for i in range(0,6):
+                    # acquire the current measurement for each of the six blades
+                    self.bus.write_byte_data(0x50,0x0,i+1)
+                    reading=self.bus.read_i2c_block_data(0x50,0x8C,2)
+                    value=reading[0]+256*reading[1]
+                    exponent=(value >> 11) & 0x1f
+                    exponent=exponent-32
+                    mantissa=value & 0x7ff
+                    current=mantissa*2**exponent
 
-                # append acquired current measurement to output list
-                current_values.append(round(current,3))
-        else:
-            for i in range(0,6):
-                current_values.append(round(random.uniform(10,15),3))
-                # ensure delay between channel readings
+                    # append acquired current measurement to output list
+                    current_values.append(round(current,3))
+            else:
+                for i in range(0,6):
+                    current_values.append(round(random.uniform(10,15),3))
+                    # ensure delay between channel readings
 
-        # acquire Temperature
-        temperature_values=[]
-        if not test:
-            for i in range(0,6):
-                # acquire the temperature measurement for each of the six blades
-                self.bus.write_byte_data(0x50,0x0,i+1)
-                reading=self.bus.read_i2c_block_data(0x50,0x8D,2)
-                value=reading[0]+256*reading[1]
-                exponent=(value >> 11) & 0x1f
-                mantissa = value & 0x7ff
-                temp=mantissa*2**exponent
+            # acquire Temperature
+            temperature_values=[]
+            if not test:
+                for i in range(0,6):
+                    # acquire the temperature measurement for each of the six blades
+                    self.bus.write_byte_data(0x50,0x0,i+1)
+                    reading=self.bus.read_i2c_block_data(0x50,0x8D,2)
+                    value=reading[0]+256*reading[1]
+                    exponent=(value >> 11) & 0x1f
+                    mantissa = value & 0x7ff
+                    temp=mantissa*2**exponent
 
-                # append acquired temperature measurement to output list
-                temperature_values.append(round(temp,3))
-        else:
-            for i in range(0,6):
-                temperature_values.append(round(random.uniform(28,35),3))
-                # ensure delay between channel readings
+                    # append acquired temperature measurement to output list
+                    temperature_values.append(round(temp,3))
+            else:
+                for i in range(0,6):
+                    temperature_values.append(round(random.uniform(28,35),3))
+                    # ensure delay between channel readings
 
-        # save data lists for blades
-        self.voltage=voltage_values
-        self.current=current_values
-        self.temperature=temperature_values
+            # save data lists for blades
+            self.voltage=voltage_values
+            self.current=current_values
+            self.temperature=temperature_values
+        except:
+            print('bus busy')
 
         self.blade_update()
 
@@ -246,7 +256,7 @@ class Session():
 
             temp_vals=[]
             for index in range(4):
-                time.sleep(0.5) # need this otherwise get bus errors. FIXME!
+                time.sleep(0.25) # need this otherwise get bus errors. FIXME!
                 channelLTC = (0b101<<5) + 4*ch + index
                 self.bus.write_byte(address, channelLTC)
 
@@ -320,7 +330,7 @@ class Window(QMainWindow,Session):
         super(Window,self).__init__()
 
         # set vars to control timers
-        self.board_time=25000
+        self.board_time=15000
         self.hv_time=750
         self.blade_time=750
 
@@ -1145,8 +1155,9 @@ if __name__=="__main__":
 
         # run the lv initialization function
         window.initialize_lv(False)
+        window.initialize_lv(False)
 
-        # import c functions for lv
+        # import c functions for hv
         rampup = "/home/pi/working_proto/python_connect.so"
         window.rampup=CDLL(rampup)
         window.test = False
