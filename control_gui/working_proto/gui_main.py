@@ -51,23 +51,14 @@ class Session():
         self.current=None
         self.temperature=None
 
-    def power_on(self,test):
+    def power_on(self,channel):
+        channel=abs(channel-5)
         GPIO.output(self.GLOBAL_ENABLE_PIN,GPIO.HIGH)
-        if not test:
-            for ich in range(0,6):
-                self.mcp1.digitalWrite(ich+8, MCP23S17.LEVEL_HIGH)
-                print("Channel " + str(ich) + " enabled")
-        else:
-            print("Testing Mode Enabled")
+        self.mcp1.digitalWrite(channel+8, MCP23S17.LEVEL_HIGH)
 
-    def power_off(self,test):
-        GPIO.output(self.GLOBAL_ENABLE_PIN,GPIO.LOW)
-        if not test:
-            for ich in range(0,6):
-                self.mcp1.digitalWrite(ich+8, MCP23S17.LEVEL_LOW)
-                print("Channel " + str(ich) + "disabled")
-        else:
-            print("Testing Mode Exited")
+    def power_off(self,channel):
+        channel=abs(channel-5)
+        self.mcp1.digitalWrite(channel+8, MCP23S17.LEVEL_LOW)
 
     def initialize_lv(self,test):
         if not test:
@@ -80,7 +71,7 @@ class Session():
                 self.mcp1.setDirection(x, self.mcp1.DIR_OUTPUT)
                 self.mcp1.digitalWrite(x, MCP23S17.LEVEL_LOW)
 
-            self.I2C_sleep_time = 0.5 # seconds to sleep between each channel reading
+            self.I2C_sleep_time = 0.25 # seconds to sleep between each channel reading
             self.bus = SMBus(1)
 
             self.max_reading = 8388608.0
@@ -106,31 +97,78 @@ class Session():
         else:
             pass
 
-    def hv_rampup_on_off(self,channel,on):
-        indicators=[self.hv_power_button_1,self.hv_power_button_2,self.hv_power_button_3,
-        self.hv_power_button_4,self.hv_power_button_5,self.hv_power_button_6,
-        self.hv_power_button_7,self.hv_power_button_8,self.hv_power_button_9,
-        self.hv_power_button_10,self.hv_power_button_11,self.hv_power_button_12]
-
-        # disable the hv controls in order to prevent simultaneous interactions from calling issues
-        for i in indicators:
-            i.setDisabled(True)
+    def hv_rampup_on_off(self):
+        self.is_ramping=True
 
         # depending on the "on" arg, actuate the hv channel
-        if on == True:
-            self.rampup.rampup_hv(channel,1500)
+        if self.rampup_list[0][1] == True:
+            self.rampup.rampup_hv(self.rampup_list[0][0],1500)
         else:
-            self.rampup.rampup_hv(channel,0)
+            self.rampup.rampup_hv(self.rampup_list[0][0],0)
 
-        # enable the hv controls, now that interaction with hv channel
-        for i in indicators:
-            i.setDisabled(False)
+        temp=[]
+        for i in range(1,len(self.rampup_list)):
+            temp.append(self.rampup_list[i])
+        self.rampup_list=temp
 
+        self.is_ramping=False
 
-    def get_data(self,test):
-        # initialize lv data acquisition
-        # TODO remove and put in initialization function
+    def get_hv_data(self,test):
+        # acquire hv current and voltage
+        hv_current=[]
+        hv_voltage=[]
+        if not test:
+            try:
+                ser = serial.Serial('/dev/ttyACM0', 115200, timeout=0.5)
+                line = ser.readline().decode('ascii')
 
+                processed_line = line.split(" ")
+                on_voltage=False
+                end=False
+                for i in processed_line:
+                    if i != '' and i != '|' and on_voltage is False:
+                        hv_current.append(float(i))
+                    elif i != '' and i != '|' and on_voltage is True and end is False:
+                        hv_voltage.append(float(i))
+                    elif end is False and i == '|':
+                        if on_voltage is False:
+                            on_voltage = True
+                        else:
+                            end = True
+
+                # returned lists are flipped
+                hv_current.reverse()
+                hv_voltage.reverse()
+
+                # round hv voltage
+                temp=[]
+                for i in hv_voltage:
+                    temp.append(round(int(i),1))
+                hv_voltage=temp
+
+                # temporary measure because only one pico is connected
+                hv_current=hv_current+hv_current
+                hv_voltage=hv_voltage+hv_voltage
+
+                assert len(hv_current) == 12
+                assert len(hv_voltage) == 12
+                # todo ensure proper length of hv current and voltage
+
+            except:
+                pass
+        else:
+            for i in range(0,12):
+                hv_voltage.append(round(random.uniform(1450,1550),3))
+                hv_current.append(round(random.uniform(20,30),3))
+
+        # save data lists for hv
+        if len(hv_voltage) == 12 and len(hv_current) == 12:
+            self.hv_voltage=hv_voltage
+            self.hv_current=hv_current
+
+            self.hv_update()
+
+    def get_blade_data(self,test):
         # acquire Voltage
         voltage_values=[]
         if not test:
@@ -186,6 +224,17 @@ class Session():
                 temperature_values.append(round(random.uniform(28,35),3))
                 # ensure delay between channel readings
 
+        # save data lists for blades
+        self.voltage=voltage_values
+        self.current=current_values
+        self.temperature=temperature_values
+
+        self.blade_update()
+
+    def get_board_data(self,test):
+        # initialize lv data acquisition
+        # TODO remove and put in initialization function
+
         # acquire readMon data
         five_voltage=[]
         five_current=[]
@@ -197,7 +246,7 @@ class Session():
 
             temp_vals=[]
             for index in range(4):
-                time.sleep(1) # need this otherwise get bus errors. FIXME!
+                time.sleep(0.5) # need this otherwise get bus errors. FIXME!
                 channelLTC = (0b101<<5) + 4*ch + index
                 self.bus.write_byte(address, channelLTC)
 
@@ -240,69 +289,13 @@ class Session():
                 five_voltage.append(temp_vals[1])
                 five_current.append(temp_vals[0])
 
-        # acquire hv current and voltage
-        hv_current=[]
-        hv_voltage=[]
-        if not test:
-            try:
-                ser = serial.Serial('/dev/ttyACM0', 115200, timeout=1)
-                line = ser.readline().decode('ascii')
-
-                processed_line = line.split(" ")
-                on_voltage=False
-                end=False
-                for i in processed_line:
-                    if i != '' and i != '|' and on_voltage is False:
-                        hv_current.append(float(i))
-                    elif i != '' and i != '|' and on_voltage is True and end is False:
-                        hv_voltage.append(float(i))
-                    elif end is False and i == '|':
-                        if on_voltage is False:
-                            on_voltage = True
-                        else:
-                            end = True
-
-                # returned lists are flipped
-                hv_current.reverse()
-                hv_voltage.reverse()
-
-                # round hv voltage
-                temp=[]
-                for i in hv_voltage:
-                    temp.append(round(int(i),1))
-                hv_voltage=temp
-
-                # temporary measure because only one pico is connected
-                hv_current=hv_current+hv_current
-                hv_voltage=hv_voltage+hv_voltage
-
-                assert len(hv_current) == 12
-                assert len(hv_voltage) == 12
-                # todo ensure proper length of hv current and voltage
-
-            except:
-                pass
-        else:
-            for i in range(0,12):
-                hv_voltage.append(round(random.uniform(1450,1550),3))
-                hv_current.append(round(random.uniform(20,30),3))
-
-        # save data lists for blades
-        self.voltage=voltage_values
-        self.current=current_values
-        self.temperature=temperature_values
-
         # save data lists for board
         self.five_voltage=five_voltage
         self.five_current=five_current
         self.cond_voltage=cond_voltage
         self.cond_current=cond_current
 
-        # save data lists for hv
-        self.hv_voltage=hv_voltage
-        self.hv_current=hv_current
-
-        self.assorted_update()
+        self.primary_update()
 
     def save_txt(self):
         output=''
@@ -325,6 +318,12 @@ class Session():
 class Window(QMainWindow,Session):
     def __init__(self):
         super(Window,self).__init__()
+
+        # set vars to control timers
+        self.board_time=25000
+        self.hv_time=750
+        self.blade_time=750
+
         self.initialize_data()
         # since it's a touch screen, the cursor is irritating
         self.setCursor(Qt.BlankCursor)
@@ -848,9 +847,11 @@ class Window(QMainWindow,Session):
         if self.blade_power[number]==True:
             indicators[number].setStyleSheet('background-color: red')
             self.blade_power[number]=False
+            self.power_off(number)
         else:
             indicators[number].setStyleSheet('background-color: green')
             self.blade_power[number]=True
+            self.power_on(number)
 
 
 
@@ -868,7 +869,7 @@ class Window(QMainWindow,Session):
             # if gui isn't in test mode, power down hv channel
             if self.test is False:
                 # use threading to ensure that the gui doesn't freeze during rampup
-                threading.Thread(target=self.hv_rampup_on_off,args=(number,False)).start()
+                self.rampup_list.append([number,False])
 
         else:
             indicators[number].setStyleSheet('background-color: green')
@@ -877,7 +878,7 @@ class Window(QMainWindow,Session):
             # if gui isn't in test mode, power up hv channel
             if self.test is False:
                 # use threading to ensure that the gui doesn't freeze during rampup
-                threading.Thread(target=self.hv_rampup_on_off,args=(number,True)).start()
+                self.rampup_list.append([number,True])
 
     def update_blade_table(self):
         for j in range(6):
@@ -892,10 +893,32 @@ class Window(QMainWindow,Session):
             self.board_cond_voltage_entries[j].setText(str(self.cond_voltage[j]))
             self.board_cond_current_entries[j].setText(str(self.cond_current[j]))
 
+    def update_hv_bars(self):
+        percent_progress=[]
+        for i in range(12):
+            temp=int(self.hv_voltage[i]/15)
+            if temp > 100:
+                temp=100
+            percent_progress.append(temp)
+
+        self.hv_bar_1.setValue(percent_progress[0])
+        self.hv_bar_2.setValue(percent_progress[1])
+        self.hv_bar_3.setValue(percent_progress[2])
+        self.hv_bar_4.setValue(percent_progress[3])
+        self.hv_bar_5.setValue(percent_progress[4])
+        self.hv_bar_6.setValue(percent_progress[5])
+        self.hv_bar_7.setValue(percent_progress[6])
+        self.hv_bar_8.setValue(percent_progress[7])
+        self.hv_bar_9.setValue(percent_progress[8])
+        self.hv_bar_10.setValue(percent_progress[9])
+        self.hv_bar_11.setValue(percent_progress[10])
+        self.hv_bar_12.setValue(percent_progress[11])
+
     def update_hv_table(self):
         for j in range(12):
             self.hv_voltage_entries[j].setText(str(self.hv_voltage[j]))
             self.hv_current_entries[j].setText(str(self.hv_current[j]))
+        self.update_hv_bars()
 
     # acquires the channel being measured
     def get_blade_channel(self):
@@ -1047,19 +1070,26 @@ class Window(QMainWindow,Session):
         self.hv_plot_canvas.draw()
         self.hv_plot_canvas.flush_events()
 
-    def call_update(self):
-        threading.Thread(target=self.get_data,args=[False]).start()
+    def call_board_data(self):
+        threading.Thread(target=self.get_board_data,args=[False]).start()
 
-        #threading.Thread(target=self.hv_rampup_on_off,args=(number,False)).start()
-
-    def assorted_update(self):
-        self.update_blade_table()
+    def primary_update(self):
         self.update_board_table()
-        self.update_hv_table()
         self.update_blade_plot()
         self.update_board_plot()
         self.update_hv_plot()
         self.save_txt()
+
+    def blade_update(self):
+        self.update_blade_table()
+
+    def hv_update(self):
+        self.update_hv_table()
+        self.update_hv_bars()
+
+        # if applicable, call function to rampup/rampdown next item in hv queue
+        if self.is_ramping == False and len(self.rampup_list) != 0:
+            threading.Thread(target=self.hv_rampup_on_off).start()
 
     def initialize_data(self):
         self.blade_voltage_plot=[[500]*50]*6
@@ -1080,12 +1110,30 @@ class Window(QMainWindow,Session):
         # keeps track of hv power statuses
         self.hv_power=[False]*12
 
+        # vars to keep track of hv ramping
+        self.is_ramping = False
+        self.rampup_list=[]
+
     def run(self):
-        self.timer = QTimer(self)
-        self.timer.setSingleShot(False)
-        self.call_update()
-        self.timer.timeout.connect(self.call_update)
-        self.timer.start(50000)
+        self.save_timer = QTimer(self)
+        self.save_timer.setSingleShot(False)
+        self.hv_timer = QTimer(self)
+        self.hv_timer.setSingleShot(False)
+        self.blade_timer = QTimer(self)
+        self. blade_timer.setSingleShot(False)
+
+        # readMon update timer
+        self.save_timer.timeout.connect(self.call_board_data)
+        self.save_timer.start(self.board_time)
+
+        # hv update timer
+        self.hv_timer.timeout.connect(lambda:self.get_hv_data(False))
+        self.hv_timer.start(self.hv_time)
+
+        # blade update timer
+        self.blade_timer.timeout.connect(lambda:self.get_blade_data(False))
+        self.blade_timer.start(self.blade_time)
+
 
 if __name__=="__main__":
     try:
@@ -1097,8 +1145,6 @@ if __name__=="__main__":
 
         # run the lv initialization function
         window.initialize_lv(False)
-        window.power_on(False)
-
 
         # import c functions for lv
         rampup = "/home/pi/working_proto/python_connect.so"
