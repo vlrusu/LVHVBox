@@ -353,14 +353,13 @@ class Window(QMainWindow,Session):
         # set vars to control timers
         self.board_time=15000
         self.hv_time=300
+        self.save_time=60000
 
         self.max_reading = 8388608.0
         self.vref = 3.3
-
         self.pins = ["P9_15","P9_15","P9_15","P9_27","P9_41","P9_12"]
         self.GLOBAL_ENABLE_PIN =  15
         self.RESET_PIN = 32
-
         self.addresses = [0x14,0x16,0x26]
 
         self.initialize_data()
@@ -398,19 +397,26 @@ class Window(QMainWindow,Session):
         # initialize hv plotting Window
         self.hv_plotting_setup()
 
+        # initialize stability blade plotting Window
+        self.stability_blade_plotting_setup()
+
+        # initialize stabiility board plotting Window
+        self.stability_board_plotting_setup()
+
+        # initialize stability hv plotting Window
+        self.stability_hv_plotting_setup()
+
 
         # adds tabs to the overall GUI
         self.tabs.addTab(self.tab1,"Tables")
-        self.tabs.addTab(self.tab2,"LV Controls")
-        self.tabs.addTab(self.tab3,"HV Controls")
-        self.tabs.addTab(self.tab4,"Raw Blade Plots")
+        self.tabs.addTab(self.tab2,"LV")
+        self.tabs.addTab(self.tab3,"HV")
+        self.tabs.addTab(self.tab4,"Blade Plots")
         self.tabs.addTab(self.tab5,"Board Plots")
         self.tabs.addTab(self.tab6,"HV Plots")
-        """
-        self.tabs.addTab(self.tab7,"Stability Raw Blade Plots")
-        self.tabs.addTab(self.tab8,"Stability Board Plots")
-        self.tabs.addTab(self.tab9,"Stability HV Plots")
-        """
+        self.tabs.addTab(self.tab7,"Blade Stability")
+        self.tabs.addTab(self.tab8,"Board Stability")
+        self.tabs.addTab(self.tab9,"HV Stability")
 
         # set title and place tab widget for pyqt
         self.setWindowTitle("LVHV GUI")
@@ -427,14 +433,14 @@ class Window(QMainWindow,Session):
         self.stability_blade_plot_canvas=FigureCanvas(self.stability_blade_plot)
         self.stability_blade_plot_axes=self.stability_blade_plot.add_subplot(111)
 
-        self.stability_blade_plot_axes.set_xlim([0,200])
+        self.stability_blade_plot_axes.set_xlim([0,48])
         self.stability_blade_plot_axes.set_ylim([0,60])
         self.stability_blade_plot_axes.set_title('Channel 0 Blade Voltage')
         self.stability_blade_plot_axes.set_ylabel('Voltage (V)')
-        self.stability_blade_plot_axes.set_xlabel('Iterative Age of Datapoint')
+        self.stability_blade_plot_axes.set_xlabel('Iterative Age of Datapoint: each iteration is ' + str(round(self.save_time/60000,1)) + ' minutes.')
 
         # initialize data (placed outside of bounds, so that it doesn't show up initially)
-        self.stability_blade_plot_data_x=[*range(0,200,1)]
+        self.stability_blade_plot_data_x=[*range(0,48,1)]
         self.stability_blade_plot_data=self.stability_blade_plot_axes.plot(self.stability_blade_plot_data_x,self.stability_blade_voltage_plot[0],marker='o',linestyle='None',markersize=2,color='k')[0]
 
         # add dropdown menus to select what's plotted
@@ -463,14 +469,14 @@ class Window(QMainWindow,Session):
         self.stability_board_plot_canvas=FigureCanvas(self.stability_board_plot)
         self.stability_board_plot_axes=self.stability_board_plot.add_subplot(111)
 
-        self.stability_board_plot_axes.set_xlim([0,200])
+        self.stability_board_plot_axes.set_xlim([0,48])
         self.stability_board_plot_axes.set_ylim([0,60])
         self.stability_board_plot_axes.set_title('Channel 0 5V Voltage')
         self.stability_board_plot_axes.set_ylabel('Voltage (V)')
-        self.stability_board_plot_axes.set_xlabel('Iterative Age of Datapoint')
+        self.stability_board_plot_axes.set_xlabel('Iterative Age of Datapoint: each iteration is ' + str(round(self.save_time/60000,1)) + ' minutes.')
 
         # initialize data (placed outside of bounds, so that it doesn't show up initially)
-        self.stability_board_plot_data_x=[*range(0,200,1)]
+        self.stability_board_plot_data_x=[*range(0,48,1)]
         self.stability_board_plot_data=self.stability_board_plot_axes.plot(self.stability_board_plot_data_x,self.stability_board_5v_voltage_plot[0],marker='o',linestyle='None',markersize=2,color='k')[0]
 
         # add dropdown menus to select what's plotted
@@ -497,16 +503,16 @@ class Window(QMainWindow,Session):
         # setup the hv plot
         self.stability_hv_plot=Figure()
         self.stability_hv_plot_canvas=FigureCanvas(self.stability_hv_plot)
-        self.stability_hv_plot_axes=self.hv_plot.add_subplot(111)
+        self.stability_hv_plot_axes=self.stability_hv_plot.add_subplot(111)
 
-        self.stability_hv_plot_axes.set_xlim([0,10])
+        self.stability_hv_plot_axes.set_xlim([0,48])
         self.stability_hv_plot_axes.set_ylim([0,1600])
         self.stability_hv_plot_axes.set_title('Channel 0 HV Voltage')
         self.stability_hv_plot_axes.set_ylabel('Voltage (V)')
-        self.stability_hv_plot_axes.set_xlabel('Iterative Age of Datapoint')
+        self.stability_hv_plot_axes.set_xlabel('Iterative Age of Datapoint: each iteration is ' + str(round(self.save_time/60000,1)) + ' minutes.')
 
         # initialize data (placed outside of bounds, so that it doesn't show up initially)
-        self.stability_hv_plot_data_x=[*range(0,10,1)]
+        self.stability_hv_plot_data_x=[*range(0,48,1)]
         self.stability_hv_plot_data=self.stability_hv_plot_axes.plot(self.stability_hv_plot_data_x,self.stability_hv_voltage_plot[0],marker='o',linestyle='None',markersize=2,color='k')[0]
 
         # add dropdown menus to select what's plotted
@@ -522,9 +528,9 @@ class Window(QMainWindow,Session):
         self.stability_hv_measurement_selector.currentIndexChanged.connect(self.change_stability_hv_plot)
 
         # add widgets and set layout
-        self.tab9.layout.addWidget(self.hv_channel_selector,0,0)
-        self.tab9.layout.addWidget(self.hv_measurement_selector,1,0)
-        self.tab9.layout.addWidget(self.hv_plot_canvas,0,1)
+        self.tab9.layout.addWidget(self.stability_hv_channel_selector,0,0)
+        self.tab9.layout.addWidget(self.stability_hv_measurement_selector,1,0)
+        self.tab9.layout.addWidget(self.stability_hv_plot_canvas,0,1)
         self.tab9.setLayout(self.tab9.layout)
 
     # initializes blade plotting (exelcys)
@@ -541,7 +547,7 @@ class Window(QMainWindow,Session):
         self.blade_plot_axes.set_ylim([0,60])
         self.blade_plot_axes.set_title('Channel 0 Blade Voltage')
         self.blade_plot_axes.set_ylabel('Voltage (V)')
-        self.blade_plot_axes.set_xlabel('Iterative Age of Datapoint')
+        self.blade_plot_axes.set_xlabel('Iterative Age of Datapoint: each iteration is ' + str(round(self.board_time/60000,1)) + ' minutes.')
 
         # initialize data (placed outside of bounds, so that it doesn't show up initially)
         self.blade_plot_data_x=[*range(0,10,1)]
@@ -578,7 +584,7 @@ class Window(QMainWindow,Session):
         self.board_plot_axes.set_ylim([0,60])
         self.board_plot_axes.set_title('Channel 0 5V Voltage')
         self.board_plot_axes.set_ylabel('Voltage (V)')
-        self.board_plot_axes.set_xlabel('Iterative Age of Datapoint')
+        self.board_plot_axes.set_xlabel('Iterative Age of Datapoint: each iteration is ' + str(round(self.board_time/60000,1)) + ' minutes.')
 
         # initialize data (placed outside of bounds, so that it doesn't show up initially)
         self.board_plot_data_x=[*range(0,10,1)]
@@ -615,7 +621,7 @@ class Window(QMainWindow,Session):
         self.hv_plot_axes.set_ylim([0,1600])
         self.hv_plot_axes.set_title('Channel 0 HV Voltage')
         self.hv_plot_axes.set_ylabel('Voltage (V)')
-        self.hv_plot_axes.set_xlabel('Iterative Age of Datapoint')
+        self.hv_plot_axes.set_xlabel('Iterative Age of Datapoint: each iteration is ' + str(round(self.board_time/60000,1)) + ' minutes.')
 
         # initialize data (placed outside of bounds, so that it doesn't show up initially)
         self.hv_plot_data_x=[*range(0,10,1)]
@@ -1151,7 +1157,7 @@ class Window(QMainWindow,Session):
     # called to change the hv plot
     # this function is only used when the TYPE of data that is being plotted changes, as per user input
     def change_stability_hv_plot(self):
-        channel=self.get_hv_channel()
+        channel=self.get_stability_hv_channel()
         type=self.stability_hv_measurement_selector.currentText()
 
         # update labels for the hv plot
@@ -1176,7 +1182,7 @@ class Window(QMainWindow,Session):
     # called to change the board plot (readmon data)
     # this function is only used when the TYPE of data that is being plotted changes, as per user input
     def change_stability_board_plot(self):
-        channel=self.get_board_channel()
+        channel=self.get_stability_board_channel()
         type=self.stability_board_measurement_selector.currentText()
 
         # update labels for the board plot
@@ -1201,8 +1207,8 @@ class Window(QMainWindow,Session):
             self.stability_board_plot_data.set_ydata(self.stability_board_cond_current_plot[channel])
 
         # actually update the plot
-        self.board_plot_canvas.draw()
-        self.board_plot_canvas.flush_events()
+        self.stability_board_plot_canvas.draw()
+        self.stability_board_plot_canvas.flush_events()
 
     # instantly changes what's being displayed on the main plot, depending on the user's selection
     # this function is only used when the TYPE of data that is being plotted changes, as per user input
@@ -1320,7 +1326,7 @@ class Window(QMainWindow,Session):
             self.stability_board_5v_voltage_plot[i]=[self.five_voltage[i]]+self.stability_board_5v_voltage_plot[i][:-1]
             self.stability_board_5v_current_plot[i]=[self.five_current[i]]+self.stability_board_5v_current_plot[i][:-1]
             self.stability_board_cond_voltage_plot[i]=[self.cond_voltage[i]]+self.stability_board_cond_voltage_plot[i][:-1]
-            self.board_cond_current_plot[i]=[self.cond_current[i]]+self.board_cond_current_plot[i][:-1]
+            self.stability_board_cond_current_plot[i]=[self.cond_current[i]]+self.board_cond_current_plot[i][:-1]
 
         # determine which type of data is currently being plotted, and set data accordingly
         if type=="5V Voltage":
@@ -1430,6 +1436,11 @@ class Window(QMainWindow,Session):
         self.update_blade_plot()
         self.update_board_plot()
         self.update_hv_plot()
+
+    def stability_save(self):
+        self.update_stability_blade_plot()
+        self.update_stability_board_plot()
+        self.update_stability_hv_plot()
         self.save_txt()
 
     # updates the hv table and hv rampup status bars
@@ -1454,17 +1465,17 @@ class Window(QMainWindow,Session):
         self.hv_voltage_plot=[[10000]*10]*12
         self.hv_current_plot=[[10000]*10]*12
 
-        self.stability_blade_voltage_plot=[[500]*200]*6
-        self.stability_blade_current_plot=[[500]*200]*6
-        self.stability_blade_temperature_plot=[[500]*200]*6
+        self.stability_blade_voltage_plot=[[500]*48]*6
+        self.stability_blade_current_plot=[[500]*48]*6
+        self.stability_blade_temperature_plot=[[500]*48]*6
 
-        self.stability_board_5v_voltage_plot=[[500]*200]*6
-        self.stability_board_5v_current_plot=[[500]*200]*6
-        self.stability_board_cond_voltage_plot=[[500]*200]*6
-        self.stability_board_cond_current_plot=[[500]*200]*6
+        self.stability_board_5v_voltage_plot=[[500]*48]*6
+        self.stability_board_5v_current_plot=[[500]*48]*6
+        self.stability_board_cond_voltage_plot=[[500]*48]*6
+        self.stability_board_cond_current_plot=[[500]*48]*6
 
-        self.stability_hv_voltage_plot=[[10000]*200]*12
-        self.stability_hv_current_plot=[[10000]*200]*12
+        self.stability_hv_voltage_plot=[[10000]*48]*12
+        self.stability_hv_current_plot=[[10000]*48]*12
 
         # keeps track of blade power statuses
         self.blade_power=[False]*6
@@ -1478,18 +1489,24 @@ class Window(QMainWindow,Session):
 
     def run(self):
         # initialize timers required to update gui/get and log data
-        self.save_timer = QTimer(self)
-        self.save_timer.setSingleShot(False)
+        self.lv_timer = QTimer(self)
+        self.lv_timer.setSingleShot(False)
         self.hv_timer = QTimer(self)
         self.hv_timer.setSingleShot(False)
+        self.stability_timer=QTimer(self)
+        self.stability_timer.setSingleShot(False)
 
         # readMon update timer
-        self.save_timer.timeout.connect(self.call_lv_data)
-        self.save_timer.start(self.board_time)
+        self.lv_timer.timeout.connect(self.call_lv_data)
+        self.lv_timer.start(self.board_time)
 
         # hv update timer
         self.hv_timer.timeout.connect(lambda:self.get_hv_data(False))
         self.hv_timer.start(self.hv_time)
+
+        # call save function and update stability_plots
+        self.stability_timer.timeout.connect(self.stability_save)
+        self.stability_timer.start(self.save_time)
 
 
 if __name__=="__main__":
