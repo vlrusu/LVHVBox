@@ -353,7 +353,7 @@ class Window(QMainWindow,Session):
         # set vars to control timers
         self.board_time=15000
         self.hv_time=300
-        self.save_time=60000
+        self.save_time=3600000
 
         self.max_reading = 8388608.0
         self.vref = 3.3
