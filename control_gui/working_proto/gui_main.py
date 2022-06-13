@@ -96,12 +96,14 @@ class Session():
         else:
             pass
 
+    # initializes connection with hv control
     def initialize_hv(self,test):
         if not test:
             self.rampup.initialization()
         else:
             pass
 
+    # called within a thread to actuate hv rampup
     def hv_rampup_on_off(self):
         self.is_ramping=True
 
@@ -118,6 +120,7 @@ class Session():
 
         self.is_ramping=False
 
+    # acquires hv data from pico via pyserial connection
     def get_hv_data(self,test):
         # acquire hv current and voltage
         hv_current=[]
@@ -273,10 +276,9 @@ class Session():
                     time.sleep(self.I2C_sleep_time)
                     reading = self.bus.read_i2c_block_data(address, channelLTC, 3)
 
-         #           print(reading)
                     val = ((((reading[0]&0x3F))<<16))+((reading[1]<<8))+(((reading[2]&0xE0)))
                     volts = val*self.vref/self.max_reading
-         #           print (volts)
+
                     vvolts = volts / 0.01964
                     ivolts = volts / 0.4
                     v12volts = volts * 10
