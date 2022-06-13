@@ -333,15 +333,15 @@ class Session():
             output+=','+str(self.five_current[i])
             output+=','+str(self.cond_voltage[i])
             output+=','+str(self.cond_current[i])
-        output+=','+str(time.time())
+        output+=','+str(time.time())+','
         output+='\n'
 
-        file1=open("logfile.txt", "a")
+        file1=open("/home/pi/working_proto/logfile.txt", "a")
         file1.write(output)
         file1.close()
 
     def save_error(self,text):
-        file2=open("error_logfile.txt","a")
+        file2=open("/home/pi/working_proto/error_logfile.txt","a")
         file2.write(text)
         file2.write(str(time.time()))
         file2.close()
