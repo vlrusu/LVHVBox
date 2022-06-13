@@ -124,7 +124,7 @@ class Session():
         hv_voltage=[]
         if not test:
             try:
-                ser = serial.Serial('/dev/ttyACM0', 115200, timeout=0.5)
+                ser = serial.Serial('/dev/ttyACM0', 115200, timeout=0.2)
                 line = ser.readline().decode('ascii')
 
                 processed_line = line.split(" ")
@@ -179,13 +179,17 @@ class Session():
             voltage_values=[]
             if not test:
                 for i in range(0,6):
-                    # acquire the voltage measurement for each of the six blades
-                    self.bus.write_byte_data(0x50,0x0,i+1)
-                    reading=self.bus.read_i2c_block_data(0x50,0x8B,2)
-                    value=float(reading[0]+256*reading[1])/256.
+                    time.sleep(self.I2C_sleep_time)
+                    try:
+                        # acquire the voltage measurement for each of the six blades
+                        self.bus.write_byte_data(0x50,0x0,i+1)
+                        reading=self.bus.read_i2c_block_data(0x50,0x8B,2)
+                        value=float(reading[0]+256*reading[1])/256.
 
-                    # append acquired voltage measurement to output list
-                    voltage_values.append(round(value,3))
+                        # append acquired voltage measurement to output list
+                        voltage_values.append(round(value,3))
+                    except:
+                        self.save_error("Error acquiring blade voltage data on channel " + str(i))
             else:
                 for i in range(0,6):
                     voltage_values.append(round(random.uniform(35,45),3))
@@ -195,17 +199,21 @@ class Session():
             current_values=[]
             if not test:
                 for i in range(0,6):
-                    # acquire the current measurement for each of the six blades
-                    self.bus.write_byte_data(0x50,0x0,i+1)
-                    reading=self.bus.read_i2c_block_data(0x50,0x8C,2)
-                    value=reading[0]+256*reading[1]
-                    exponent=(value >> 11) & 0x1f
-                    exponent=exponent-32
-                    mantissa=value & 0x7ff
-                    current=mantissa*2**exponent
+                    time.sleep(self.I2C_sleep_time)
+                    try:
+                        # acquire the current measurement for each of the six blades
+                        self.bus.write_byte_data(0x50,0x0,i+1)
+                        reading=self.bus.read_i2c_block_data(0x50,0x8C,2)
+                        value=reading[0]+256*reading[1]
+                        exponent=(value >> 11) & 0x1f
+                        exponent=exponent-32
+                        mantissa=value & 0x7ff
+                        current=mantissa*2**exponent
 
-                    # append acquired current measurement to output list
-                    current_values.append(round(current,3))
+                        # append acquired current measurement to output list
+                        current_values.append(round(current,3))
+                    except:
+                        self.save_error("Error acquiring blade current data on channel " + str(i))
             else:
                 for i in range(0,6):
                     current_values.append(round(random.uniform(10,15),3))
@@ -215,16 +223,20 @@ class Session():
             temperature_values=[]
             if not test:
                 for i in range(0,6):
-                    # acquire the temperature measurement for each of the six blades
-                    self.bus.write_byte_data(0x50,0x0,i+1)
-                    reading=self.bus.read_i2c_block_data(0x50,0x8D,2)
-                    value=reading[0]+256*reading[1]
-                    exponent=(value >> 11) & 0x1f
-                    mantissa = value & 0x7ff
-                    temp=mantissa*2**exponent
+                    time.sleep(self.I2C_sleep_time)
+                    try:
+                        # acquire the temperature measurement for each of the six blades
+                        self.bus.write_byte_data(0x50,0x0,i+1)
+                        reading=self.bus.read_i2c_block_data(0x50,0x8D,2)
+                        value=reading[0]+256*reading[1]
+                        exponent=(value >> 11) & 0x1f
+                        mantissa = value & 0x7ff
+                        temp=mantissa*2**exponent
 
-                    # append acquired temperature measurement to output list
-                    temperature_values.append(round(temp,3))
+                        # append acquired temperature measurement to output list
+                        temperature_values.append(round(temp,3))
+                    except:
+                        self.save_error("Error acquiring blade temperature data on channel " + str(i))
             else:
                 for i in range(0,6):
                     temperature_values.append(round(random.uniform(28,35),3))
@@ -237,9 +249,8 @@ class Session():
         except:
             print('bus busy')
 
-        self.blade_update()
-
-    def get_board_data(self,test):
+    def get_lv_data(self,test):
+        self.get_blade_data(False)
         # initialize lv data acquisition
         # TODO remove and put in initialization function
 
@@ -249,53 +260,56 @@ class Session():
         cond_voltage=[]
         cond_current=[]
         for channel in reversed(range(0,6)):
-            address=self.addresses[int(channel/2)]
-            ch=channel%2
+            try:
+                address=self.addresses[int(channel/2)]
+                ch=channel%2
 
-            temp_vals=[]
-            for index in range(4):
-                time.sleep(0.25) # need this otherwise get bus errors. FIXME!
-                channelLTC = (0b101<<5) + 4*ch + index
-                self.bus.write_byte(address, channelLTC)
+                temp_vals=[]
+                for index in range(4):
+                    time.sleep(self.I2C_sleep_time)
+                    channelLTC = (0b101<<5) + 4*ch + index
+                    self.bus.write_byte(address, channelLTC)
 
-                time.sleep(self.I2C_sleep_time)
-                reading = self.bus.read_i2c_block_data(address, channelLTC, 3)
+                    time.sleep(self.I2C_sleep_time)
+                    reading = self.bus.read_i2c_block_data(address, channelLTC, 3)
 
-     #           print(reading)
-                val = ((((reading[0]&0x3F))<<16))+((reading[1]<<8))+(((reading[2]&0xE0)))
-                volts = val*self.vref/self.max_reading
-     #           print (volts)
-                vvolts = volts / 0.01964
-                ivolts = volts / 0.4
-                v12volts = volts * 10
+         #           print(reading)
+                    val = ((((reading[0]&0x3F))<<16))+((reading[1]<<8))+(((reading[2]&0xE0)))
+                    volts = val*self.vref/self.max_reading
+         #           print (volts)
+                    vvolts = volts / 0.01964
+                    ivolts = volts / 0.4
+                    v12volts = volts * 10
 
-                if (ch == 0):
-                    if (index%2 == 0):
-                        if ( index % 4 == 0):
-                            temp_vals.append(round(vvolts,3))
+                    if (ch == 0):
+                        if (index%2 == 0):
+                            if ( index % 4 == 0):
+                                temp_vals.append(round(vvolts,3))
+                            else:
+                                temp_vals.append(round(v12volts,3))
                         else:
-                            temp_vals.append(round(v12volts,3))
+                            temp_vals.append(round(ivolts,3))
                     else:
-                        temp_vals.append(round(ivolts,3))
+                        if (index%2 == 1):
+                            if ( index % 4 == 3):
+                                temp_vals.append(round(vvolts,3))
+                            else:
+                                temp_vals.append(round(v12volts,3))
+                        else:
+                            temp_vals.append(round(ivolts,3))
+
+                if channel%2 == 0:
+                    cond_voltage.append(temp_vals[0])
+                    cond_current.append(temp_vals[1])
+                    five_voltage.append(temp_vals[2])
+                    five_current.append(temp_vals[3])
                 else:
-                    if (index%2 == 1):
-                        if ( index % 4 == 3):
-                            temp_vals.append(round(vvolts,3))
-                        else:
-                            temp_vals.append(round(v12volts,3))
-                    else:
-                        temp_vals.append(round(ivolts,3))
-
-            if channel%2 == 0:
-                cond_voltage.append(temp_vals[0])
-                cond_current.append(temp_vals[1])
-                five_voltage.append(temp_vals[2])
-                five_current.append(temp_vals[3])
-            else:
-                cond_voltage.append(temp_vals[3])
-                cond_current.append(temp_vals[2])
-                five_voltage.append(temp_vals[1])
-                five_current.append(temp_vals[0])
+                    cond_voltage.append(temp_vals[3])
+                    cond_current.append(temp_vals[2])
+                    five_voltage.append(temp_vals[1])
+                    five_current.append(temp_vals[0])
+            except:
+                self.save_error("Error acquiring board data on channel " + str(channel))
 
         # save data lists for board
         self.five_voltage=five_voltage
@@ -303,7 +317,10 @@ class Session():
         self.cond_voltage=cond_voltage
         self.cond_current=cond_current
 
-        self.primary_update()
+        try:
+            self.primary_update()
+        except:
+            self.save_error("Error with primary update")
 
     def save_txt(self):
         output=''
@@ -323,14 +340,28 @@ class Session():
         file1.write(output)
         file1.close()
 
+    def save_error(self,text):
+        file2=open("error_logfile.txt","a")
+        file2.write(text)
+        file2.write(str(time.time()))
+        file2.close()
+
 class Window(QMainWindow,Session):
     def __init__(self):
         super(Window,self).__init__()
 
         # set vars to control timers
         self.board_time=15000
-        self.hv_time=750
-        self.blade_time=750
+        self.hv_time=300
+
+        self.max_reading = 8388608.0
+        self.vref = 3.3
+
+        self.pins = ["P9_15","P9_15","P9_15","P9_27","P9_41","P9_12"]
+        self.GLOBAL_ENABLE_PIN =  15
+        self.RESET_PIN = 32
+
+        self.addresses = [0x14,0x16,0x26]
 
         self.initialize_data()
         # since it's a touch screen, the cursor is irritating
@@ -367,8 +398,6 @@ class Window(QMainWindow,Session):
         # initialize hv plotting Window
         self.hv_plotting_setup()
 
-        # initialize diagnostics Window
-        self.diagnostics_setup()
 
         # adds tabs to the overall GUI
         self.tabs.addTab(self.tab1,"Tables")
@@ -377,13 +406,126 @@ class Window(QMainWindow,Session):
         self.tabs.addTab(self.tab4,"Raw Blade Plots")
         self.tabs.addTab(self.tab5,"Board Plots")
         self.tabs.addTab(self.tab6,"HV Plots")
-        self.tabs.addTab(self.tab7,"Diagnostics")
+        """
+        self.tabs.addTab(self.tab7,"Stability Raw Blade Plots")
+        self.tabs.addTab(self.tab8,"Stability Board Plots")
+        self.tabs.addTab(self.tab9,"Stability HV Plots")
+        """
 
         # set title and place tab widget for pyqt
         self.setWindowTitle("LVHV GUI")
         self.setCentralWidget(self.tabs)
 
         self.show()
+
+    def stability_blade_plotting_setup(self):
+        self.tab7=QWidget()
+        self.tab7.layout=QGridLayout()
+
+        # set up the blade plot
+        self.stability_blade_plot=Figure()
+        self.stability_blade_plot_canvas=FigureCanvas(self.stability_blade_plot)
+        self.stability_blade_plot_axes=self.stability_blade_plot.add_subplot(111)
+
+        self.stability_blade_plot_axes.set_xlim([0,200])
+        self.stability_blade_plot_axes.set_ylim([0,60])
+        self.stability_blade_plot_axes.set_title('Channel 0 Blade Voltage')
+        self.stability_blade_plot_axes.set_ylabel('Voltage (V)')
+        self.stability_blade_plot_axes.set_xlabel('Iterative Age of Datapoint')
+
+        # initialize data (placed outside of bounds, so that it doesn't show up initially)
+        self.stability_blade_plot_data_x=[*range(0,200,1)]
+        self.stability_blade_plot_data=self.stability_blade_plot_axes.plot(self.stability_blade_plot_data_x,self.stability_blade_voltage_plot[0],marker='o',linestyle='None',markersize=2,color='k')[0]
+
+        # add dropdown menus to select what's plotted
+        self.stability_blade_channel_selector=QComboBox()
+        self.stability_blade_channel_selector.addItems(["Channel 0","Channel 1","Channel 2","Channel 3","Channel 4","Channel 5"])
+        self.stability_blade_channel_selector.setStyleSheet(button_color)
+        self.stability_blade_channel_selector.currentIndexChanged.connect(self.change_stability_blade_plot)
+
+        self.stability_blade_measurement_selector=QComboBox()
+        self.stability_blade_measurement_selector.addItems(["Voltage","Current","Temperature"])
+        self.stability_blade_measurement_selector.setStyleSheet(button_color)
+        self.stability_blade_measurement_selector.currentIndexChanged.connect(self.change_stability_blade_plot)
+
+        # add widgets and set layout
+        self.tab7.layout.addWidget(self.stability_blade_channel_selector,0,0)
+        self.tab7.layout.addWidget(self.stability_blade_measurement_selector,1,0)
+        self.tab7.layout.addWidget(self.stability_blade_plot_canvas,0,1)
+        self.tab7.setLayout(self.tab7.layout)
+
+    def stability_board_plotting_setup(self):
+        self.tab8=QWidget()
+        self.tab8.layout=QGridLayout()
+
+        # setup the board plot
+        self.stability_board_plot=Figure()
+        self.stability_board_plot_canvas=FigureCanvas(self.stability_board_plot)
+        self.stability_board_plot_axes=self.stability_board_plot.add_subplot(111)
+
+        self.stability_board_plot_axes.set_xlim([0,200])
+        self.stability_board_plot_axes.set_ylim([0,60])
+        self.stability_board_plot_axes.set_title('Channel 0 5V Voltage')
+        self.stability_board_plot_axes.set_ylabel('Voltage (V)')
+        self.stability_board_plot_axes.set_xlabel('Iterative Age of Datapoint')
+
+        # initialize data (placed outside of bounds, so that it doesn't show up initially)
+        self.stability_board_plot_data_x=[*range(0,200,1)]
+        self.stability_board_plot_data=self.stability_board_plot_axes.plot(self.stability_board_plot_data_x,self.stability_board_5v_voltage_plot[0],marker='o',linestyle='None',markersize=2,color='k')[0]
+
+        # add dropdown menus to select what's plotted
+        self.stability_board_channel_selector=QComboBox()
+        self.stability_board_channel_selector.addItems(["Channel 0","Channel 1","Channel 2","Channel 3","Channel 4","Channel 5"])
+        self.stability_board_channel_selector.setStyleSheet(button_color)
+        self.stability_board_channel_selector.currentIndexChanged.connect(self.change_stability_board_plot)
+
+        self.stability_board_measurement_selector=QComboBox()
+        self.stability_board_measurement_selector.addItems(["5V Voltage","5V Current","Conditioned Voltage","Conditioned Current"])
+        self.stability_board_measurement_selector.setStyleSheet(button_color)
+        self.stability_board_measurement_selector.currentIndexChanged.connect(self.change_stability_board_plot)
+
+        # add widgets and set layout
+        self.tab8.layout.addWidget(self.stability_board_channel_selector,0,0)
+        self.tab8.layout.addWidget(self.stability_board_measurement_selector,1,0)
+        self.tab8.layout.addWidget(self.stability_board_plot_canvas,0,1)
+        self.tab8.setLayout(self.tab8.layout)
+
+    def stability_hv_plotting_setup(self):
+        self.tab9=QWidget()
+        self.tab9.layout=QGridLayout()
+
+        # setup the hv plot
+        self.stability_hv_plot=Figure()
+        self.stability_hv_plot_canvas=FigureCanvas(self.stability_hv_plot)
+        self.stability_hv_plot_axes=self.hv_plot.add_subplot(111)
+
+        self.stability_hv_plot_axes.set_xlim([0,10])
+        self.stability_hv_plot_axes.set_ylim([0,1600])
+        self.stability_hv_plot_axes.set_title('Channel 0 HV Voltage')
+        self.stability_hv_plot_axes.set_ylabel('Voltage (V)')
+        self.stability_hv_plot_axes.set_xlabel('Iterative Age of Datapoint')
+
+        # initialize data (placed outside of bounds, so that it doesn't show up initially)
+        self.stability_hv_plot_data_x=[*range(0,10,1)]
+        self.stability_hv_plot_data=self.stability_hv_plot_axes.plot(self.stability_hv_plot_data_x,self.stability_hv_voltage_plot[0],marker='o',linestyle='None',markersize=2,color='k')[0]
+
+        # add dropdown menus to select what's plotted
+        self.stability_hv_channel_selector=QComboBox()
+        self.stability_hv_channel_selector.addItems(["Channel 0","Channel 1","Channel 2","Channel 3","Channel 4","Channel 5",
+        "Channel 6","Channel 7","Channel 8","Channel 9","Channel 10","Channel 11"])
+        self.stability_hv_channel_selector.setStyleSheet(button_color)
+        self.stability_hv_channel_selector.currentIndexChanged.connect(self.change_stability_hv_plot)
+
+        self.stability_hv_measurement_selector=QComboBox()
+        self.stability_hv_measurement_selector.addItems(["Voltage","Current"])
+        self.stability_hv_measurement_selector.setStyleSheet(button_color)
+        self.stability_hv_measurement_selector.currentIndexChanged.connect(self.change_stability_hv_plot)
+
+        # add widgets and set layout
+        self.tab9.layout.addWidget(self.hv_channel_selector,0,0)
+        self.tab9.layout.addWidget(self.hv_measurement_selector,1,0)
+        self.tab9.layout.addWidget(self.hv_plot_canvas,0,1)
+        self.tab9.setLayout(self.tab9.layout)
 
     # initializes blade plotting (exelcys)
     def blade_plotting_setup(self):
@@ -395,19 +537,19 @@ class Window(QMainWindow,Session):
         self.blade_plot_canvas=FigureCanvas(self.blade_plot)
         self.blade_plot_axes=self.blade_plot.add_subplot(111)
 
-        self.blade_plot_axes.set_xlim([0,50])
-        self.blade_plot_axes.set_ylim([0,100])
-        self.blade_plot_axes.set_title('Channel 1 Blade Voltage')
+        self.blade_plot_axes.set_xlim([0,10])
+        self.blade_plot_axes.set_ylim([0,60])
+        self.blade_plot_axes.set_title('Channel 0 Blade Voltage')
         self.blade_plot_axes.set_ylabel('Voltage (V)')
         self.blade_plot_axes.set_xlabel('Iterative Age of Datapoint')
 
         # initialize data (placed outside of bounds, so that it doesn't show up initially)
-        self.blade_plot_data_x=[*range(0,50,1)]
+        self.blade_plot_data_x=[*range(0,10,1)]
         self.blade_plot_data=self.blade_plot_axes.plot(self.blade_plot_data_x,self.blade_voltage_plot[0],marker='o',linestyle='None',markersize=2,color='k')[0]
 
         # add dropdown menus to select what's plotted
         self.blade_channel_selector=QComboBox()
-        self.blade_channel_selector.addItems(["Channel 1","Channel 2","Channel 3","Channel 4","Channel 5","Channel 6"])
+        self.blade_channel_selector.addItems(["Channel 0","Channel 1","Channel 2","Channel 3","Channel 4","Channel 5"])
         self.blade_channel_selector.setStyleSheet(button_color)
         self.blade_channel_selector.currentIndexChanged.connect(self.change_blade_plot)
 
@@ -432,19 +574,19 @@ class Window(QMainWindow,Session):
         self.board_plot_canvas=FigureCanvas(self.board_plot)
         self.board_plot_axes=self.board_plot.add_subplot(111)
 
-        self.board_plot_axes.set_xlim([0,50])
-        self.board_plot_axes.set_ylim([0,100])
-        self.board_plot_axes.set_title('Channel 1 5V Voltage')
+        self.board_plot_axes.set_xlim([0,10])
+        self.board_plot_axes.set_ylim([0,60])
+        self.board_plot_axes.set_title('Channel 0 5V Voltage')
         self.board_plot_axes.set_ylabel('Voltage (V)')
         self.board_plot_axes.set_xlabel('Iterative Age of Datapoint')
 
         # initialize data (placed outside of bounds, so that it doesn't show up initially)
-        self.board_plot_data_x=[*range(0,50,1)]
+        self.board_plot_data_x=[*range(0,10,1)]
         self.board_plot_data=self.board_plot_axes.plot(self.board_plot_data_x,self.board_5v_voltage_plot[0],marker='o',linestyle='None',markersize=2,color='k')[0]
 
         # add dropdown menus to select what's plotted
         self.board_channel_selector=QComboBox()
-        self.board_channel_selector.addItems(["Channel 1","Channel 2","Channel 3","Channel 4","Channel 5","Channel 6"])
+        self.board_channel_selector.addItems(["Channel 0","Channel 1","Channel 2","Channel 3","Channel 4","Channel 5"])
         self.board_channel_selector.setStyleSheet(button_color)
         self.board_channel_selector.currentIndexChanged.connect(self.change_board_plot)
 
@@ -469,20 +611,20 @@ class Window(QMainWindow,Session):
         self.hv_plot_canvas=FigureCanvas(self.hv_plot)
         self.hv_plot_axes=self.hv_plot.add_subplot(111)
 
-        self.hv_plot_axes.set_xlim([0,50])
+        self.hv_plot_axes.set_xlim([0,10])
         self.hv_plot_axes.set_ylim([0,1600])
-        self.hv_plot_axes.set_title('Channel 1 HV Voltage')
+        self.hv_plot_axes.set_title('Channel 0 HV Voltage')
         self.hv_plot_axes.set_ylabel('Voltage (V)')
         self.hv_plot_axes.set_xlabel('Iterative Age of Datapoint')
 
         # initialize data (placed outside of bounds, so that it doesn't show up initially)
-        self.hv_plot_data_x=[*range(0,50,1)]
+        self.hv_plot_data_x=[*range(0,10,1)]
         self.hv_plot_data=self.hv_plot_axes.plot(self.hv_plot_data_x,self.hv_voltage_plot[0],marker='o',linestyle='None',markersize=2,color='k')[0]
 
         # add dropdown menus to select what's plotted
         self.hv_channel_selector=QComboBox()
-        self.hv_channel_selector.addItems(["Channel 1","Channel 2","Channel 3","Channel 4","Channel 5","Channel 6",
-        "Channel 7","Channel 8","Channel 9","Channel 10","Channel 11","Channel 12"])
+        self.hv_channel_selector.addItems(["Channel 0","Channel 1","Channel 2","Channel 3","Channel 4","Channel 5",
+        "Channel 6","Channel 7","Channel 8","Channel 9","Channel 10","Channel 11"])
         self.hv_channel_selector.setStyleSheet(button_color)
         self.hv_channel_selector.currentIndexChanged.connect(self.change_hv_plot)
 
@@ -497,43 +639,38 @@ class Window(QMainWindow,Session):
         self.tab6.layout.addWidget(self.hv_plot_canvas,0,1)
         self.tab6.setLayout(self.tab6.layout)
 
-    # sets up the diagnostics tab for the GUI
-    # not implemented currently, not sure if it will be needed
-    def diagnostics_setup(self):
-        self.tab7=QWidget()
-
     # sets up the lv control tab for the GUI
     def lv_controls_setup(self):
         self.tab2=QWidget()
         self.tab2.layout=QGridLayout()
 
         # initialize lv control buttons and indicators
-        self.lv_power_button_1=QPushButton("LV 1")
+        self.lv_power_button_1=QPushButton("LV 0")
         self.lv_power_button_1.setFixedSize(QSize(210, 130))
         self.lv_power_button_1.setStyleSheet('background-color: red')
         self.lv_power_button_1.setFont(QFont("Arial", 45))
 
-        self.lv_power_button_2=QPushButton("LV 2")
+        self.lv_power_button_2=QPushButton("LV 1")
         self.lv_power_button_2.setFixedSize(QSize(210, 130))
         self.lv_power_button_2.setStyleSheet('background-color: red')
         self.lv_power_button_2.setFont(QFont("Arial", 45))
 
-        self.lv_power_button_3=QPushButton("LV 3")
+        self.lv_power_button_3=QPushButton("LV 2")
         self.lv_power_button_3.setFixedSize(QSize(210, 130))
         self.lv_power_button_3.setStyleSheet('background-color: red')
         self.lv_power_button_3.setFont(QFont("Arial", 45))
 
-        self.lv_power_button_4=QPushButton("LV 4")
+        self.lv_power_button_4=QPushButton("LV 3")
         self.lv_power_button_4.setFixedSize(QSize(210, 130))
         self.lv_power_button_4.setStyleSheet('background-color: red')
         self.lv_power_button_4.setFont(QFont("Arial", 45))
 
-        self.lv_power_button_5=QPushButton("LV 5")
+        self.lv_power_button_5=QPushButton("LV 4")
         self.lv_power_button_5.setFixedSize(QSize(210, 130))
         self.lv_power_button_5.setStyleSheet('background-color: red')
         self.lv_power_button_5.setFont(QFont("Arial", 45))
 
-        self.lv_power_button_6=QPushButton("LV 6")
+        self.lv_power_button_6=QPushButton("LV 5")
         self.lv_power_button_6.setFixedSize(QSize(210, 130))
         self.lv_power_button_6.setStyleSheet('background-color: red')
         self.lv_power_button_6.setFont(QFont("Arial", 45))
@@ -562,62 +699,62 @@ class Window(QMainWindow,Session):
         self.tab3.layout=QGridLayout()
 
         # initilize hv control buttons
-        self.hv_power_button_1=QPushButton("HV 1")
+        self.hv_power_button_1=QPushButton("HV 0")
         self.hv_power_button_1.setFixedSize(QSize(130, 80))
         self.hv_power_button_1.setStyleSheet('background-color: red')
         self.hv_power_button_1.setFont(QFont("Arial", 30))
 
-        self.hv_power_button_2=QPushButton("HV 2")
+        self.hv_power_button_2=QPushButton("HV 1")
         self.hv_power_button_2.setFixedSize(QSize(130, 80))
         self.hv_power_button_2.setStyleSheet('background-color: red')
         self.hv_power_button_2.setFont(QFont("Arial", 30))
 
-        self.hv_power_button_3=QPushButton("HV 3")
+        self.hv_power_button_3=QPushButton("HV 2")
         self.hv_power_button_3.setFixedSize(QSize(130, 80))
         self.hv_power_button_3.setStyleSheet('background-color: red')
         self.hv_power_button_3.setFont(QFont("Arial", 30))
 
-        self.hv_power_button_4=QPushButton("HV 4")
+        self.hv_power_button_4=QPushButton("HV 3")
         self.hv_power_button_4.setFixedSize(QSize(130, 80))
         self.hv_power_button_4.setStyleSheet('background-color: red')
         self.hv_power_button_4.setFont(QFont("Arial", 30))
 
-        self.hv_power_button_5=QPushButton("HV 5")
+        self.hv_power_button_5=QPushButton("HV 4")
         self.hv_power_button_5.setFixedSize(QSize(130, 80))
         self.hv_power_button_5.setStyleSheet('background-color: red')
         self.hv_power_button_5.setFont(QFont("Arial", 30))
 
-        self.hv_power_button_6=QPushButton("HV 6")
+        self.hv_power_button_6=QPushButton("HV 5")
         self.hv_power_button_6.setFixedSize(QSize(130, 80))
         self.hv_power_button_6.setStyleSheet('background-color: red')
         self.hv_power_button_6.setFont(QFont("Arial", 30))
 
-        self.hv_power_button_7=QPushButton("HV 7")
+        self.hv_power_button_7=QPushButton("HV 6")
         self.hv_power_button_7.setFixedSize(QSize(130, 80))
         self.hv_power_button_7.setStyleSheet('background-color: red')
         self.hv_power_button_7.setFont(QFont("Arial", 30))
 
-        self.hv_power_button_8=QPushButton("HV 8")
+        self.hv_power_button_8=QPushButton("HV 7")
         self.hv_power_button_8.setFixedSize(QSize(130, 80))
         self.hv_power_button_8.setStyleSheet('background-color: red')
         self.hv_power_button_8.setFont(QFont("Arial", 30))
 
-        self.hv_power_button_9=QPushButton("HV 9")
+        self.hv_power_button_9=QPushButton("HV 8")
         self.hv_power_button_9.setFixedSize(QSize(130, 80))
         self.hv_power_button_9.setStyleSheet('background-color: red')
         self.hv_power_button_9.setFont(QFont("Arial", 30))
 
-        self.hv_power_button_10=QPushButton("HV 10")
+        self.hv_power_button_10=QPushButton("HV 9")
         self.hv_power_button_10.setFixedSize(QSize(130, 80))
         self.hv_power_button_10.setStyleSheet('background-color: red')
         self.hv_power_button_10.setFont(QFont("Arial", 30))
 
-        self.hv_power_button_11=QPushButton("HV 11")
+        self.hv_power_button_11=QPushButton("HV 10")
         self.hv_power_button_11.setFixedSize(QSize(130, 80))
         self.hv_power_button_11.setStyleSheet('background-color: red')
         self.hv_power_button_11.setFont(QFont("Arial", 30))
 
-        self.hv_power_button_12=QPushButton("HV 12")
+        self.hv_power_button_12=QPushButton("HV 11")
         self.hv_power_button_12.setFixedSize(QSize(130, 80))
         self.hv_power_button_12.setStyleSheet('background-color: red')
         self.hv_power_button_12.setFont(QFont("Arial", 30))
@@ -728,7 +865,7 @@ class Window(QMainWindow,Session):
         self.board_control_table.setDisabled(True)
 
         self.board_control_table.setHorizontalHeaderLabels(["5V Voltage (V)","5V Current (A)","Cond Voltage (V)","Cond Current (A)"])
-        self.board_control_table.setVerticalHeaderLabels(["Ch 1","Ch 2","Ch 3","Ch 4","Ch 5","Ch 6"])
+        self.board_control_table.setVerticalHeaderLabels(["Ch 0","Ch 1","Ch 2","Ch 3","Ch 4","Ch 5"])
         self.board_control_table.horizontalHeader().setResizeMode(QHeaderView.Stretch)
 
         # setup hv table
@@ -740,7 +877,7 @@ class Window(QMainWindow,Session):
         for i in range(0,12):
             self.hv_control_table.setRowHeight(i,24)
 
-        self.hv_control_table.setVerticalHeaderLabels(["Ch 1","Ch 2","Ch 3","Ch 4","Ch 5","Ch 6","Ch 7","Ch 8","Ch 9","Ch 10","Ch 11","Ch 12"])
+        self.hv_control_table.setVerticalHeaderLabels(["Ch 0","Ch 1","Ch 2","Ch 3","Ch 4","Ch 5","Ch 6","Ch 7","Ch 8","Ch 9","Ch 10","Ch 11"])
         self.hv_control_table.setHorizontalHeaderLabels(["Voltage (V)","Current (A)"])
 
         # set up tabs to select whether to view blade data or board data
@@ -943,25 +1080,129 @@ class Window(QMainWindow,Session):
     # acquires the channel being measured
     def get_blade_channel(self):
         # determine which blade data is to be plotted for
-        channels={"Channel 1": 0,"Channel 2": 1,"Channel 3": 2,"Channel 4": 3,"Channel 5": 4,"Channel 6": 5}
+        channels={"Channel 0": 0,"Channel 1": 1,"Channel 2": 2,"Channel 3": 3,"Channel 4": 4,"Channel 5": 5}
         channel=channels[self.blade_channel_selector.currentText()]
         return channel
 
     # returns the proper board channel number, based on the current user selection
     def get_board_channel(self):
         # determine which blade data is to be plotted for
-        channels={"Channel 1": 0,"Channel 2": 1,"Channel 3": 2,"Channel 4": 3,"Channel 5": 4,"Channel 6": 5}
+        channels={"Channel 0": 0,"Channel 1": 1,"Channel 2": 2,"Channel 3": 3,"Channel 4": 4,"Channel 5": 5}
         channel=channels[self.board_channel_selector.currentText()]
         return channel
 
     # returns the proper hv channel number, based on the current user selection
     def get_hv_channel(self):
         # determine which hv channel data is to be plotted for
-        channels={"Channel 1": 0,"Channel 2": 1,"Channel 3": 2,"Channel 4": 3,"Channel 5": 4,
-        "Channel 6": 5,"Channel 7": 6,"Channel 8": 7,"Channel 9": 8,"Channel 10": 9,
-        "Channel 11": 10,"Channel 12": 11}
+        channels={"Channel 0": 0,"Channel 1": 1,"Channel 2": 2,"Channel 3": 3,"Channel 4": 4,
+        "Channel 5": 5,"Channel 6": 6,"Channel 7": 7,"Channel 8": 8,"Channel 9": 9,
+        "Channel 10": 10,"Channel 11": 11}
         channel=channels[self.hv_channel_selector.currentText()]
         return channel
+
+    # acquires the channel being measured
+    def get_stability_blade_channel(self):
+        # determine which blade data is to be plotted for
+        channels={"Channel 0": 0,"Channel 1": 1,"Channel 2": 2,"Channel 3": 3,"Channel 4": 4,"Channel 5": 5}
+        channel=channels[self.stability_blade_channel_selector.currentText()]
+        return channel
+
+    # returns the proper board channel number, based on the current user selection
+    def get_stability_board_channel(self):
+        # determine which blade data is to be plotted for
+        channels={"Channel 0": 0,"Channel 1": 1,"Channel 2": 2,"Channel 3": 3,"Channel 4": 4,"Channel 5": 5}
+        channel=channels[self.stability_board_channel_selector.currentText()]
+        return channel
+
+    # returns the proper hv channel number, based on the current user selection
+    def get_stability_hv_channel(self):
+        # determine which hv channel data is to be plotted for
+        channels={"Channel 0": 0,"Channel 1": 1,"Channel 2": 2,"Channel 3": 3,"Channel 4": 4,
+        "Channel 5": 5,"Channel 6": 6,"Channel 7": 7,"Channel 8": 8,"Channel 9": 9,
+        "Channel 10": 10,"Channel 11": 11}
+        channel=channels[self.stability_hv_channel_selector.currentText()]
+        return channel
+
+    def change_stability_blade_plot(self):
+        channel=self.get_stability_blade_channel()
+        type=self.stability_blade_measurement_selector.currentText()
+
+        # update labels for the blade plot
+        self.stability_blade_plot_axes.set_title(self.stability_blade_channel_selector.currentText() + ' Blade ' + type)
+        if type=="Voltage":
+            self.stability_blade_plot_axes.set_ylabel('Voltage (V)')
+        elif type=="Current":
+            self.stability_blade_plot_axes.set_ylabel('Current (A)')
+        else:
+            self.stability_blade_plot_axes.set_ylabel('Temperature (C)')
+
+        # ensure that the proper type of data is plotted
+        if type=="Voltage":
+            self.stability_blade_plot_data.set_ydata(self.stability_blade_voltage_plot[channel])
+        elif type=="Current":
+            self.stability_blade_plot_data.set_ydata(self.stability_blade_current_plot[channel])
+        else:
+            self.stability_blade_plot_data.set_ydata(self.stability_blade_temperature_plot[channel])
+
+        # update the plot
+        self.stability_blade_plot_canvas.draw()
+        self.stability_blade_plot_canvas.flush_events()
+
+    # called to change the hv plot
+    # this function is only used when the TYPE of data that is being plotted changes, as per user input
+    def change_stability_hv_plot(self):
+        channel=self.get_hv_channel()
+        type=self.stability_hv_measurement_selector.currentText()
+
+        # update labels for the hv plot
+        self.stability_hv_plot_axes.set_title(self.stability_hv_channel_selector.currentText() + ' HV ' + type)
+        if type=="Voltage":
+            self.stability_hv_plot_axes.set_ylabel('Voltage (V)')
+            self.stability_hv_plot_axes.set_ylim([0,1600])
+        else:
+            self.stability_hv_plot_axes.set_ylabel('Current (A)')
+            self.stability_hv_plot_axes.set_ylim([0,100])
+
+        # ensure that the proper type of data is being plotted
+        if type=="Voltage":
+            self.stability_hv_plot_data.set_ydata(self.stability_hv_voltage_plot[channel])
+        else:
+            self.stability_hv_plot_data.set_ydata(self.stability_hv_current_plot[channel])
+
+        # update the plot
+        self.stability_hv_plot_canvas.draw()
+        self.stability_hv_plot_canvas.flush_events()
+
+    # called to change the board plot (readmon data)
+    # this function is only used when the TYPE of data that is being plotted changes, as per user input
+    def change_stability_board_plot(self):
+        channel=self.get_board_channel()
+        type=self.stability_board_measurement_selector.currentText()
+
+        # update labels for the board plot
+        self.stability_board_plot_axes.set_title(self.stability_board_channel_selector.currentText() + ' Board ' + type)
+        if type=="5V Voltage":
+            self.stability_board_plot_axes.set_ylabel('5V Voltage (V)')
+        elif type=="5V Current":
+            self.stability_board_plot_axes.set_ylabel('5V Current (A)')
+        elif type=="Conditioned Voltage":
+            self.stability_board_plot_axes.set_ylabel('Conditioned Voltage (V)')
+        else:
+            self.stability_board_plot_axes.set_ylabel('Conditioned Current (A)')
+
+        # update the data, according to what is being plotted
+        if type=="5V Voltage":
+            self.stability_board_plot_data.set_ydata(self.stability_board_5v_voltage_plot[channel])
+        elif type=="5V Current":
+            self.stability_board_plot_data.set_ydata(self.stability_board_5v_current_plot[channel])
+        elif type=="Conditioned Voltage":
+            self.stability_board_plot_data.set_ydata(self.stability_board_cond_voltage_plot[channel])
+        else:
+            self.stability_board_plot_data.set_ydata(self.stability_board_cond_current_plot[channel])
+
+        # actually update the plot
+        self.board_plot_canvas.draw()
+        self.board_plot_canvas.flush_events()
 
     # instantly changes what's being displayed on the main plot, depending on the user's selection
     # this function is only used when the TYPE of data that is being plotted changes, as per user input
@@ -1046,7 +1287,71 @@ class Window(QMainWindow,Session):
         self.board_plot_canvas.draw()
         self.board_plot_canvas.flush_events()
 
+    # called by the timer to update the main plot with new data
+    def update_stability_blade_plot(self):
+        channel=self.get_blade_channel()
+        type=self.stability_blade_measurement_selector.currentText()
 
+        # rotate plot lists
+        for i in range(len(self.stability_blade_voltage_plot)):
+            self.stability_blade_voltage_plot[i]=[self.voltage[i]]+self.stability_blade_voltage_plot[i][:-1]
+            self.stability_blade_current_plot[i]=[self.current[i]]+self.stability_blade_current_plot[i][:-1]
+            self.stability_blade_temperature_plot[i]=[self.temperature[i]]+self.stability_blade_temperature_plot[i][:-1]
+
+        # determine what kind of data is being plotted, and respond accordingly
+        if type=="Voltage":
+            self.stability_blade_plot_data.set_ydata(self.stability_blade_voltage_plot[channel])
+        elif type=="Current":
+            self.stability_blade_plot_data.set_ydata(self.stability_blade_current_plot[channel])
+        else:
+            self.stability_blade_plot_data.set_ydata(self.stability_blade_temperature_plot[channel])
+
+        # update the plot
+        self.stability_blade_plot_canvas.draw()
+        self.stability_blade_plot_canvas.flush_events()
+
+    # this function updates the board plot (readmon data)
+    def update_stability_board_plot(self):
+        channel=self.get_board_channel()
+        type=self.stability_board_measurement_selector.currentText()
+
+        # rotate plot lists
+        for i in range(len(self.stability_board_5v_voltage_plot)):
+            self.stability_board_5v_voltage_plot[i]=[self.five_voltage[i]]+self.stability_board_5v_voltage_plot[i][:-1]
+            self.stability_board_5v_current_plot[i]=[self.five_current[i]]+self.stability_board_5v_current_plot[i][:-1]
+            self.stability_board_cond_voltage_plot[i]=[self.cond_voltage[i]]+self.stability_board_cond_voltage_plot[i][:-1]
+            self.board_cond_current_plot[i]=[self.cond_current[i]]+self.board_cond_current_plot[i][:-1]
+
+        # determine which type of data is currently being plotted, and set data accordingly
+        if type=="5V Voltage":
+            self.stability_board_plot_data.set_ydata(self.stability_board_5v_voltage_plot[channel])
+        elif type=="5V Current":
+            self.stability_board_plot_data.set_ydata(self.stability_board_5v_current_plot[channel])
+        elif type=="Conditioned Voltage":
+            self.stability_board_plot_data.set_ydata(self.stability_board_cond_voltage_plot[channel])
+        else:
+            self.stability_board_plot_data.set_ydata(self.stability_board_cond_current_plot[channel])
+
+        # actually update the plot
+        self.stability_board_plot_canvas.draw()
+        self.stability_board_plot_canvas.flush_events()
+
+    # this function updates the hv plot
+    def update_stability_hv_plot(self):
+        channel=self.get_hv_channel()
+        type=self.stability_hv_measurement_selector.currentText()
+
+        # rotate plot lists
+        for i in range(len(self.stability_hv_voltage_plot)):
+            self.stability_hv_voltage_plot[i]=[self.hv_voltage[i]]+self.stability_hv_voltage_plot[i][:-1]
+            self.stability_hv_current_plot[i]=[self.hv_current[i]]+self.stability_hv_current_plot[i][:-1]
+
+        if type=="Voltage":
+            self.stability_hv_plot_data.set_ydata(self.stability_hv_voltage_plot[channel])
+        else:
+            self.stability_hv_plot_data.set_ydata(self.stability_hv_current_plot[channel])
+        self.stability_hv_plot_canvas.draw()
+        self.stability_hv_plot_canvas.flush_events()
 
     # called by the timer to update the main plot with new data
     def update_blade_plot(self):
@@ -1114,21 +1419,18 @@ class Window(QMainWindow,Session):
         self.hv_plot_canvas.draw()
         self.hv_plot_canvas.flush_events()
 
-    def call_board_data(self):
-        threading.Thread(target=self.get_board_data,args=[False]).start()
+    def call_lv_data(self):
+        threading.Thread(target=self.get_lv_data,args=[False]).start()
 
     # this function updates all of the plots, as well as everything that has to do with readmon data
     # because readmon also takes the longest, this update function saves data to logfile.txt
     def primary_update(self):
         self.update_board_table()
+        self.update_blade_table()
         self.update_blade_plot()
         self.update_board_plot()
         self.update_hv_plot()
         self.save_txt()
-
-    # updates the blade table
-    def blade_update(self):
-        self.update_blade_table()
 
     # updates the hv table and hv rampup status bars
     def hv_update(self):
@@ -1140,17 +1442,29 @@ class Window(QMainWindow,Session):
             threading.Thread(target=self.hv_rampup_on_off).start()
 
     def initialize_data(self):
-        self.blade_voltage_plot=[[500]*50]*6
-        self.blade_current_plot=[[500]*50]*6
-        self.blade_temperature_plot=[[500]*50]*6
+        self.blade_voltage_plot=[[500]*10]*6
+        self.blade_current_plot=[[500]*10]*6
+        self.blade_temperature_plot=[[500]*10]*6
 
-        self.board_5v_voltage_plot=[[500]*50]*6
-        self.board_5v_current_plot=[[500]*50]*6
-        self.board_cond_voltage_plot=[[500]*50]*6
-        self.board_cond_current_plot=[[500]*50]*6
+        self.board_5v_voltage_plot=[[500]*10]*6
+        self.board_5v_current_plot=[[500]*10]*6
+        self.board_cond_voltage_plot=[[500]*10]*6
+        self.board_cond_current_plot=[[500]*10]*6
 
-        self.hv_voltage_plot=[[10000]*50]*12
-        self.hv_current_plot=[[10000]*50]*12
+        self.hv_voltage_plot=[[10000]*10]*12
+        self.hv_current_plot=[[10000]*10]*12
+
+        self.stability_blade_voltage_plot=[[500]*200]*6
+        self.stability_blade_current_plot=[[500]*200]*6
+        self.stability_blade_temperature_plot=[[500]*200]*6
+
+        self.stability_board_5v_voltage_plot=[[500]*200]*6
+        self.stability_board_5v_current_plot=[[500]*200]*6
+        self.stability_board_cond_voltage_plot=[[500]*200]*6
+        self.stability_board_cond_current_plot=[[500]*200]*6
+
+        self.stability_hv_voltage_plot=[[10000]*200]*12
+        self.stability_hv_current_plot=[[10000]*200]*12
 
         # keeps track of blade power statuses
         self.blade_power=[False]*6
@@ -1168,20 +1482,14 @@ class Window(QMainWindow,Session):
         self.save_timer.setSingleShot(False)
         self.hv_timer = QTimer(self)
         self.hv_timer.setSingleShot(False)
-        self.blade_timer = QTimer(self)
-        self. blade_timer.setSingleShot(False)
 
         # readMon update timer
-        self.save_timer.timeout.connect(self.call_board_data)
+        self.save_timer.timeout.connect(self.call_lv_data)
         self.save_timer.start(self.board_time)
 
         # hv update timer
         self.hv_timer.timeout.connect(lambda:self.get_hv_data(False))
         self.hv_timer.start(self.hv_time)
-
-        # blade update timer
-        self.blade_timer.timeout.connect(lambda:self.get_blade_data(False))
-        self.blade_timer.start(self.blade_time)
 
 
 if __name__=="__main__":
