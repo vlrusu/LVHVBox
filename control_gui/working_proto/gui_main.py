@@ -1433,17 +1433,44 @@ class Window(QMainWindow,Session):
     # this function updates all of the plots, as well as everything that has to do with readmon data
     # because readmon also takes the longest, this update function saves data to logfile.txt
     def primary_update(self):
-        self.update_board_table()
-        self.update_blade_table()
-        self.update_blade_plot()
-        self.update_board_plot()
-        self.update_hv_plot()
+        try:
+            self.update_board_table()
+        except:
+            self.save_error("Error with update board table.")
+        try:
+            self.update_blade_table()
+        except:
+            self.save_error("Error with update blade table.")
+        try:
+            self.update_blade_plot()
+        except:
+            self.save_error("Error with update blade plot.")
+        try:
+            self.update_board_plot()
+        except:
+            self.save_error("Error with update board plot.")
+        try:
+            self.update_hv_plot()
+        except:
+            self.save_error("Error with update hv plot.")
 
     def stability_save(self):
-        self.update_stability_blade_plot()
-        self.update_stability_board_plot()
-        self.update_stability_hv_plot()
-        self.save_txt()
+        try:
+            self.update_stability_blade_plot()
+        except:
+            self.save_error("Error with the stability blade plot update.")
+        try:
+            self.update_stability_board_plot()
+        except:
+            self.save_error("Error with the stability board plot update.")
+        try:
+            self.update_stability_hv_plot()
+        except:
+            self.save_error("Error with the stability hv plot update.")
+        try:
+            self.save_txt()
+        except:
+            self.save_error("Error saving the txt.")
 
     # updates the hv table and hv rampup status bars
     def hv_update(self):
