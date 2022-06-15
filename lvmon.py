@@ -250,6 +250,12 @@ def process_command(line):
         bus.write_byte_data(0x50,0x0,channel+1)
         bus.write_byte_data(0x50,0x01,0x0)
 
+    elif keys[0] == "status":
+        channel = int(get_key_value(keys,"c",-1))
+        reading=bus.read_word_data(0x50,0x79)
+        print(hex(reading))
+
+
 
     else:
       print ("Unknown command")

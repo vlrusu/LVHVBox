@@ -163,7 +163,7 @@ class Session():
                 # todo ensure proper length of hv current and voltage
 
             except:
-                pass
+                self.save_error("Error acquiring hv data")
         else:
             for i in range(0,12):
                 hv_voltage.append(round(random.uniform(1450,1550),3))
@@ -253,7 +253,10 @@ class Session():
             print('bus busy')
 
     def get_lv_data(self,test):
-        self.get_blade_data(False)
+        try:
+            self.get_blade_data(False)
+        except:
+            self.save_error("Error acquiring blade data inside get lv data.")
         # initialize lv data acquisition
         # TODO remove and put in initialization function
 
@@ -355,7 +358,7 @@ class Window(QMainWindow,Session):
         # set vars to control timers
         self.board_time=15000
         self.hv_time=300
-        self.save_time=3600000
+        self.save_time=60000
 
         self.max_reading = 8388608.0
         self.vref = 3.3
