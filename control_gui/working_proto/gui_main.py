@@ -127,8 +127,9 @@ class Session():
         hv_voltage=[]
         if not test:
             try:
-                ser = serial.Serial('/dev/ttyACM0', 115200, timeout=0.2)
+                ser = serial.Serial('/dev/ttyACM0', 115200)
                 line = ser.readline().decode('ascii')
+                ser.close()
 
                 processed_line = line.split(" ")
                 on_voltage=False
@@ -178,12 +179,14 @@ class Session():
 
     def get_blade_data(self,test):
         # acquire Voltage
+        #self.bus.pec=1
         try:
             voltage_values=[]
             if not test:
                 for i in range(0,6):
                     time.sleep(self.I2C_sleep_time)
                     try:
+                        self.bus.pec=1
                         # acquire the voltage measurement for each of the six blades
                         self.bus.write_byte_data(0x50,0x0,i+1)
                         reading=self.bus.read_i2c_block_data(0x50,0x8B,2)
@@ -191,7 +194,9 @@ class Session():
 
                         # append acquired voltage measurement to output list
                         voltage_values.append(round(value,3))
+                        self.bus.pec=0
                     except:
+                        self.bus.pec=0
                         self.save_error("Error acquiring blade voltage data on channel " + str(i))
             else:
                 for i in range(0,6):
@@ -204,6 +209,7 @@ class Session():
                 for i in range(0,6):
                     time.sleep(self.I2C_sleep_time)
                     try:
+                        self.bus.pec=1
                         # acquire the current measurement for each of the six blades
                         self.bus.write_byte_data(0x50,0x0,i+1)
                         reading=self.bus.read_i2c_block_data(0x50,0x8C,2)
@@ -215,7 +221,9 @@ class Session():
 
                         # append acquired current measurement to output list
                         current_values.append(round(current,3))
+                        self.bus.pec=0
                     except:
+                        self.bus.pec=0
                         self.save_error("Error acquiring blade current data on channel " + str(i))
             else:
                 for i in range(0,6):
@@ -228,6 +236,7 @@ class Session():
                 for i in range(0,6):
                     time.sleep(self.I2C_sleep_time)
                     try:
+                        self.bus.pec=1
                         # acquire the temperature measurement for each of the six blades
                         self.bus.write_byte_data(0x50,0x0,i+1)
                         reading=self.bus.read_i2c_block_data(0x50,0x8D,2)
@@ -238,19 +247,24 @@ class Session():
 
                         # append acquired temperature measurement to output list
                         temperature_values.append(round(temp,3))
+                        self.bus.pec=0
                     except:
+                        self.bus.pec=0
                         self.save_error("Error acquiring blade temperature data on channel " + str(i))
             else:
                 for i in range(0,6):
                     temperature_values.append(round(random.uniform(28,35),3))
                     # ensure delay between channel readings
 
+            #self.bus.pec=0
             # save data lists for blades
             self.voltage=voltage_values
             self.current=current_values
             self.temperature=temperature_values
         except:
+            #self.bus.pec=0
             print('bus busy')
+        #self.bus.pec=0
 
     def get_lv_data(self,test):
         try:
@@ -337,8 +351,8 @@ class Session():
             output+=','+str(self.five_voltage[i])
             output+=','+str(self.five_current[i])
             output+=','+str(self.cond_voltage[i])
-            output+=','+str(self.cond_current[i])
-        output+=','+str(time.time())+','
+            output+=','+str(self.cond_current[i])+','
+        output+=','+str(time.time())
         output+='\n'
 
         file1=open("/home/pi/working_proto/logfile.txt", "a")
@@ -348,7 +362,7 @@ class Session():
     def save_error(self,text):
         file2=open("/home/pi/working_proto/error_logfile.txt","a")
         file2.write(text)
-        file2.write(str(time.time()))
+        file2.write(str(time.time()) + "\n")
         file2.close()
 
 class Window(QMainWindow,Session):
@@ -357,7 +371,7 @@ class Window(QMainWindow,Session):
 
         # set vars to control timers
         self.board_time=15000
-        self.hv_time=300
+        self.hv_time=500
         self.save_time=60000
 
         self.max_reading = 8388608.0
