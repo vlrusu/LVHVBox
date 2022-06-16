@@ -86,6 +86,7 @@ class Session():
             # sleep to keep i2c from complaining
             time.sleep(1)
 
+            # setup GPIO pins
             GPIO.setup(self.GLOBAL_ENABLE_PIN,GPIO.OUT)
             GPIO.setup(self.RESET_PIN,GPIO.OUT)
             GPIO.output(self.GLOBAL_ENABLE_PIN,GPIO.LOW)
@@ -94,14 +95,14 @@ class Session():
             if "libedit" in readline.__doc__:
                 self.readline.parse_and_bind("bind ^I rl_complete")
         else:
-            pass
+            self.save_error("Error initializing low voltage connection.")
 
     # initializes connection with hv control
     def initialize_hv(self,test):
         if not test:
             self.rampup.initialization()
         else:
-            pass
+            self.save_error("Error initializing high voltage connection.")
 
     # called within a thread to actuate hv rampup
     def hv_rampup_on_off(self):
@@ -127,10 +128,12 @@ class Session():
         hv_voltage=[]
         if not test:
             try:
+                # make serial connection and close as soon as most recent line of data is acquired
                 ser = serial.Serial('/dev/ttyACM0', 115200)
                 line = ser.readline().decode('ascii')
                 ser.close()
 
+                # break apart the acquired pyserial output line and parse
                 processed_line = line.split(" ")
                 on_voltage=False
                 end=False
@@ -166,6 +169,7 @@ class Session():
             except:
                 self.save_error("Error acquiring hv data")
         else:
+            # if data acquisition function is in test mode, populate with bogus data for testing purposes
             for i in range(0,12):
                 hv_voltage.append(round(random.uniform(1450,1550),3))
                 hv_current.append(round(random.uniform(20,30),3))
@@ -177,6 +181,7 @@ class Session():
 
             self.hv_update()
 
+    # used to acquire assorted data from exelcys blade modules via I2C protocol
     def get_blade_data(self,test):
         # acquire Voltage
         #self.bus.pec=1
@@ -199,6 +204,7 @@ class Session():
                         self.bus.pec=0
                         self.save_error("Error acquiring blade voltage data on channel " + str(i))
             else:
+                # for testing purposes, autopopulate with bogus data
                 for i in range(0,6):
                     voltage_values.append(round(random.uniform(35,45),3))
                     # ensure delay between channel readings
@@ -226,6 +232,7 @@ class Session():
                         self.bus.pec=0
                         self.save_error("Error acquiring blade current data on channel " + str(i))
             else:
+                # for testing purposes, autopopulate with bogus data
                 for i in range(0,6):
                     current_values.append(round(random.uniform(10,15),3))
                     # ensure delay between channel readings
@@ -267,6 +274,7 @@ class Session():
         #self.bus.pec=0
 
     def get_lv_data(self,test):
+        # call blade data initially
         try:
             self.get_blade_data(False)
         except:
@@ -279,6 +287,7 @@ class Session():
         five_current=[]
         cond_voltage=[]
         cond_current=[]
+        # iterates through all six lv channels to acquire readMon data
         for channel in reversed(range(0,6)):
             try:
                 address=self.addresses[int(channel/2)]
@@ -293,6 +302,7 @@ class Session():
                     time.sleep(self.I2C_sleep_time)
                     reading = self.bus.read_i2c_block_data(address, channelLTC, 3)
 
+                    # convert I2C reading to legitimate data
                     val = ((((reading[0]&0x3F))<<16))+((reading[1]<<8))+(((reading[2]&0xE0)))
                     volts = val*self.vref/self.max_reading
 
@@ -381,12 +391,13 @@ class Window(QMainWindow,Session):
         self.RESET_PIN = 32
         self.addresses = [0x14,0x16,0x26]
 
+        # initialize variables to store data
         self.initialize_data()
+
         # since it's a touch screen, the cursor is irritating
         self.setCursor(Qt.BlankCursor)
 
         self.setWindowTitle("LVHV GUI")
-
         self.setStyleSheet(background_color)
 
         # call function to set up the overall tab layout
