@@ -61,6 +61,8 @@ class Session():
 
         self.addresses = [0x14,0x16,0x26]
 
+        self.acquiring_hv=False
+
     def power_on(self,channel):
         channel=abs(channel-5)
         GPIO.output(self.GLOBAL_ENABLE_PIN,GPIO.HIGH)
@@ -121,6 +123,11 @@ class Session():
 
         self.is_ramping=False
 
+    def call_hv_data(self):
+        if self.acquiring_hv is False:
+            hv_thread=threading.Thread(target=self.get_hv_data,args=[False])
+            hv_thread.start()
+
     # acquires hv data from pico via pyserial connection
     def get_hv_data(self,test):
         # acquire hv current and voltage
@@ -129,9 +136,11 @@ class Session():
         if not test:
             try:
                 # make serial connection and close as soon as most recent line of data is acquired
+                self.acquiring_hv=True
                 ser = serial.Serial('/dev/ttyACM0', 115200)
                 line = ser.readline().decode('ascii')
                 ser.close()
+                self.acquiring_hv=False
 
                 # break apart the acquired pyserial output line and parse
                 processed_line = line.split(" ")
@@ -390,6 +399,8 @@ class Window(QMainWindow,Session):
         self.GLOBAL_ENABLE_PIN =  15
         self.RESET_PIN = 32
         self.addresses = [0x14,0x16,0x26]
+
+        self.acquiring_hv = False
 
         # initialize variables to store data
         self.initialize_data()
@@ -1558,7 +1569,7 @@ class Window(QMainWindow,Session):
         self.lv_timer.start(self.board_time)
 
         # hv update timer
-        self.hv_timer.timeout.connect(lambda:self.get_hv_data(False))
+        self.hv_timer.timeout.connect(lambda:self.call_hv_data())
         self.hv_timer.start(self.hv_time)
 
         # call save function and update stability_plots
