@@ -37,6 +37,11 @@ import wiringpi
 # import c functions for lv
 from ctypes import *
 
+
+import os
+import subprocess
+import re
+
 # initialize gui stuff
 os.environ["DISPLAY"] = ':0'
 background_color='background-color: white;'
@@ -83,7 +88,7 @@ class Session():
                 self.mcp1.digitalWrite(x, MCP23S17.LEVEL_LOW)
 
             self.I2C_sleep_time = 0.25 # seconds to sleep between each channel reading
-            self.bus = SMBus(1)
+            self.bus = SMBus(3)
 
             # sleep to keep i2c from complaining
             time.sleep(1)
@@ -136,6 +141,7 @@ class Session():
         if not test:
             try:
                 # make serial connection and close as soon as most recent line of data is acquired
+
                 self.acquiring_hv=True
                 ser = serial.Serial('/dev/ttyACM0', 115200)
                 line = ser.readline().decode('ascii')
@@ -389,9 +395,9 @@ class Window(QMainWindow,Session):
         super(Window,self).__init__()
 
         # set vars to control timers
-        self.board_time=15000
-        self.hv_time=500
-        self.save_time=60000
+        self.board_time=20000
+        self.hv_time=700
+        self.save_time=30000
 
         self.max_reading = 8388608.0
         self.vref = 3.3
