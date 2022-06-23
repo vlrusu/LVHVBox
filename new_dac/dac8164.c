@@ -12,7 +12,7 @@
 #include "mcp23s17.h"
 
 
-void DAC8164_setup(DAC8164 *self, int MCP, uint8_t sync, uint8_t sclk, _uint8_t _sdi, uint8_t enable_pin=-1, uint8_t ldac_pin=-1);
+void DAC8164_setup(DAC8164 *self, int MCP, uint8_t sync, uint8_t sclk, _uint8_t _sdi, uint8_t enable_pin, uint8_t ldac_pin);
 
 {
   self->_MCP = MCP;
@@ -22,39 +22,19 @@ void DAC8164_setup(DAC8164 *self, int MCP, uint8_t sync, uint8_t sclk, _uint8_t 
   self->_enable_pin = enable_pin;
   self->_ldac_pin = ldac_pin;
 
-
-  if (enable_pin != -1) {
-    digitalWrite(self->_MCP + self->_enable_pin, HIGH);
-    pinMode(self->_MCP + self->_enable_pin, OUTPUT);
-  }
-
-
-   // LDAC to low
-  if (ldac_pin != -1)
-  {
-    digitalWrite(self->_MCP + self->_ldac_pin, HIGH);
-    pinMode(self->_MCP + self->_ldac_pin, OUTPUT);
-
-  }
-
   digitalWrite(self->_MCP + self->_sync_pin, 1);
   pinMode(self->_MCP + self->_sync_pin, OUTPUT);
-
   digitalWrite(self->_MCP + self->_sclk_pin, 0);
   pinMode(self->_MCP + self->_sclk_pin, OUTPUT);
-
   digitalWrite(self->_MCP + self->_sdi_pin, 0);
   pinMode(self->_MCP + self->_sdi_pin, OUTPUT);
 
 
 }
 
-void DAC8164_write(uint32_t data)
+void DAC8164_write(DAC8164 *self, uint8_t address, uint32_t data)
 {
-  uint8_t datahigh, datamid, datalow;
-
-  if (self->_enable_pin != -1)
-    digitalWrite(self->_MCP + self->_enable_pin, LOW);
+  uint32_t dataWord = ((address & 0xFF) << 16) | data;
 
 
   digitalWrite(self->_MCP + self->_sclk_pin, 0);
@@ -63,7 +43,7 @@ void DAC8164_write(uint32_t data)
 
   for (int i=23;i>=0;i--){
     uint8_t thisbit;
-    if ((0x1<<i) & data)
+    if ((0x1<<i) & dataWord)
       thisbit = 1;
     else
       thisbit = 0;
@@ -77,9 +57,6 @@ void DAC8164_write(uint32_t data)
   }
   digitalWrite(self->_MCP + self->_sync_Pin, 1);
 
-
-  if (self->_enable_pin != -1)
-    digitalWrite(_enable_pin, HIGH);
 }
 
 

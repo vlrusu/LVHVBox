@@ -47,6 +47,10 @@ void initialization(){
   wiringPiSPISetup (SPICS, SPISPEED);
 
   //bring the MCP out of reset
+  //bring the MCP out of reset
+  pinMode(26, OUTPUT);
+  digitalWrite(26, HIGH);
+  
   int retc = mcp23s17Setup (MCPPINBASE, SPICS, 0);
   printf("mcp setup done %d\n",retc);
 
