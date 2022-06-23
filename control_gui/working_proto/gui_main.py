@@ -67,6 +67,7 @@ class Session():
         self.addresses = [0x14,0x16,0x26]
 
         self.acquiring_hv=False
+        self.accessing_lv=False
 
     def power_on(self,channel):
         channel=abs(channel-5)
@@ -295,6 +296,7 @@ class Session():
         #self.bus.pec=0
 
     def get_lv_data(self,test):
+        self.accessing_lv = True
         # call blade data initially
         try:
             self.get_blade_data(False)
@@ -371,6 +373,8 @@ class Session():
             self.primary_update()
         except:
             self.save_error("Error with primary update")
+
+        self.accessing_lv=False
 
     def save_txt(self):
         output=''
@@ -1479,7 +1483,8 @@ class Window(QMainWindow,Session):
         self.hv_plot_canvas.flush_events()
 
     def call_lv_data(self):
-        threading.Thread(target=self.get_lv_data,args=[False]).start()
+        if not self.accessing_lv:
+            threading.Thread(target=self.get_lv_data,args=[False]).start()
 
     # this function updates all of the plots, as well as everything that has to do with readmon data
     # because readmon also takes the longest, this update function saves data to logfile.txt
