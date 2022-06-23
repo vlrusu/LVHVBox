@@ -285,15 +285,12 @@ class Session():
                     temperature_values.append(round(random.uniform(28,35),3))
                     # ensure delay between channel readings
 
-            #self.bus.pec=0
             # save data lists for blades
             self.voltage=voltage_values
             self.current=current_values
             self.temperature=temperature_values
         except:
-            #self.bus.pec=0
-            print('bus busy')
-        #self.bus.pec=0
+            self.save_error("Bus Busy")
 
     def get_lv_data(self,test):
         self.accessing_lv = True
@@ -302,8 +299,6 @@ class Session():
             self.get_blade_data(False)
         except:
             self.save_error("Error acquiring blade data inside get lv data.")
-        # initialize lv data acquisition
-        # TODO remove and put in initialization function
 
         # acquire readMon data
         five_voltage=[]
@@ -387,7 +382,7 @@ class Session():
             output+=','+str(self.five_current[i])
             output+=','+str(self.cond_voltage[i])
             output+=','+str(self.cond_current[i])+','
-        output+=','+str(time.time())
+        output+=str(time.time())
         output+='\n'
 
         file1=open("/home/pi/working_proto/logfile.txt", "a")
@@ -1483,8 +1478,11 @@ class Window(QMainWindow,Session):
         self.hv_plot_canvas.flush_events()
 
     def call_lv_data(self):
-        if not self.accessing_lv:
-            threading.Thread(target=self.get_lv_data,args=[False]).start()
+        try:
+            if not self.accessing_lv:
+                threading.Thread(target=self.get_lv_data,args=[False]).start()
+        except:
+            save_error("Error calling lv data")
 
     # this function updates all of the plots, as well as everything that has to do with readmon data
     # because readmon also takes the longest, this update function saves data to logfile.txt
@@ -1608,9 +1606,12 @@ if __name__=="__main__":
         # run the lv initialization function
         # for whatever ungodly reason, it sometimes needs to be run more than once to properly work
         # TODO FIX
-        window.initialize_lv(False)
-        window.initialize_lv(False)
-        window.initialize_lv(False)
+        try:
+            window.initialize_lv(False)
+            window.initialize_lv(False)
+            window.initialize_lv(False)
+        except:
+            window.save_error("Error initializing LV in main")
 
         # import c functions for hv
         rampup = "/home/pi/working_proto/python_connect.so"
@@ -1618,9 +1619,15 @@ if __name__=="__main__":
         window.test = False
 
         # run the hv initialization program
-        window.initialize_hv(False)
+        try:
+            window.initialize_hv(False)
+        except:
+            window.save_error("Error intializing HV in main")
 
-        window.run()
+        try:
+            window.run()
+        except:
+            window.save_error("Error running window in main")
 
         # start the app
         sys.exit(App.exec())
@@ -1628,4 +1635,4 @@ if __name__=="__main__":
     except KeyboardInterrupt:
         stored_exception=sys.exc_info()
     except Exception as e:
-        print (type(e),e)
+        window.save_error("-- EXCEPTION as e --")
