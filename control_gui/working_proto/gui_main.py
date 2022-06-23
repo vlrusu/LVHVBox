@@ -129,9 +129,12 @@ class Session():
         self.is_ramping=False
 
     def call_hv_data(self):
-        if self.acquiring_hv is False:
-            hv_thread=threading.Thread(target=self.get_hv_data,args=[False])
-            hv_thread.start()
+        try:
+            if self.acquiring_hv is False:
+                hv_thread=threading.Thread(target=self.get_hv_data,args=[False])
+                hv_thread.start()
+        except:
+            save_error("problem with call hv data")
 
     # acquires hv data from pico via pyserial connection
     def get_hv_data(self,test):
@@ -190,11 +193,14 @@ class Session():
                 hv_current.append(round(random.uniform(20,30),3))
 
         # save data lists for hv
-        if len(hv_voltage) == 12 and len(hv_current) == 12:
-            self.hv_voltage=hv_voltage
-            self.hv_current=hv_current
+        try:
+            if len(hv_voltage) == 12 and len(hv_current) == 12:
+                self.hv_voltage=hv_voltage
+                self.hv_current=hv_current
 
-            self.hv_update()
+                self.hv_update()
+        except:
+            save_error("problem with get_hv_data call")
 
     # used to acquire assorted data from exelcys blade modules via I2C protocol
     def get_blade_data(self,test):
@@ -1562,25 +1568,28 @@ class Window(QMainWindow,Session):
         self.rampup_list=[]
 
     def run(self):
-        # initialize timers required to update gui/get and log data
-        self.lv_timer = QTimer(self)
-        self.lv_timer.setSingleShot(False)
-        self.hv_timer = QTimer(self)
-        self.hv_timer.setSingleShot(False)
-        self.stability_timer=QTimer(self)
-        self.stability_timer.setSingleShot(False)
+        try:
+            # initialize timers required to update gui/get and log data
+            self.lv_timer = QTimer(self)
+            self.lv_timer.setSingleShot(False)
+            self.hv_timer = QTimer(self)
+            self.hv_timer.setSingleShot(False)
+            self.stability_timer=QTimer(self)
+            self.stability_timer.setSingleShot(False)
 
-        # readMon update timer
-        self.lv_timer.timeout.connect(self.call_lv_data)
-        self.lv_timer.start(self.board_time)
+            # readMon update timer
+            self.lv_timer.timeout.connect(self.call_lv_data)
+            self.lv_timer.start(self.board_time)
 
-        # hv update timer
-        self.hv_timer.timeout.connect(lambda:self.call_hv_data())
-        self.hv_timer.start(self.hv_time)
+            # hv update timer
+            self.hv_timer.timeout.connect(lambda:self.call_hv_data())
+            self.hv_timer.start(self.hv_time)
 
-        # call save function and update stability_plots
-        self.stability_timer.timeout.connect(self.stability_save)
-        self.stability_timer.start(self.save_time)
+            # call save function and update stability_plots
+            self.stability_timer.timeout.connect(self.stability_save)
+            self.stability_timer.start(self.save_time)
+        except:
+            save_error("problem with main run call")
 
 
 if __name__=="__main__":
