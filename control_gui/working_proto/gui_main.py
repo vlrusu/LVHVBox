@@ -912,7 +912,7 @@ class Window(QMainWindow,Session):
         self.blade_control_table.setDisabled(True)
 
         self.blade_control_table.setHorizontalHeaderLabels(["Voltage (V)","current (A)","Temp (C)"])
-        self.blade_control_table.setVerticalHeaderLabels(["Ch 1","Ch 2","Ch 3","Ch 4","Ch 5","Ch 6"])
+        self.blade_control_table.setVerticalHeaderLabels(["Ch 0","Ch 1","Ch 2","Ch 3","Ch 4","Ch 5"])
         self.blade_control_table.horizontalHeader().setResizeMode(QHeaderView.Stretch)
 
         # setup board table
