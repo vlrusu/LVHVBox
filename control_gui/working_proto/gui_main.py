@@ -135,7 +135,7 @@ class Session():
                 hv_thread=threading.Thread(target=self.get_hv_data,args=[False])
                 hv_thread.start()
         except:
-            save_error("problem with call hv data")
+            self.save_error("problem with call hv data")
 
     # acquires hv data from pico via pyserial connection
     def get_hv_data(self,test):
@@ -201,7 +201,7 @@ class Session():
 
                 self.hv_update()
         except:
-            save_error("problem with get_hv_data call")
+            self.save_error("problem with get_hv_data call")
 
     # used to acquire assorted data from exelcys blade modules via I2C protocol
     def get_blade_data(self,test):
@@ -402,7 +402,7 @@ class Window(QMainWindow,Session):
         # set vars to control timers
         self.board_time=20000
         self.hv_time=700
-        self.save_time=30000
+        self.save_time=60000
 
         self.max_reading = 8388608.0
         self.vref = 3.3
@@ -412,6 +412,7 @@ class Window(QMainWindow,Session):
         self.addresses = [0x14,0x16,0x26]
 
         self.acquiring_hv = False
+        self.accessing_lv = False
 
         # initialize variables to store data
         self.initialize_data()
@@ -1482,7 +1483,7 @@ class Window(QMainWindow,Session):
             if not self.accessing_lv:
                 threading.Thread(target=self.get_lv_data,args=[False]).start()
         except:
-            save_error("Error calling lv data")
+            self.save_error("Error calling lv data")
 
     # this function updates all of the plots, as well as everything that has to do with readmon data
     # because readmon also takes the longest, this update function saves data to logfile.txt
@@ -1592,7 +1593,7 @@ class Window(QMainWindow,Session):
             self.stability_timer.timeout.connect(self.stability_save)
             self.stability_timer.start(self.save_time)
         except:
-            save_error("problem with main run call")
+            self.save_error("problem with main run call")
 
 
 if __name__=="__main__":
