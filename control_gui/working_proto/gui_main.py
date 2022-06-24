@@ -53,8 +53,6 @@ import serial
 # session class focuses on interactions with the hardware, providing them to the gui class
 class Session():
     def __init__(self):
-        self.voltage=None
-        self.current=None
         self.temperature=None
 
         self.max_reading = 8388608.0
@@ -198,10 +196,8 @@ class Session():
             if len(hv_voltage) == 12 and len(hv_current) == 12:
                 self.hv_voltage=hv_voltage
                 self.hv_current=hv_current
-
-                self.hv_update()
         except:
-            self.save_error("problem with get_hv_data call")
+            self.save_error("problem with get_hv_data save")
 
     # used to acquire assorted data from exelcys blade modules via I2C protocol
     def get_blade_data(self,test):
@@ -364,11 +360,6 @@ class Session():
         self.cond_voltage=cond_voltage
         self.cond_current=cond_current
 
-        try:
-            self.primary_update()
-        except:
-            self.save_error("Error with primary update")
-
         self.accessing_lv=False
 
     def save_txt(self):
@@ -403,6 +394,7 @@ class Window(QMainWindow,Session):
         self.board_time=20000
         self.hv_time=700
         self.save_time=60000
+        self.hv_display_time=700
 
         self.max_reading = 8388608.0
         self.vref = 3.3
@@ -413,6 +405,7 @@ class Window(QMainWindow,Session):
 
         self.acquiring_hv = False
         self.accessing_lv = False
+
 
         # initialize variables to store data
         self.initialize_data()
@@ -959,11 +952,6 @@ class Window(QMainWindow,Session):
         self.table_tab3.layout.addWidget(self.hv_control_table,0,0)
         self.table_tab3.setLayout(self.table_tab3.layout)
 
-        # fill blade table with entries and set background color
-        self.blade_voltage_entries=[]
-        self.blade_current_entries=[]
-        self.blade_temperature_entries=[]
-
         for i in range(6):
             # fill with blade voltage entries
             current_entry=QLabel("N/A")
@@ -1134,7 +1122,6 @@ class Window(QMainWindow,Session):
         for j in range(12):
             self.hv_voltage_entries[j].setText(str(self.hv_voltage[j]))
             self.hv_current_entries[j].setText(str(self.hv_current[j]))
-        self.update_hv_bars()
 
     # acquires the channel being measured
     def get_blade_channel(self):
@@ -1504,10 +1491,6 @@ class Window(QMainWindow,Session):
             self.update_board_plot()
         except:
             self.save_error("Error with update board plot.")
-        try:
-            self.update_hv_plot()
-        except:
-            self.save_error("Error with update hv plot.")
 
     def stability_save(self):
         try:
@@ -1561,6 +1544,11 @@ class Window(QMainWindow,Session):
         self.stability_hv_voltage_plot=[[10000]*48]*12
         self.stability_hv_current_plot=[[10000]*48]*12
 
+        # fill blade table with entries and set background color
+        self.blade_voltage_entries=[]
+        self.blade_current_entries=[]
+        self.blade_temperature_entries=[]
+
         # keeps track of blade power statuses
         self.blade_power=[False]*6
 
@@ -1571,6 +1559,9 @@ class Window(QMainWindow,Session):
         self.is_ramping = False
         self.rampup_list=[]
 
+        self.hv_voltage = [0]*12
+        self.hv_current = [0]*12
+
     def run(self):
         try:
             # initialize timers required to update gui/get and log data
@@ -1580,14 +1571,21 @@ class Window(QMainWindow,Session):
             self.hv_timer.setSingleShot(False)
             self.stability_timer=QTimer(self)
             self.stability_timer.setSingleShot(False)
+            self.hv_display_timer=QTimer(self)
+            self.hv_display_timer.setSingleShot(False)
 
             # readMon update timer
             self.lv_timer.timeout.connect(self.call_lv_data)
+            self.lv_timer.timeout.connect(self.primary_update)
             self.lv_timer.start(self.board_time)
 
             # hv update timer
             self.hv_timer.timeout.connect(lambda:self.call_hv_data())
             self.hv_timer.start(self.hv_time)
+
+            # update hv table and bars
+            self.hv_display_timer.timeout.connect(self.hv_update)
+            self.hv_display_timer.start(self.hv_display_time)
 
             # call save function and update stability_plots
             self.stability_timer.timeout.connect(self.stability_save)
