@@ -25,7 +25,8 @@
 #define SPICS 1
 //#define SPISPEED 320000
 
-DAC8164 dac[3]
+DAC8164 dac[3];
+
 
 int mygetch ( void )
 {
@@ -43,14 +44,14 @@ int mygetch ( void )
 }
 
 void initialization(){
-  wiringPiSetup () ;
-  wiringPiSPISetup (SPICS, SPISPEED);
+  wiringPiSetup();
+  wiringPiSPISetup(SPICS, SPISPEED);
 
-  //bring the MCP out of reset
   //bring the MCP out of reset
   pinMode(26, OUTPUT);
   digitalWrite(26, HIGH);
-  
+
+  //setup MCP
   int retc = mcp23s17Setup (MCPPINBASE, SPICS, 0);
   printf("mcp setup done %d\n",retc);
 
@@ -65,29 +66,23 @@ void initialization(){
   DAC8164_setup (&dac[0], MCPPINBASE, 4, MCPPINBASE, 2, MCPPINBASE, 0);
   DAC8164_setup (&dac[1], MCPPINBASE, 5, MCPPINBASE, 2, MCPPINBASE, 0);
   DAC8164_setup (&dac[2], MCPPINBASE, 6, MCPPINBASE, 2, MCPPINBASE, 0);
-
 }
 
 
 
 int main(int argc, char *argv[])
 {
-	int opt;
-	int cmderr = 0;
+  initialization();
 
-	initialization();
-
-	int channel = atoi(argv[1]);
+  int channel = atoi(argv[1]);
 	float value = atof(argv[2]);
 
-
-	int idac = (int) (channel/4);
+  int idac = (int) (channel/4);
 	printf(" Chan %i HV idac %i  is set to %7.2f\n", channel, idac, value);
 
+  struct timeval start, end;
 
-	struct timeval start, end, total ;
-
-	gettimeofday (&start, NULL) ;
+  gettimeofday (&start, NULL) ;
 
 
 	float increment = value*2.3/NSTEPS/1510.;
@@ -95,15 +90,12 @@ int main(int argc, char *argv[])
 	for (int itick =0; itick < NSTEPS; itick++){
 	  usleep(50000);
 	  setvalue += increment;
-	  DAC8164_setdac(&dac[idac],channel%4,setvalue);
+
+    uint32_t digvalue = ( (int) (16383.*(setvalue/2.5))) & 0x3FFF;
+    DAC8164_setChannelPower(&dac[idac], channel%4, digvalue);
 	}
 
 	gettimeofday (&end, NULL) ;
-
-
-	printf("The elapsed time is %ld seconds\n", end.tv_sec-start.tv_sec);
-
-
 
 
 
