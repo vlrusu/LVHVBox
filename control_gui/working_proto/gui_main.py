@@ -130,6 +130,7 @@ class Session():
     def call_hv_data(self):
         try:
             if self.acquiring_hv is False:
+                self.acquiring_hv=True
                 hv_thread=threading.Thread(target=self.get_hv_data,args=[False])
                 hv_thread.start()
         except:
@@ -144,7 +145,6 @@ class Session():
             try:
                 # make serial connection and close as soon as most recent line of data is acquired
 
-                self.acquiring_hv=True
                 ser = serial.Serial('/dev/ttyACM0', 115200)
                 line = ser.readline().decode('ascii')
                 ser.close()
@@ -185,6 +185,7 @@ class Session():
 
             except:
                 self.save_error("Error acquiring hv data")
+                self.acquiring_hv=False
         else:
             # if data acquisition function is in test mode, populate with bogus data for testing purposes
             for i in range(0,12):
