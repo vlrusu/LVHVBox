@@ -135,6 +135,199 @@ python_connect.c:
 
   ** stability_blade_plotting_setup(self) **
 
+    Defines tab 7 in the GUI.
+
+  ** stability_board_plotting_setup(self) **
+
+    Defines tab 8 in the GUI.
+
+  ** stability_hv_plotting_setup(self) **
+
+    Defines tab 9 in the GUI.
+
+  ** blade_plotting_setup(self) **
+
+    Defines tab 4 in the GUI.
+
+  ** board_plotting_setup(self) **
+
+    Defines tab 5 in the GUI.
+
+  ** hv_plotting_setup(self) **
+
+    Defines tab 6 in the GUI.
+
+  ** lv_controls setup(self) **
+
+    Defines tab 2 in the GUI.
+
+  ** hv_controls_setup(self) **
+
+    Defines tab 3 in the GUI.
+
+  ** controls_setup(self) **
+
+    Defines tab 1 in the GUI.
+
+  ** actuate_lv_power(self, number) **
+
+    Called when any of the LV power actuation buttons are toggled.
+    Changes the color of the button and calls either self.power_on
+    or self.power_off, depending on the button status.
+
+  ** actuate_hv_power(self, number) **
+
+    Called when one of the hv power buttons is pressed.
+    Appends the button to self.rampup_list, in order to utilize
+    threading. This ensures that the GUI doesn't lock up.
+
+  ** update_blade_table(self) **
+
+    Called to update the blade table - rather self explanatory.
+
+  ** update_board_table(self) **
+
+    Called to update the board table.
+
+  ** update_hv_bars(self) **
+
+    Called to update the hv bars above the buttons. This alerts
+    users to hv rampup progress - where hv channels are in the
+    queue.
+
+  ** update_hv_table(self) **
+
+    Called to update the hv table.
+
+  ** get_blade_channel(self) **
+
+    When given the text value of a blade channel, this function
+    returns the integer value of that channel.
+
+  ** get_board_channel(self) **
+
+    When given the text value of a board channel, this function
+    returns the integer value of that channel.
+
+  ** get_hv_channel(self) **
+
+    When given the text value of an hv channel, this function
+    returns the integer value of that channel.
+
+  ** get_stability_blade_channel(self) **
+
+    When given the text value of a blade stability channel, this
+    function returns the integer value of that channel.
+
+  ** get_stability_board_channel(self) **
+
+    When given the text value of a stability board channel, this
+    function returns the integer value of that channel.
+
+  ** get_stability_hv_channel(self) **
+
+    When given the text value of a stability hv channel, this
+    function returns the integer value of that channel.
+
+  ** change_stability_blade_plot(self) **
+
+    When called, this function changes the type of data displayed
+    on the stability blade plot. The labels and ydata lists are
+    updated. The plot is then redrawn.
+
+  ** change_stability_hv_plot(self) **
+
+    When called, this function changes the type of data displayed
+    on the stability hv plot. The labels and ydata lists are
+    updated. The plot is then redrawn.
+
+  ** change_stability_board_plot(self) **
+
+    When called, this function changes the type of data displayed
+    on the stability hv plot. The labels and ydata lists are
+    updated. The plot is then redrawn.
+
+  ** change_blade_plot(self) **
+
+    When called, this function changes the type of data displayed
+    on the blade plot. The labels and ydata lists are updated.
+    The plot is then redrawn.
+
+  ** change_hv_plot(self) **
+
+    When called, this function changes the type of data displayed
+    on the hv plot. The labels and ydata lists are updated.
+    The plot is then redrawn.
+
+  ** change_board_plot(self) **
+
+    When called, this function changes the type of data displayed
+    on the board plot. The labels and ydata lists are updated.
+    The plot is then redrawn.
+
+  ** update_stability_blade_plot(self) **
+
+    When called, this function updates the pertinent ydata and then
+    redraws the stability blade plot.
+
+  ** update_stability_board_plot(self) **
+
+    When called, this function updates the pertinent ydata and then
+    redraws the stability board plot.
+
+  ** update_stability_hv_plot(self) **
+
+    When called, this function updates the pertinent ydata and then
+    redraws the stability hv plot.
+
+  ** update_blade_plot(self) **
+
+    When called, this function updates the pertinent ydata and then
+    redraws the blade plot.
+
+  ** update_board_plot(self) **
+
+    When called, this function updates the pertinent ydata and then
+    redraws the board plot.
+
+  ** update_hv_plot(self) **
+
+    When called, this function updates the pertinent ydata and then
+    redraws the hv plot.
+
+  ** call_lv_data(self) **
+
+    Checks to see if the lv data is currently in the process of being
+    acquired by another thread. If not, it then starts a thread to
+    call self.get_lv_data. This prevents collisions on the I2C bus.
+
+  ** primary_update(self) **
+
+    Calls self.update_board_table(), self.update_blade_table(),
+    self.update_blade_plot(), and self.update_board_plot().
+
+  ** stability_save(self) **
+
+    Calls self.update_stability_blade_plot(), self.update_stability_board_plot(),
+    self.update_stability_hv_plot(), and self.save_txt().
+
+  ** hv_update(self) **
+
+    Calls self.update_hv_table() and self.update_hv_bars(). If
+    self.is_ramping is false and the self.rampup_list isn't empty,
+    it then starts a thread to call self.hv_rampup_on_off.
+
+  ** initialize_data(self) **
+
+    Initializes assorted variables, lists, et cetera... used in the window
+    class.
+
+  ** run(self) **
+
+    Called to start up the GUI. Initializes timers and their periodically
+    called functions, et cetera...
+
+
 
 
 
