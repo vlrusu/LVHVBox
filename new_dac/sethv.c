@@ -22,7 +22,7 @@
 
 #define SPISPEED 40000000
 #define NSTEPS 200
-#define SPICS 1
+#define SPICS 0
 //#define SPISPEED 320000
 
 DAC8164 dac[3];
@@ -56,16 +56,16 @@ void initialization(){
   printf("mcp setup done %d\n",retc);
 
   //sete RESET to DACs to high
-  digitalWrite (MCPPINBASE+7, 1);
+  digitalWrite (MCPPINBASE+7, 0);
   pinMode(MCPPINBASE+7, OUTPUT);
 
   //set LDAC to DACs to low
   digitalWrite (MCPPINBASE+3, 0);
   pinMode(MCPPINBASE+3, OUTPUT);
 
-  DAC8164_setup (&dac[0], MCPPINBASE, 4, MCPPINBASE, 2, MCPPINBASE, 0);
-  DAC8164_setup (&dac[1], MCPPINBASE, 5, MCPPINBASE, 2, MCPPINBASE, 0);
-  DAC8164_setup (&dac[2], MCPPINBASE, 6, MCPPINBASE, 2, MCPPINBASE, 0);
+  DAC8164_setup (&dac[0], MCPPINBASE, 4, 2, 0, -1, -1);
+  DAC8164_setup (&dac[1], MCPPINBASE, 5, 2, 0, -1, -1);
+  DAC8164_setup (&dac[2], MCPPINBASE, 6, 2, 0, -1, -1);
 }
 
 
@@ -83,7 +83,8 @@ int main(int argc, char *argv[])
 
 
   uint32_t digvalue = ( (int) (16383.*(value/2.5))) & 0x3FFF;
-  DAC8164_setChannelPower(&dac[idac], channel%4, digvalue);
+  printf(" dig val = %x %d\n", digvalue, channel);
+  DAC8164_writeChannel(&dac[idac], channel, digvalue);
 
 
 	return 0 ;

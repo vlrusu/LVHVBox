@@ -10,6 +10,7 @@
 #include "wiringPi.h"
 #include "wiringPiSPI.h"
 #include "mcp23s17.h"
+#include <stdio.h>
 
 #define DAC8164DELAY 2
 
@@ -98,33 +99,49 @@ void DAC8164_setReference(DAC8164 *self, uint16_t reference)
 void DAC8164_writeChannel(DAC8164 *self, uint8_t channel, uint16_t value)
 {
   uint32_t data ;
+  uint32_t dac_mask;
 
-  if (channel == DAC_CHANNEL_A)
-    data = DAC_SINGLE_CHANNEL_UPDATE;
+  uint8_t mod_channel = channel % 4;
 
-  else if (channel == DAC_CHANNEL_B)
-    data = DAC_SINGLE_CHANNEL_UPDATE | DAC_MASK_DACSEL0 ;
+  if ((channel - mod_channel) == 8) {
+    dac_mask = DAC_MASK_2;
+  }
+  else if ((channel - mod_channel) == 4) {
+    dac_mask = DAC_MASK_1;
+  }
+  else {
+    dac_mask = DAC_MASK_0;
+  }
+  mod_channel = mod_channel + 1;
 
-  else if (channel == DAC_CHANNEL_C)
-    data = DAC_SINGLE_CHANNEL_UPDATE| DAC_MASK_DACSEL1 ;
 
-  else if (channel == DAC_CHANNEL_D)
-    data = DAC_SINGLE_CHANNEL_UPDATE | DAC_MASK_DACSEL1 | DAC_MASK_DACSEL0 ;
+  if (mod_channel == DAC_CHANNEL_A)
+    data = DAC_SINGLE_CHANNEL_UPDATE  | dac_mask ;
 
-  else if (channel == DAC_CHANNEL_ALL)
+  else if (mod_channel == DAC_CHANNEL_B)
+    data = DAC_SINGLE_CHANNEL_UPDATE | DAC_MASK_DACSEL0 | dac_mask ;
+
+  else if (mod_channel == DAC_CHANNEL_C)
+    data = DAC_SINGLE_CHANNEL_UPDATE| DAC_MASK_DACSEL1 | dac_mask ;
+
+  else if (mod_channel == DAC_CHANNEL_D)
+    data = DAC_SINGLE_CHANNEL_UPDATE | DAC_MASK_DACSEL1 | DAC_MASK_DACSEL0 | dac_mask ;
+
+  else if (mod_channel == DAC_CHANNEL_ALL)
     data = DAC_BROADCAST_UPDATE | DAC_MASK_DACSEL1 ;
-
   else
     // avoid writing bad data
     return;
 
   // value is 12 MSB bits (last LSB nibble to 0)
-  data |= value << 4;
+
+  data |= value << 2;
 
   // Send to chip
   DAC8164_write (self, data);
 }
 
+/*
 void DAC8164_setChannelPower(DAC8164 *self, uint8_t channel, uint16_t power)
 {
   // Default we'll set power
@@ -148,3 +165,4 @@ void DAC8164_setChannelPower(DAC8164 *self, uint8_t channel, uint16_t power)
   // Send to chip
   DAC8164_write (self, data);
 }
+*/

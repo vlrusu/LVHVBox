@@ -92,7 +92,7 @@ int main(int argc, char *argv[])
 	  setvalue += increment;
 
     uint32_t digvalue = ( (int) (16383.*(setvalue/2.5))) & 0x3FFF;
-    DAC8164_setChannelPower(&dac[idac], channel%4, digvalue);
+    DAC8164_writeChannel(&dac[idac], channel, digvalue);
 	}
 
 	gettimeofday (&end, NULL) ;

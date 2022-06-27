@@ -27,6 +27,10 @@
 #define DAC_MASK_PD2        0x004000
 #define DAC_MASK_DATA       0x00FFF0
 
+#define DAC_MASK_0          0x0
+#define DAC_MASK_1          0x400000
+#define DAC_MASK_2          0x800000
+
 #define DAC_SINGLE_CHANNEL_STORE    0 /* LD1=0,LD0=0 */
 #define DAC_SINGLE_CHANNEL_UPDATE   DAC_MASK_LD0 /* LD1=0,LD0=1 */
 #define DAC_SIMULTANEOUS_UPDATE     DAC_MASK_LD1 /* LD1=1,LD0=0 */
