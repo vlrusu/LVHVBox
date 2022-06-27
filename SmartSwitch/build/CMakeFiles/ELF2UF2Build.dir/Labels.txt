@@ -1,0 +1,13 @@
+# Target labels
+ ELF2UF2Build
+# Source files and their labels
+/home/pi/SmartSwitch/build/CMakeFiles/ELF2UF2Build
+/home/pi/SmartSwitch/build/CMakeFiles/ELF2UF2Build.rule
+/home/pi/SmartSwitch/build/CMakeFiles/ELF2UF2Build-complete.rule
+/home/pi/SmartSwitch/build/elf2uf2/src/ELF2UF2Build-stamp/ELF2UF2Build-install.rule
+/home/pi/SmartSwitch/build/elf2uf2/src/ELF2UF2Build-stamp/ELF2UF2Build-mkdir.rule
+/home/pi/SmartSwitch/build/elf2uf2/src/ELF2UF2Build-stamp/ELF2UF2Build-download.rule
+/home/pi/SmartSwitch/build/elf2uf2/src/ELF2UF2Build-stamp/ELF2UF2Build-update.rule
+/home/pi/SmartSwitch/build/elf2uf2/src/ELF2UF2Build-stamp/ELF2UF2Build-patch.rule
+/home/pi/SmartSwitch/build/elf2uf2/src/ELF2UF2Build-stamp/ELF2UF2Build-configure.rule
+/home/pi/SmartSwitch/build/elf2uf2/src/ELF2UF2Build-stamp/ELF2UF2Build-build.rule
