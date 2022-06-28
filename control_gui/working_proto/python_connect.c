@@ -15,7 +15,7 @@
 #include <mcp23s17.h>
 #include <softPwm.h>
 #include <linux/spi/spidev.h>
-#include <ad5685.h>
+#include <dac8164.h>
 
 #define NSTEPS 100
 #define MCPPINBASE 2000
@@ -45,11 +45,8 @@ int mygetch ( void )
 
 
 void initialization(){
-
-
-  wiringPiSetup () ;
-  wiringPiSPISetup (SPICS, SPISPEED);
-
+  wiringPiSetup();
+  wiringPiSPISetup(SPICS, SPISPEED);
 
   //bring the MCP out of reset
   pinMode(26, OUTPUT);
@@ -57,21 +54,19 @@ void initialization(){
 
   //setup MCP
   int retc = mcp23s17Setup (MCPPINBASE, SPICS, 0);
+  printf("mcp setup done %d\n",retc);
 
   //sete RESET to DACs to high
   digitalWrite (MCPPINBASE+7, 1);
   pinMode(MCPPINBASE+7, OUTPUT);
 
-  //sete LDAC to DACs to low
+  //set LDAC to DACs to low
   digitalWrite (MCPPINBASE+3, 0);
   pinMode(MCPPINBASE+3, OUTPUT);
 
-
-
-  AD5685_setup (&dac[0], MCPPINBASE, 4, MCPPINBASE, 2, MCPPINBASE, 0);
-  AD5685_setup (&dac[1], MCPPINBASE, 5, MCPPINBASE, 2, MCPPINBASE, 0);
-  AD5685_setup (&dac[2], MCPPINBASE, 6, MCPPINBASE, 2, MCPPINBASE, 0);
-
+  DAC8164_setup (&dac[0], MCPPINBASE, 4, MCPPINBASE, 2, MCPPINBASE, 0);
+  DAC8164_setup (&dac[1], MCPPINBASE, 5, MCPPINBASE, 2, MCPPINBASE, 0);
+  DAC8164_setup (&dac[2], MCPPINBASE, 6, MCPPINBASE, 2, MCPPINBASE, 0);
 }
 
 
@@ -83,7 +78,8 @@ void rampup_hv(int channel, int value){
   for (int itick =0; itick < NSTEPS; itick++){
     usleep(50000);
     setvalue += increment;
-    AD5685_setdac(&dac[idac],channel%4,setvalue);
+    uint32_t digvalue = ( (int) (16383.*(setvalue/2.5))) & 0x3FFF;
+    DAC8164_writeChannel(&dac[idac], channel, digvalue);
   }
 }
 
