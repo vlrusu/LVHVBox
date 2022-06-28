@@ -16,10 +16,10 @@ gui_main.py:
   allows users to control all hv channels and lv channels through a simple touchscreen
   interface.
 
-ad5685.c:
+dac8164.c:
   Driver for hv.
 
-ad5685.h:
+dac8164.h:
   Header file for hv.
 
 python_connect.c:
@@ -340,21 +340,20 @@ python_connect.c:
 
 
 
-|| ad5685.c ||
+|| dac8164.c ||
 
-  ** AD5685_setup(AD5685 *self, int csnMCP, uint8_t csnPin, int sclkMCP, uint8_t sclkPin, int sdiMCP, uint8_t sdiPin) **
+  ** AD5685_setup(DAC8164 *self, int MCP, uint8_t sync, int sclk, uint8_t sdi, int enable_pin, uint8_t ldac_pin) **
 
     Initializes the DAC utilizing digitalWrite and pinMode.
     Additionally, it initializes the self struct.
 
-  ** AD5685_write(AD5685 *self, uint8_t address, uint16_t value) **
+  ** DAC8164_write(DAC8164 *self, uint32_t data) **
 
     Used to write a value to the pertinent DAC address.
 
-  ** AD5685_setdac(AD5685 *self, uint8_t dacchannel, float value) **
+  ** DAC8164_setReference(DAC8164 *self, uint16_t reference) **
 
-    Utilizes AD5685_write to set the dac for one hv channel to the
-    pertinent voltage.
+  ** DAC8164_writeChannel(DAC8164 *self, uint8_t channel, uint16_t value) **
 
 || ad5685.h ||
 
@@ -362,7 +361,7 @@ python_connect.c:
 
     Defines self struct variables.
 
-  Also sets AD5685_setup, AD5685_write, and AD5685_setdac.
+  Also sets DAC8164_write, DAC8164_setup, DAC8164_setReference, DAC8164_writeChannel, and DAC8164_setChannelPower.
 
 || python_connect.c ||
 
