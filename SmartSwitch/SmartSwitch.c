@@ -273,7 +273,7 @@ void readCurent(int32_t* result) {
   //    printf("test:%08x\n",byChn[chn]);
   //  }
 
-  for (uint8_t chn = nAdc; chn > 0; chn--) {
+  for (uint8_t chn = nAdc; chn--;) {
     result[chn] = (int16_t)byChn[chn];
   }
   // Read offset
@@ -283,7 +283,7 @@ void readCurent(int32_t* result) {
   sleep_us(100);
   // Remap offset bits and merge with shunt
   SM73201_ADC_Remap();
-  for (uint8_t chn = nAdc;  chn > 0; chn--) {
+  for (uint8_t chn = nAdc;  chn--;) {
         result[chn] -= (int16_t)byChn[chn];
     }
 }
@@ -312,7 +312,7 @@ void readMultiple(int32_t* sumI, int32_t *sumV) {
     //    SM73201_ADC_Raw();
     //    SM73201_ADC_Remap();
 
-    for (uint8_t chn = mAdc; chn>nAdc; chn--) {
+    for (uint8_t chn = mAdc; chn>=nAdc; chn--) {
       sumV[chn-nAdc] += (int16_t)byChn[chn];
     }
   }
@@ -409,7 +409,7 @@ int main(){
     printf( " | ");
     uint32_t totalTime = absolute_time_diff_us (start, get_absolute_time() );
 
-    float result = adc_read()*3.3/4096;
+    float result = adc_read()*3.3/8192;
     printf("%1.2f | ",result);
 
     printf( "ADCTime=%d TotalTime=%d\n",adcTime,totalTime);
