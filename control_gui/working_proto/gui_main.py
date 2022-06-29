@@ -9,6 +9,7 @@ import struct
 import time
 import threading
 import readline
+import asyncio
 
 from PyQt4.QtGui import *
 from PyQt4.QtCore import *
@@ -66,6 +67,8 @@ class Session():
 
         self.acquiring_hv=False
         self.accessing_lv=False
+        self.hv_lock_time=time.time()
+        self.hv_threadlist=[]
 
     def power_on(self,channel):
         channel=abs(channel-5)
@@ -129,10 +132,20 @@ class Session():
 
     def call_hv_data(self):
         try:
-            if self.acquiring_hv is False:
+            """
+            if self.acquiring_hv == False:
                 self.acquiring_hv=True
-                hv_thread=threading.Thread(target=self.get_hv_data,args=[False])
-                hv_thread.start()
+            """
+
+            hv_thread=threading.Thread(target=self.get_hv_data,args=[False])
+            hv_thread.setDaemon(True)
+            hv_thread.start()
+
+            '''
+            self.acquiring_hv=True
+            hv_thread=threading.Thread(target=self.get_hv_data,args=[False])
+            hv_thread.start()
+            '''
         except:
             self.save_error("problem with call hv data")
 
@@ -145,10 +158,8 @@ class Session():
             try:
                 # make serial connection and close as soon as most recent line of data is acquired
 
-                ser = serial.Serial('/dev/ttyACM0', 115200)
+                ser = serial.Serial('/dev/ttyACM0', 115200, timeout=1.5)
                 line = ser.readline().decode('ascii')
-                ser.close()
-                self.acquiring_hv=False
 
                 # break apart the acquired pyserial output line and parse
                 processed_line = line.split(" ")
@@ -185,7 +196,15 @@ class Session():
 
             except:
                 self.save_error("Error acquiring hv data")
+            """
+            finally:
+                ser.reset_input_buffer()
+                time.sleep(0.1)
+                ser.reset_output_buffer()
+                time.sleep(0.1)
+                ser.close()
                 self.acquiring_hv=False
+            """
         else:
             # if data acquisition function is in test mode, populate with bogus data for testing purposes
             for i in range(0,12):
@@ -193,12 +212,13 @@ class Session():
                 hv_current.append(round(random.uniform(20,30),3))
 
         # save data lists for hv
+
         try:
             if len(hv_voltage) == 12 and len(hv_current) == 12:
                 self.hv_voltage=hv_voltage
                 self.hv_current=hv_current
         except:
-            self.save_error("problem with get_hv_data save")
+            self.save_error("hv data is of improper length")
 
     # used to acquire assorted data from exelcys blade modules via I2C protocol
     def get_blade_data(self,test):
@@ -393,9 +413,9 @@ class Window(QMainWindow,Session):
 
         # set vars to control timers
         self.board_time=20000
-        self.hv_time=700
+        self.hv_time=2500
         self.save_time=60000
-        self.hv_display_time=700
+        self.hv_display_time=2000
 
         self.max_reading = 8388608.0
         self.vref = 3.3
@@ -406,6 +426,8 @@ class Window(QMainWindow,Session):
 
         self.acquiring_hv = False
         self.accessing_lv = False
+        self.hv_lock_time=time.time()
+        self.hv_threadlist=[]
 
 
         # initialize variables to store data
@@ -1492,6 +1514,10 @@ class Window(QMainWindow,Session):
             self.update_board_plot()
         except:
             self.save_error("Error with update board plot.")
+        try:
+            self.update_hv_plot()
+        except:
+            self.save_error("Error with update hv plot.")
 
     def stability_save(self):
         try:
