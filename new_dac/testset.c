@@ -44,8 +44,8 @@ int mygetch ( void )
 }
 
 void initialization(){
-  wiringPiSetup();
-  wiringPiSPISetup(SPICS, SPISPEED);
+    wiringPiSetup();
+    wiringPiSPISetup(SPICS, SPISPEED);
 
   //bring the MCP out of reset
   pinMode(26, OUTPUT);
@@ -68,6 +68,31 @@ void initialization(){
   DAC8164_setup (&dac[2], MCPPINBASE, 6, 2, 0, -1, -1);
 }
 
+void init(){
+  //  wiringPiSetup();
+  //  wiringPiSPISetup(SPICS, SPISPEED);
+
+  //bring the MCP out of reset
+  pinMode(26, OUTPUT);
+  digitalWrite(26, HIGH);
+
+  //setup MCP
+  //  int retc = mcp23s17Setup (MCPPINBASE, SPICS, 0);
+  //  printf("mcp setup done %d\n",retc);
+
+  //sete RESET to DACs to high
+  digitalWrite (MCPPINBASE+7, 0);
+  pinMode(MCPPINBASE+7, OUTPUT);
+
+  //set LDAC to DACs to low
+  digitalWrite (MCPPINBASE+3, 0);
+  pinMode(MCPPINBASE+3, OUTPUT);
+
+  //  DAC8164_setup (&dac[0], MCPPINBASE, 4, 2, 0, -1, -1);
+  //  DAC8164_setup (&dac[1], MCPPINBASE, 5, 2, 0, -1, -1);
+  //  DAC8164_setup (&dac[2], MCPPINBASE, 6, 2, 0, -1, -1);
+}
+
 
 
 int main(int argc, char *argv[])
@@ -83,7 +108,14 @@ int main(int argc, char *argv[])
 
 
   uint32_t digvalue = ( (int) (16383.*(value/2.5))) & 0x3FFF;
-  printf(" dig val = %d %d\n", digvalue, channel);
+  printf(" dig val = %x %d\n", digvalue, channel);
+  DAC8164_writeChannel(&dac[idac], channel, digvalue);
+
+  //  delay(5000);
+  //  digitalWrite(2000+4,1);
+
+  digvalue = 2*digvalue;
+  printf(" dig val = %x %d\n", digvalue, channel);  
   DAC8164_writeChannel(&dac[idac], channel, digvalue);
 
 

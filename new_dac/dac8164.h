@@ -56,7 +56,6 @@ typedef struct {
   uint8_t _sclk_pin;
   uint8_t _sdi_pin;
   uint8_t _enable_pin;
-  uint8_t _sync_Pin;
   uint8_t _ldac_pin;
 } DAC8164;
 

@@ -63,6 +63,9 @@ rampup:	rampup.o dac8164.o
 sethv:	sethv.o dac8164.o
 	$Q echo [link]
 	$Q $(CC) -o $@ sethv.o dac8164.o  $(LDFLAGS) $(LDLIBS)
+testset: testset.o dac8164.o
+	$Q echo [link]
+	$Q $(CC) -o $@ testset.o dac8164.o  $(LDFLAGS) $(LDLIBS)
 
 python_connect:	python_connect.o dac8164.o
 	$Q echo [link]
@@ -77,7 +80,7 @@ python_connect:	python_connect.o dac8164.o
 
 clean:
 	$Q echo "[Clean]"
-	$Q rm -f $(OBJ) *~ core tags $(BINS) adrac
+	$Q rm -f $(OBJ) *~ core tags $(BINS) *.o 
 
 tags:	$(SRC)
 	$Q echo [ctags]
