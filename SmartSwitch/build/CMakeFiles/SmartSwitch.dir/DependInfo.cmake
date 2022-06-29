@@ -115,6 +115,7 @@ set(CMAKE_ASM_TARGET_INCLUDE_PATH
   "/home/pi/pico/pico-sdk/src/rp2_common/pico_unique_id/include"
   "/home/pi/pico/pico-sdk/src/rp2_common/hardware_flash/include"
   "/home/pi/pico/pico-sdk/src/common/pico_usb_reset_interface/include"
+  "/home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/include"
   )
 set(CMAKE_DEPENDS_CHECK_C
   "/home/pi/SmartSwitch/SmartSwitch.c" "/home/pi/SmartSwitch/build/CMakeFiles/SmartSwitch.dir/SmartSwitch.c.obj"
@@ -145,6 +146,7 @@ set(CMAKE_DEPENDS_CHECK_C
   "/home/pi/pico/pico-sdk/src/common/pico_util/datetime.c" "/home/pi/SmartSwitch/build/CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/common/pico_util/datetime.c.obj"
   "/home/pi/pico/pico-sdk/src/common/pico_util/pheap.c" "/home/pi/SmartSwitch/build/CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/common/pico_util/pheap.c.obj"
   "/home/pi/pico/pico-sdk/src/common/pico_util/queue.c" "/home/pi/SmartSwitch/build/CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/common/pico_util/queue.c.obj"
+  "/home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.c" "/home/pi/SmartSwitch/build/CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.c.obj"
   "/home/pi/pico/pico-sdk/src/rp2_common/hardware_claim/claim.c" "/home/pi/SmartSwitch/build/CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/rp2_common/hardware_claim/claim.c.obj"
   "/home/pi/pico/pico-sdk/src/rp2_common/hardware_clocks/clocks.c" "/home/pi/SmartSwitch/build/CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/rp2_common/hardware_clocks/clocks.c.obj"
   "/home/pi/pico/pico-sdk/src/rp2_common/hardware_flash/flash.c" "/home/pi/SmartSwitch/build/CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/rp2_common/hardware_flash/flash.c.obj"
@@ -272,6 +274,7 @@ set(CMAKE_C_TARGET_INCLUDE_PATH
   "/home/pi/pico/pico-sdk/src/rp2_common/pico_unique_id/include"
   "/home/pi/pico/pico-sdk/src/rp2_common/hardware_flash/include"
   "/home/pi/pico/pico-sdk/src/common/pico_usb_reset_interface/include"
+  "/home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/include"
   )
 set(CMAKE_DEPENDS_CHECK_CXX
   "/home/pi/pico/pico-sdk/src/rp2_common/pico_standard_link/new_delete.cpp" "/home/pi/SmartSwitch/build/CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/rp2_common/pico_standard_link/new_delete.cpp.obj"
@@ -373,6 +376,7 @@ set(CMAKE_CXX_TARGET_INCLUDE_PATH
   "/home/pi/pico/pico-sdk/src/rp2_common/pico_unique_id/include"
   "/home/pi/pico/pico-sdk/src/rp2_common/hardware_flash/include"
   "/home/pi/pico/pico-sdk/src/common/pico_usb_reset_interface/include"
+  "/home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/include"
   )
 
 # Targets to which this target links.

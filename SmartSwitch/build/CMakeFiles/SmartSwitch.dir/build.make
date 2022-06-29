@@ -866,6 +866,19 @@ CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/rp2_common/hardware_flash/f
 	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Compiling C source to assembly CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/rp2_common/hardware_flash/flash.c.s"
 	/usr/bin/arm-none-eabi-gcc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -S /home/pi/pico/pico-sdk/src/rp2_common/hardware_flash/flash.c -o CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/rp2_common/hardware_flash/flash.c.s
 
+CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.c.obj: CMakeFiles/SmartSwitch.dir/flags.make
+CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.c.obj: /home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.c
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/pi/SmartSwitch/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_70) "Building C object CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.c.obj"
+	/usr/bin/arm-none-eabi-gcc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -o CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.c.obj   -c /home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.c
+
+CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.c.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Preprocessing C source to CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.c.i"
+	/usr/bin/arm-none-eabi-gcc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -E /home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.c > CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.c.i
+
+CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.c.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Compiling C source to assembly CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.c.s"
+	/usr/bin/arm-none-eabi-gcc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -S /home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.c -o CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.c.s
+
 # Object files for target SmartSwitch
 SmartSwitch_OBJECTS = \
 "CMakeFiles/SmartSwitch.dir/SmartSwitch.c.obj" \
@@ -936,7 +949,8 @@ SmartSwitch_OBJECTS = \
 "CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/lib/tinyusb/src/common/tusb_fifo.c.obj" \
 "CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/rp2_common/pico_fix/rp2040_usb_device_enumeration/rp2040_usb_device_enumeration.c.obj" \
 "CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/rp2_common/pico_unique_id/unique_id.c.obj" \
-"CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/rp2_common/hardware_flash/flash.c.obj"
+"CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/rp2_common/hardware_flash/flash.c.obj" \
+"CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.c.obj"
 
 # External object files for target SmartSwitch
 SmartSwitch_EXTERNAL_OBJECTS =
@@ -1010,10 +1024,11 @@ SmartSwitch.elf: CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/lib/tinyusb/sr
 SmartSwitch.elf: CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/rp2_common/pico_fix/rp2040_usb_device_enumeration/rp2040_usb_device_enumeration.c.obj
 SmartSwitch.elf: CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/rp2_common/pico_unique_id/unique_id.c.obj
 SmartSwitch.elf: CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/rp2_common/hardware_flash/flash.c.obj
+SmartSwitch.elf: CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.c.obj
 SmartSwitch.elf: CMakeFiles/SmartSwitch.dir/build.make
 SmartSwitch.elf: pico-sdk/src/rp2_common/boot_stage2/bs2_default_padded_checksummed.S
 SmartSwitch.elf: CMakeFiles/SmartSwitch.dir/link.txt
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --bold --progress-dir=/home/pi/SmartSwitch/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_70) "Linking CXX executable SmartSwitch.elf"
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --bold --progress-dir=/home/pi/SmartSwitch/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_71) "Linking CXX executable SmartSwitch.elf"
 	$(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/SmartSwitch.dir/link.txt --verbose=$(VERBOSE)
 	/usr/bin/arm-none-eabi-objcopy -Oihex /home/pi/SmartSwitch/build/SmartSwitch.elf SmartSwitch.hex
 	/usr/bin/arm-none-eabi-objcopy -Obinary /home/pi/SmartSwitch/build/SmartSwitch.elf SmartSwitch.bin

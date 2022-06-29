@@ -28,7 +28,6 @@ pico_enable_stdio_uart(SmartSwitch 0)
 pico_enable_stdio_usb(SmartSwitch 1)
 
 # Add the standard library to the build
-target_link_libraries(SmartSwitch pico_stdlib)
+target_link_libraries(SmartSwitch pico_stdlib hardware_adc)
 
 pico_add_extra_outputs(SmartSwitch)
-

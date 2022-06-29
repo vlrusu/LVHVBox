@@ -187,6 +187,7 @@ CMakeFiles/SmartSwitch.dir/SmartSwitch.c.obj: /home/pi/pico/pico-sdk/src/common/
 CMakeFiles/SmartSwitch.dir/SmartSwitch.c.obj: /home/pi/pico/pico-sdk/src/common/pico_stdlib/include/pico/stdlib.h
 CMakeFiles/SmartSwitch.dir/SmartSwitch.c.obj: /home/pi/pico/pico-sdk/src/common/pico_time/include/pico/time.h
 CMakeFiles/SmartSwitch.dir/SmartSwitch.c.obj: /home/pi/pico/pico-sdk/src/rp2040/hardware_regs/include/hardware/platform_defs.h
+CMakeFiles/SmartSwitch.dir/SmartSwitch.c.obj: /home/pi/pico/pico-sdk/src/rp2040/hardware_regs/include/hardware/regs/adc.h
 CMakeFiles/SmartSwitch.dir/SmartSwitch.c.obj: /home/pi/pico/pico-sdk/src/rp2040/hardware_regs/include/hardware/regs/addressmap.h
 CMakeFiles/SmartSwitch.dir/SmartSwitch.c.obj: /home/pi/pico/pico-sdk/src/rp2040/hardware_regs/include/hardware/regs/dreq.h
 CMakeFiles/SmartSwitch.dir/SmartSwitch.c.obj: /home/pi/pico/pico-sdk/src/rp2040/hardware_regs/include/hardware/regs/io_bank0.h
@@ -194,6 +195,7 @@ CMakeFiles/SmartSwitch.dir/SmartSwitch.c.obj: /home/pi/pico/pico-sdk/src/rp2040/
 CMakeFiles/SmartSwitch.dir/SmartSwitch.c.obj: /home/pi/pico/pico-sdk/src/rp2040/hardware_regs/include/hardware/regs/sio.h
 CMakeFiles/SmartSwitch.dir/SmartSwitch.c.obj: /home/pi/pico/pico-sdk/src/rp2040/hardware_regs/include/hardware/regs/timer.h
 CMakeFiles/SmartSwitch.dir/SmartSwitch.c.obj: /home/pi/pico/pico-sdk/src/rp2040/hardware_regs/include/hardware/regs/uart.h
+CMakeFiles/SmartSwitch.dir/SmartSwitch.c.obj: /home/pi/pico/pico-sdk/src/rp2040/hardware_structs/include/hardware/structs/adc.h
 CMakeFiles/SmartSwitch.dir/SmartSwitch.c.obj: /home/pi/pico/pico-sdk/src/rp2040/hardware_structs/include/hardware/structs/interp.h
 CMakeFiles/SmartSwitch.dir/SmartSwitch.c.obj: /home/pi/pico/pico-sdk/src/rp2040/hardware_structs/include/hardware/structs/iobank0.h
 CMakeFiles/SmartSwitch.dir/SmartSwitch.c.obj: /home/pi/pico/pico-sdk/src/rp2040/hardware_structs/include/hardware/structs/padsbank0.h
@@ -201,6 +203,7 @@ CMakeFiles/SmartSwitch.dir/SmartSwitch.c.obj: /home/pi/pico/pico-sdk/src/rp2040/
 CMakeFiles/SmartSwitch.dir/SmartSwitch.c.obj: /home/pi/pico/pico-sdk/src/rp2040/hardware_structs/include/hardware/structs/timer.h
 CMakeFiles/SmartSwitch.dir/SmartSwitch.c.obj: /home/pi/pico/pico-sdk/src/rp2040/hardware_structs/include/hardware/structs/uart.h
 CMakeFiles/SmartSwitch.dir/SmartSwitch.c.obj: /home/pi/pico/pico-sdk/src/rp2_common/cmsis/include/cmsis/rename_exceptions.h
+CMakeFiles/SmartSwitch.dir/SmartSwitch.c.obj: /home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/include/hardware/adc.h
 CMakeFiles/SmartSwitch.dir/SmartSwitch.c.obj: /home/pi/pico/pico-sdk/src/rp2_common/hardware_base/include/hardware/address_mapped.h
 CMakeFiles/SmartSwitch.dir/SmartSwitch.c.obj: /home/pi/pico/pico-sdk/src/rp2_common/hardware_gpio/include/hardware/gpio.h
 CMakeFiles/SmartSwitch.dir/SmartSwitch.c.obj: /home/pi/pico/pico-sdk/src/rp2_common/hardware_sync/include/hardware/sync.h
@@ -1309,6 +1312,35 @@ CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/common/pico_util/queue.c.ob
 CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/common/pico_util/queue.c.obj: /home/pi/pico/pico-sdk/src/rp2_common/pico_platform/include/pico/platform.h
 CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/common/pico_util/queue.c.obj: generated/pico_base/pico/config_autogen.h
 CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/common/pico_util/queue.c.obj: generated/pico_base/pico/version.h
+
+CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.c.obj: /home/pi/pico/pico-sdk/src/boards/include/boards/pico.h
+CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.c.obj: /home/pi/pico/pico-sdk/src/common/pico_base/include/pico.h
+CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.c.obj: /home/pi/pico/pico-sdk/src/common/pico_base/include/pico/assert.h
+CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.c.obj: /home/pi/pico/pico-sdk/src/common/pico_base/include/pico/config.h
+CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.c.obj: /home/pi/pico/pico-sdk/src/common/pico_base/include/pico/error.h
+CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.c.obj: /home/pi/pico/pico-sdk/src/common/pico_base/include/pico/types.h
+CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.c.obj: /home/pi/pico/pico-sdk/src/rp2040/hardware_regs/include/hardware/platform_defs.h
+CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.c.obj: /home/pi/pico/pico-sdk/src/rp2040/hardware_regs/include/hardware/regs/adc.h
+CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.c.obj: /home/pi/pico/pico-sdk/src/rp2040/hardware_regs/include/hardware/regs/addressmap.h
+CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.c.obj: /home/pi/pico/pico-sdk/src/rp2040/hardware_regs/include/hardware/regs/io_bank0.h
+CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.c.obj: /home/pi/pico/pico-sdk/src/rp2040/hardware_regs/include/hardware/regs/pads_bank0.h
+CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.c.obj: /home/pi/pico/pico-sdk/src/rp2040/hardware_regs/include/hardware/regs/resets.h
+CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.c.obj: /home/pi/pico/pico-sdk/src/rp2040/hardware_regs/include/hardware/regs/sio.h
+CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.c.obj: /home/pi/pico/pico-sdk/src/rp2040/hardware_structs/include/hardware/structs/adc.h
+CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.c.obj: /home/pi/pico/pico-sdk/src/rp2040/hardware_structs/include/hardware/structs/interp.h
+CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.c.obj: /home/pi/pico/pico-sdk/src/rp2040/hardware_structs/include/hardware/structs/iobank0.h
+CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.c.obj: /home/pi/pico/pico-sdk/src/rp2040/hardware_structs/include/hardware/structs/padsbank0.h
+CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.c.obj: /home/pi/pico/pico-sdk/src/rp2040/hardware_structs/include/hardware/structs/resets.h
+CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.c.obj: /home/pi/pico/pico-sdk/src/rp2040/hardware_structs/include/hardware/structs/sio.h
+CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.c.obj: /home/pi/pico/pico-sdk/src/rp2_common/cmsis/include/cmsis/rename_exceptions.h
+CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.c.obj: /home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.c
+CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.c.obj: /home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/include/hardware/adc.h
+CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.c.obj: /home/pi/pico/pico-sdk/src/rp2_common/hardware_base/include/hardware/address_mapped.h
+CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.c.obj: /home/pi/pico/pico-sdk/src/rp2_common/hardware_gpio/include/hardware/gpio.h
+CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.c.obj: /home/pi/pico/pico-sdk/src/rp2_common/hardware_resets/include/hardware/resets.h
+CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.c.obj: /home/pi/pico/pico-sdk/src/rp2_common/pico_platform/include/pico/platform.h
+CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.c.obj: generated/pico_base/pico/config_autogen.h
+CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.c.obj: generated/pico_base/pico/version.h
 
 CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/rp2_common/hardware_claim/claim.c.obj: /home/pi/pico/pico-sdk/src/boards/include/boards/pico.h
 CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/rp2_common/hardware_claim/claim.c.obj: /home/pi/pico/pico-sdk/src/common/pico_base/include/pico.h

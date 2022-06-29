@@ -27,6 +27,8 @@ pico/stdlib.h
 /home/pi/SmartSwitch/pico/stdlib.h
 hardware/sync.h
 /home/pi/SmartSwitch/hardware/sync.h
+hardware/adc.h
+/home/pi/SmartSwitch/hardware/adc.h
 
 /home/pi/pico/pico-sdk/src/boards/include/boards/pico.h
 
@@ -92,6 +94,8 @@ hardware/timer.h
 
 /home/pi/pico/pico-sdk/src/rp2040/hardware_regs/include/hardware/platform_defs.h
 
+/home/pi/pico/pico-sdk/src/rp2040/hardware_regs/include/hardware/regs/adc.h
+
 /home/pi/pico/pico-sdk/src/rp2040/hardware_regs/include/hardware/regs/addressmap.h
 hardware/platform_defs.h
 /home/pi/pico/pico-sdk/src/rp2040/hardware_regs/include/hardware/regs/hardware/platform_defs.h
@@ -107,6 +111,12 @@ hardware/platform_defs.h
 /home/pi/pico/pico-sdk/src/rp2040/hardware_regs/include/hardware/regs/timer.h
 
 /home/pi/pico/pico-sdk/src/rp2040/hardware_regs/include/hardware/regs/uart.h
+
+/home/pi/pico/pico-sdk/src/rp2040/hardware_structs/include/hardware/structs/adc.h
+hardware/address_mapped.h
+/home/pi/pico/pico-sdk/src/rp2040/hardware_structs/include/hardware/structs/hardware/address_mapped.h
+hardware/regs/adc.h
+/home/pi/pico/pico-sdk/src/rp2040/hardware_structs/include/hardware/structs/hardware/regs/adc.h
 
 /home/pi/pico/pico-sdk/src/rp2040/hardware_structs/include/hardware/structs/interp.h
 hardware/address_mapped.h
@@ -147,6 +157,14 @@ hardware/regs/uart.h
 /home/pi/pico/pico-sdk/src/rp2040/hardware_structs/include/hardware/structs/hardware/regs/uart.h
 
 /home/pi/pico/pico-sdk/src/rp2_common/cmsis/include/cmsis/rename_exceptions.h
+
+/home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/include/hardware/adc.h
+pico.h
+/home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/include/hardware/pico.h
+hardware/structs/adc.h
+/home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/include/hardware/hardware/structs/adc.h
+hardware/gpio.h
+/home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/include/hardware/hardware/gpio.h
 
 /home/pi/pico/pico-sdk/src/rp2_common/hardware_base/include/hardware/address_mapped.h
 pico.h

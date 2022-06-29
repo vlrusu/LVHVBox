@@ -931,6 +931,33 @@ home/pi/pico/pico-sdk/src/common/pico_util/queue.c.s:
 	$(MAKE) -f CMakeFiles/SmartSwitch.dir/build.make CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/common/pico_util/queue.c.s
 .PHONY : home/pi/pico/pico-sdk/src/common/pico_util/queue.c.s
 
+home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.obj: home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.c.obj
+
+.PHONY : home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.obj
+
+# target to build an object file
+home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.c.obj:
+	$(MAKE) -f CMakeFiles/SmartSwitch.dir/build.make CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.c.obj
+.PHONY : home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.c.obj
+
+home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.i: home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.c.i
+
+.PHONY : home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.i
+
+# target to preprocess a source file
+home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.c.i:
+	$(MAKE) -f CMakeFiles/SmartSwitch.dir/build.make CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.c.i
+.PHONY : home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.c.i
+
+home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.s: home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.c.s
+
+.PHONY : home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.s
+
+# target to generate assembly for a file
+home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.c.s:
+	$(MAKE) -f CMakeFiles/SmartSwitch.dir/build.make CMakeFiles/SmartSwitch.dir/home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.c.s
+.PHONY : home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.c.s
+
 home/pi/pico/pico-sdk/src/rp2_common/hardware_claim/claim.obj: home/pi/pico/pico-sdk/src/rp2_common/hardware_claim/claim.c.obj
 
 .PHONY : home/pi/pico/pico-sdk/src/rp2_common/hardware_claim/claim.obj
@@ -1937,6 +1964,9 @@ help:
 	@echo "... home/pi/pico/pico-sdk/src/common/pico_util/queue.obj"
 	@echo "... home/pi/pico/pico-sdk/src/common/pico_util/queue.i"
 	@echo "... home/pi/pico/pico-sdk/src/common/pico_util/queue.s"
+	@echo "... home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.obj"
+	@echo "... home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.i"
+	@echo "... home/pi/pico/pico-sdk/src/rp2_common/hardware_adc/adc.s"
 	@echo "... home/pi/pico/pico-sdk/src/rp2_common/hardware_claim/claim.obj"
 	@echo "... home/pi/pico/pico-sdk/src/rp2_common/hardware_claim/claim.i"
 	@echo "... home/pi/pico/pico-sdk/src/rp2_common/hardware_claim/claim.s"
