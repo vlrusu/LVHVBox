@@ -448,6 +448,10 @@ class Window(QMainWindow,Session):
     def tabs(self):
         self.tabs=QTabWidget()
 
+        self.plotting=QWidget()
+        self.plotting.layout=QGridLayout()
+        self.plotting_tabs=QTabWidget()
+
         # initialize tables
         self.controls_setup()
 
@@ -478,14 +482,17 @@ class Window(QMainWindow,Session):
 
         # adds tabs to the overall GUI
         self.tabs.addTab(self.tab1,"Tables")
-        self.tabs.addTab(self.tab2,"LV")
-        self.tabs.addTab(self.tab3,"HV")
-        self.tabs.addTab(self.tab4,"Blade Plots")
-        self.tabs.addTab(self.tab5,"Board Plots")
-        self.tabs.addTab(self.tab6,"HV Plots")
-        self.tabs.addTab(self.tab7,"Blade Stability")
-        self.tabs.addTab(self.tab8,"Board Stability")
-        self.tabs.addTab(self.tab9,"HV Stability")
+        self.tabs.addTab(self.tab2,"LV Actuation")
+        self.tabs.addTab(self.tab3,"HV Actuation")
+        self.tabs.addTab(self.plotting,"Plots")
+        self.plotting_tabs.addTab(self.tab4,"Blade Plots")
+        self.plotting_tabs.addTab(self.tab5,"Board Plots")
+        self.plotting_tabs.addTab(self.tab6,"HV Plots")
+        self.plotting_tabs.addTab(self.tab7,"Blade Stability")
+        self.plotting_tabs.addTab(self.tab8,"Board Stability")
+        self.plotting_tabs.addTab(self.tab9,"HV Stability")
+        self.plotting.layout.addWidget(self.plotting_tabs)
+        self.plotting.setLayout(self.plotting.layout)
 
         # set title and place tab widget for pyqt
         self.setWindowTitle("LVHV GUI")
