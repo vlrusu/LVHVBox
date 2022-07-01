@@ -51,6 +51,11 @@ void DAC8164_setup(DAC8164 *self, int MCP, uint8_t sync, int sclk, uint8_t sdi, 
 
 }
 
+
+
+
+
+
 void DAC8164_write(DAC8164 *self, uint32_t data)
 {
 
@@ -76,8 +81,8 @@ void DAC8164_write(DAC8164 *self, uint32_t data)
     digitalWrite(self->_MCP + self->_sclk_pin, 0);
     delayMicroseconds(DAC8164DELAY);
   }
-  digitalWrite(self->_MCP + self->_sync_Pin, 1);
 
+  digitalWrite(self->_MCP + self->_sync_pin, 1);
 
   if (self->_enable_pin != -1)
     digitalWrite(self->_enable_pin, HIGH);
@@ -136,7 +141,6 @@ void DAC8164_writeChannel(DAC8164 *self, uint8_t channel, uint16_t value)
   // value is 12 MSB bits (last LSB nibble to 0)
 
   data |= value << 2;
-
   // Send to chip
   DAC8164_write (self, data);
 }
