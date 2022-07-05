@@ -43,6 +43,7 @@ int mygetch ( void )
   return ch;
 }
 
+
 void initialization(){
   wiringPiSetup();
   wiringPiSPISetup(SPICS, SPISPEED);
@@ -56,7 +57,7 @@ void initialization(){
   printf("mcp setup done %d\n",retc);
 
   //sete RESET to DACs to high
-  digitalWrite (MCPPINBASE+7, 1);
+  digitalWrite (MCPPINBASE+7, 0);
   pinMode(MCPPINBASE+7, OUTPUT);
 
   //set LDAC to DACs to low
@@ -69,22 +70,29 @@ void initialization(){
 }
 
 
-
-int main(int argc, char *argv[])
-{
-  initialization();
-
-  int channel = atoi(argv[1]);
-	float value = atof(argv[2]);
-
-	value = value*2.3/1510.;
-	int idac = (int) (channel/4);
-	printf(" Chan %i HV idac %i  is set to %7.2f\n", channel, idac, value);
+void set_hv(int channel, float value){
+  int idac = (int) (channel/4);
 
 
   uint32_t digvalue = ( (int) (16383.*(value/2.5))) & 0x3FFF;
-  printf(" dig val = %d %d\n", digvalue, channel);
+  printf("%d\n",digvalue);
+
   DAC8164_writeChannel(&dac[idac], channel, digvalue);
+
+}
+
+
+
+int main(int argc, char *argv[])
+{
+  int channel = atoi(argv[1]);
+	float value = atoi(argv[2]);
+  value = value*2.3/1664.;
+
+	initialization();
+
+	set_hv(channel,value);
+
 
 
 
