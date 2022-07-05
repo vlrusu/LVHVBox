@@ -149,14 +149,31 @@ class Session():
             try:
                 # make serial connection and close as soon as most recent line of data is acquired
 
-                ser = serial.Serial('/dev/ttyACM0', 115200, timeout=1.5)
+                ser = serial.Serial('/dev/ttyACM1', 115200, timeout=1.5)
                 line = ser.readline().decode('ascii')
+
+                ser1 = serial.Serial('/dev/ttyACM0', 115200, timeout=1.5)
+                line1 = ser1.readline().decode('ascii')
 
                 # break apart the acquired pyserial output line and parse
                 processed_line = line.split(" ")
+                processed_line1 = line1.split(" ")
                 on_voltage=False
                 end=False
                 for i in processed_line:
+                    if i != '' and i != '|' and on_voltage is False:
+                        hv_current.append(float(i))
+                    elif i != '' and i != '|' and on_voltage is True and end is False:
+                        hv_voltage.append(float(i))
+                    elif end is False and i == '|':
+                        if on_voltage is False:
+                            on_voltage = True
+                        else:
+                            end = True
+
+                on_voltage=False
+                end=False
+                for i in processed_line1:
                     if i != '' and i != '|' and on_voltage is False:
                         hv_current.append(float(i))
                     elif i != '' and i != '|' and on_voltage is True and end is False:
@@ -176,10 +193,6 @@ class Session():
                 for i in hv_voltage:
                     temp.append(round(int(i),1))
                 hv_voltage=temp
-
-                # temporary measure because only one pico is connected
-                hv_current=hv_current+hv_current
-                hv_voltage=hv_voltage+hv_voltage
 
                 assert len(hv_current) == 12
                 assert len(hv_voltage) == 12
