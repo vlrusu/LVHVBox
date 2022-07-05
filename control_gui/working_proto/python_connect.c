@@ -15,17 +15,17 @@
 #include <mcp23s17.h>
 #include <softPwm.h>
 #include <linux/spi/spidev.h>
-#include <ad5685.h>
+#include <dac8164.h>
 
-#define NSTEPS 100
+
 #define MCPPINBASE 2000
 
-#define SPICS 1
-
 #define SPISPEED 40000000
+#define NSTEPS 200
+#define SPICS 1
 //#define SPISPEED 320000
 
-AD5685 dac[3];
+DAC8164 dac[3];
 
 
 int mygetch ( void )
@@ -45,11 +45,8 @@ int mygetch ( void )
 
 
 void initialization(){
-
-
-  wiringPiSetup () ;
-  wiringPiSPISetup (SPICS, SPISPEED);
-
+  wiringPiSetup();
+  wiringPiSPISetup(SPICS, SPISPEED);
 
   //bring the MCP out of reset
   pinMode(26, OUTPUT);
@@ -57,33 +54,34 @@ void initialization(){
 
   //setup MCP
   int retc = mcp23s17Setup (MCPPINBASE, SPICS, 0);
+  printf("mcp setup done %d\n",retc);
 
   //sete RESET to DACs to high
-  digitalWrite (MCPPINBASE+7, 1);
+  digitalWrite (MCPPINBASE+7, 0);
   pinMode(MCPPINBASE+7, OUTPUT);
 
-  //sete LDAC to DACs to low
+  //set LDAC to DACs to low
   digitalWrite (MCPPINBASE+3, 0);
   pinMode(MCPPINBASE+3, OUTPUT);
 
-
-
-  AD5685_setup (&dac[0], MCPPINBASE, 4, MCPPINBASE, 2, MCPPINBASE, 0);
-  AD5685_setup (&dac[1], MCPPINBASE, 5, MCPPINBASE, 2, MCPPINBASE, 0);
-  AD5685_setup (&dac[2], MCPPINBASE, 6, MCPPINBASE, 2, MCPPINBASE, 0);
-
+  DAC8164_setup (&dac[0], MCPPINBASE, 4, 2, 0, -1, -1);
+  DAC8164_setup (&dac[1], MCPPINBASE, 5, 2, 0, -1, -1);
+  DAC8164_setup (&dac[2], MCPPINBASE, 6, 2, 0, -1, -1);
 }
 
 
 void rampup_hv(int channel, int value){
   int idac = (int) (channel/4);
 
-  float increment = value*2.3/NSTEPS/1510.;
+  float increment = value*2.3/NSTEPS/1664.;
   float setvalue = 0;
   for (int itick =0; itick < NSTEPS; itick++){
     usleep(50000);
     setvalue += increment;
-    AD5685_setdac(&dac[idac],channel%4,setvalue);
+    uint32_t digvalue = ( (int) (16383.*(setvalue/2.5))) & 0x3FFF;
+
+    DAC8164_writeChannel(&dac[idac], channel, digvalue);
+
   }
 }
 
@@ -91,8 +89,6 @@ void rampup_hv(int channel, int value){
 
 int main(int argc, char *argv[])
 {
-	int opt;
-	int cmderr = 0;
 
 	/*
 	while((opt = getopt(argc, argv, “:if:lrx”)) != -1)
@@ -124,7 +120,7 @@ int main(int argc, char *argv[])
 	value = value*2.3/1510.;
 	int idac = (int) (channel/4);
 	printf(" Chan %i HV idac %i  is set to %7.2f\n", channel, idac, value);
-	AD5685_setdac(&dac[idac],channel%4,value);
+
 
 
 

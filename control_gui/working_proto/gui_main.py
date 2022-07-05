@@ -132,20 +132,11 @@ class Session():
 
     def call_hv_data(self):
         try:
-            """
-            if self.acquiring_hv == False:
-                self.acquiring_hv=True
-            """
 
             hv_thread=threading.Thread(target=self.get_hv_data,args=[False])
             hv_thread.setDaemon(True)
             hv_thread.start()
 
-            '''
-            self.acquiring_hv=True
-            hv_thread=threading.Thread(target=self.get_hv_data,args=[False])
-            hv_thread.start()
-            '''
         except:
             self.save_error("problem with call hv data")
 
@@ -196,15 +187,6 @@ class Session():
 
             except:
                 self.save_error("Error acquiring hv data")
-            """
-            finally:
-                ser.reset_input_buffer()
-                time.sleep(0.1)
-                ser.reset_output_buffer()
-                time.sleep(0.1)
-                ser.close()
-                self.acquiring_hv=False
-            """
         else:
             # if data acquisition function is in test mode, populate with bogus data for testing purposes
             for i in range(0,12):

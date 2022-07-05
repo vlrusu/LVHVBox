@@ -53,7 +53,7 @@ really-all:	$(BINS)
 main:	main.o dac8164.o
 	$Q echo [link]
 	$Q $(CC) -o $@ main.o dac8164.o  $(LDFLAGS) $(LDLIBS)
-test:	test.o dac8164.o
+test:	test.o ad5685.o
 	$Q echo [link]
 	$Q $(CC) -o $@ test.o dac8164.o  $(LDFLAGS) $(LDLIBS)
 rampup:	rampup.o dac8164.o
