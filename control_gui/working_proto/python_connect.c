@@ -22,7 +22,7 @@
 
 #define SPISPEED 40000000
 #define NSTEPS 200
-#define SPICS 0
+#define SPICS 1
 //#define SPISPEED 320000
 
 DAC8164 dac[3];
@@ -120,7 +120,7 @@ int main(int argc, char *argv[])
 	value = value*2.3/1510.;
 	int idac = (int) (channel/4);
 	printf(" Chan %i HV idac %i  is set to %7.2f\n", channel, idac, value);
-	
+
 
 
 

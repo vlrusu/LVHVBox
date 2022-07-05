@@ -37,7 +37,7 @@ LDLIBS    = -lwiringPi -lwiringPiDev -lpthread -lm -lcrypt -lrt
 # Should not alter anything below this line
 ###############################################################################
 
-SRC	=	main.c ad5686.c
+SRC	=	main.c dac8164.c
 
 OBJ	=	$(SRC:.c=.o)
 
@@ -50,23 +50,23 @@ all:
 
 really-all:	$(BINS)
 
-main:	main.o ad5685.o
+main:	main.o dac8164.o
 	$Q echo [link]
-	$Q $(CC) -o $@ main.o ad5685.o  $(LDFLAGS) $(LDLIBS)
-test:	test.o ad5685.o
+	$Q $(CC) -o $@ main.o dac8164.o  $(LDFLAGS) $(LDLIBS)
+test:	test.o dac8164.o
 	$Q echo [link]
-	$Q $(CC) -o $@ test.o ad5685.o  $(LDFLAGS) $(LDLIBS)
-rampup:	rampup.o ad5685.o
+	$Q $(CC) -o $@ test.o dac8164.o  $(LDFLAGS) $(LDLIBS)
+rampup:	rampup.o dac8164.o
 	$Q echo [link]
-	$Q $(CC) -o $@ rampup.o ad5685.o  $(LDFLAGS) $(LDLIBS)
+	$Q $(CC) -o $@ rampup.o dac8164.o  $(LDFLAGS) $(LDLIBS)
 
-sethv:	sethv.o ad5685.o
+sethv:	sethv.o dac8164.o
 	$Q echo [link]
-	$Q $(CC) -o $@ sethv.o ad5685.o  $(LDFLAGS) $(LDLIBS)
+	$Q $(CC) -o $@ sethv.o dac8164.o  $(LDFLAGS) $(LDLIBS)
 
-python_connect:	python_connect.o ad5685.o
+python_connect:	python_connect.o dac8164.o
 	$Q echo [link]
-	$Q $(CC) -o $@ python_connect.o ad5685.o  $(LDFLAGS) $(LDLIBS)
+	$Q $(CC) -o $@ python_connect.o dac8164.o  $(LDFLAGS) $(LDLIBS)
 
 
 
