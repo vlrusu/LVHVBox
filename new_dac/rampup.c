@@ -63,9 +63,9 @@ void initialization(){
   digitalWrite (MCPPINBASE+3, 0);
   pinMode(MCPPINBASE+3, OUTPUT);
 
-  DAC8164_setup (&dac[0], MCPPINBASE, 4, MCPPINBASE, 2, MCPPINBASE, 0);
-  DAC8164_setup (&dac[1], MCPPINBASE, 5, MCPPINBASE, 2, MCPPINBASE, 0);
-  DAC8164_setup (&dac[2], MCPPINBASE, 6, MCPPINBASE, 2, MCPPINBASE, 0);
+  DAC8164_setup (&dac[0], MCPPINBASE, 4, 2, 0, -1, -1);
+  DAC8164_setup (&dac[1], MCPPINBASE, 5, 2, 0, -1, -1);
+  DAC8164_setup (&dac[2], MCPPINBASE, 6, 2, 0, -1, -1);
 }
 
 
