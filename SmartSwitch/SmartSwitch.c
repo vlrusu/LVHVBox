@@ -405,6 +405,10 @@ int main(){
     float result = adc_read()*3.3/8192;
     printf("%1.2f | ",result);
 
+    // identifier for the pico
+    //printf("1 | ");
+    printf("2 | ");
+
     printf( "ADCTime=%d TotalTime=%d\n",adcTime,totalTime);
 
     sleep_ms(1000);

@@ -53,22 +53,7 @@ import serial
 
 # session class focuses on interactions with the hardware, providing them to the gui class
 class Session():
-    def __init__(self):
-        self.temperature=None
 
-        self.max_reading = 8388608.0
-        self.vref = 3.3
-
-        self.pins = ["P9_15","P9_15","P9_15","P9_27","P9_41","P9_12"]
-        self.GLOBAL_ENABLE_PIN =  15
-        self.RESET_PIN = 32
-
-        self.addresses = [0x14,0x16,0x26]
-
-        self.acquiring_hv=False
-        self.accessing_lv=False
-        self.hv_lock_time=time.time()
-        self.hv_threadlist=[]
 
     def power_on(self,channel):
         channel=abs(channel-5)
@@ -143,28 +128,36 @@ class Session():
     # acquires hv data from pico via pyserial connection
     def get_hv_data(self,test):
         # acquire hv current and voltage
-        hv_current=[]
-        hv_voltage=[]
+        hv_voltage_1=[]
+        hv_current_1=[]
+
+        hv_voltage_2=[]
+        hv_current_2=[]
         if not test:
             try:
                 # make serial connection and close as soon as most recent line of data is acquired
 
-                ser = serial.Serial('/dev/ttyACM1', 115200, timeout=1.5)
+                ser = serial.Serial('/dev/ttyACM0', 115200, timeout=2)
                 line = ser.readline().decode('ascii')
 
-                ser1 = serial.Serial('/dev/ttyACM0', 115200, timeout=1.5)
+                ser1 = serial.Serial('/dev/ttyACM1', 115200, timeout=2)
                 line1 = ser1.readline().decode('ascii')
 
                 # break apart the acquired pyserial output line and parse
                 processed_line = line.split(" ")
                 processed_line1 = line1.split(" ")
+
+                # determine which pico is first
+                picocheck1=line.split("|")[3][1]
+                picocheck2=line1.split("|")[3][1]
+
                 on_voltage=False
                 end=False
                 for i in processed_line:
                     if i != '' and i != '|' and on_voltage is False:
-                        hv_current.append(float(i))
+                        hv_current_1.append(float(i))
                     elif i != '' and i != '|' and on_voltage is True and end is False:
-                        hv_voltage.append(float(i))
+                        hv_voltage_1.append(float(i))
                     elif end is False and i == '|':
                         if on_voltage is False:
                             on_voltage = True
@@ -175,14 +168,24 @@ class Session():
                 end=False
                 for i in processed_line1:
                     if i != '' and i != '|' and on_voltage is False:
-                        hv_current.append(float(i))
+                        hv_current_2.append(float(i))
                     elif i != '' and i != '|' and on_voltage is True and end is False:
-                        hv_voltage.append(float(i))
+                        hv_voltage_2.append(float(i))
                     elif end is False and i == '|':
                         if on_voltage is False:
                             on_voltage = True
                         else:
                             end = True
+
+                # based on picocheck results, form main hv lists
+                if picocheck1 == '2':
+                    hv_voltage = hv_voltage_1 + hv_voltage_2
+                    hv_current = hv_current_1 + hv_current_2
+                else:
+                    hv_voltage = hv_voltage_2 + hv_voltage_1
+                    hv_current = hv_current_2 + hv_current_1
+
+
 
                 # returned lists are flipped
                 hv_current.reverse()
@@ -389,6 +392,11 @@ class Session():
             output+=','+str(self.five_current[i])
             output+=','+str(self.cond_voltage[i])
             output+=','+str(self.cond_current[i])+','
+        for i in range(0,12):
+            output+='ch'+str(i)
+            output+=','+str(self.hv_voltage[i])
+            output+=','+str(self.hv_current[i])+','
+
         output+=str(time.time())
         output+='\n'
 
@@ -405,25 +413,6 @@ class Session():
 class Window(QMainWindow,Session):
     def __init__(self):
         super(Window,self).__init__()
-
-        # set vars to control timers
-        self.board_time=20000
-        self.hv_time=2500
-        self.save_time=60000
-        self.hv_display_time=2000
-
-        self.max_reading = 8388608.0
-        self.vref = 3.3
-        self.pins = ["P9_15","P9_15","P9_15","P9_27","P9_41","P9_12"]
-        self.GLOBAL_ENABLE_PIN =  15
-        self.RESET_PIN = 32
-        self.addresses = [0x14,0x16,0x26]
-
-        self.acquiring_hv = False
-        self.accessing_lv = False
-        self.hv_lock_time=time.time()
-        self.hv_threadlist=[]
-
 
         # initialize variables to store data
         self.initialize_data()
@@ -1500,26 +1489,29 @@ class Window(QMainWindow,Session):
     # this function updates all of the plots, as well as everything that has to do with readmon data
     # because readmon also takes the longest, this update function saves data to logfile.txt
     def primary_update(self):
-        try:
-            self.update_board_table()
-        except:
-            self.save_error("Error with update board table.")
-        try:
-            self.update_blade_table()
-        except:
-            self.save_error("Error with update blade table.")
-        try:
-            self.update_blade_plot()
-        except:
-            self.save_error("Error with update blade plot.")
-        try:
-            self.update_board_plot()
-        except:
-            self.save_error("Error with update board plot.")
-        try:
-            self.update_hv_plot()
-        except:
-            self.save_error("Error with update hv plot.")
+        if self.initial_lv_display == False:
+            try:
+                self.update_board_table()
+            except:
+                self.save_error("Error with update board table.")
+            try:
+                self.update_blade_table()
+            except:
+                self.save_error("Error with update blade table.")
+            try:
+                self.update_blade_plot()
+            except:
+                self.save_error("Error with update blade plot.")
+            try:
+                self.update_board_plot()
+            except:
+                self.save_error("Error with update board plot.")
+            try:
+                self.update_hv_plot()
+            except:
+                self.save_error("Error with update hv plot.")
+        else:
+            self.initial_lv_display = True
 
     def stability_save(self):
         try:
@@ -1549,6 +1541,29 @@ class Window(QMainWindow,Session):
             threading.Thread(target=self.hv_rampup_on_off).start()
 
     def initialize_data(self):
+        # set vars to control timers
+        self.board_time=20000
+        self.hv_time=2500
+        self.save_time=60000
+        self.hv_display_time=2000
+
+        self.max_reading = 8388608.0
+        self.vref = 3.3
+        self.pins = ["P9_15","P9_15","P9_15","P9_27","P9_41","P9_12"]
+        self.GLOBAL_ENABLE_PIN =  15
+        self.RESET_PIN = 32
+        self.addresses = [0x14,0x16,0x26]
+
+        # set vars to track hardware connections in threads
+        self.acquiring_hv = False
+        self.accessing_lv = False
+        self.hv_lock_time=time.time()
+        self.hv_threadlist=[]
+
+        # keeps lv screen update from occuring until data is acquired
+        self.initial_lv_display=True
+
+        # initialize lists of data
         self.blade_voltage_plot=[[500]*10]*6
         self.blade_current_plot=[[500]*10]*6
         self.blade_temperature_plot=[[500]*10]*6
