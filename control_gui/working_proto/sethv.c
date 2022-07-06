@@ -87,7 +87,7 @@ int main(int argc, char *argv[])
 {
   int channel = atoi(argv[1]);
 	float value = atoi(argv[2]);
-  value = value*2.3/1664.;
+  value = value*2.3/1510.;
 
 	initialization();
 

@@ -56,7 +56,7 @@ void initialization(){
   printf("mcp setup done %d\n",retc);
 
   //sete RESET to DACs to high
-  digitalWrite (MCPPINBASE+7, 1);
+  digitalWrite (MCPPINBASE+7, 0);
   pinMode(MCPPINBASE+7, OUTPUT);
 
   //set LDAC to DACs to low
@@ -66,6 +66,16 @@ void initialization(){
   DAC8164_setup (&dac[0], MCPPINBASE, 4, 2, 0, -1, -1);
   DAC8164_setup (&dac[1], MCPPINBASE, 5, 2, 0, -1, -1);
   DAC8164_setup (&dac[2], MCPPINBASE, 6, 2, 0, -1, -1);
+}
+
+void set_hv(int channel, float value){
+  int idac = (int) (channel/4);
+
+  uint32_t digvalue = ( (int) (16383.*(value/2.5))) & 0x3FFF;
+
+
+  DAC8164_writeChannel(&dac[idac], channel, digvalue);
+
 }
 
 
@@ -80,10 +90,6 @@ int main(int argc, char *argv[])
   int idac = (int) (channel/4);
   printf(" Chan %i HV idac %i  is set to %7.2f\n", channel, idac, value);
 
-  struct timeval start, end;
-
-  gettimeofday (&start, NULL) ;
-
 
   float increment = value*2.3/NSTEPS/1510.;
 
@@ -91,15 +97,11 @@ int main(int argc, char *argv[])
   for (int itick =0; itick < NSTEPS; itick++){
     usleep(50000);
     setvalue += increment;
-    uint32_t digvalue = ( (int) (16383.*(setvalue/2.5))) & 0x3FFF;
 
-
-
-    DAC8164_writeChannel(&dac[idac], channel, digvalue);
+    set_hv(channel,setvalue);
 
   }
 
-  gettimeofday (&end, NULL) ;
 
 
   return 0 ;
