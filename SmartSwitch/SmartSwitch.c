@@ -16,7 +16,9 @@
 #define nAdc  6		// Number of SmartSwitches
 #define mChn  6		// Number of channels for trip processing
 
-// Pin definitions
+
+// Pin definitions for pico 1
+/*
 const uint8_t crowbarPins[mChn] =			// crowbar pins
   //  { 21, 26, 22, 16, 4, 5 };     //Channels in data are upside down, FIXME!!!
     { 2, 5, 8, 11, 14, 21 };
@@ -27,6 +29,19 @@ const uint8_t dataPinsI[nAdc] =			// crowbar pins
 const uint8_t P1_0 = 20;					// Offset
 const uint8_t sclk = 27;						// SPI clock
 const uint8_t csPin = 15;					// SPI Chip select for I
+*/
+
+// Pin definitions for pico 2
+const uint8_t crowbarPins[mChn] =			// crowbar pins
+  //  { 21, 26, 22, 16, 4, 5 };     //Channels in data are upside down, FIXME!!!
+    { 2, 5, 8, 26, 21, 14 };
+const uint8_t dataPinsV[nAdc] =			// crowbar pins
+  { 0, 3, 6, 9, 27, 20};
+const uint8_t dataPinsI[nAdc] =			// crowbar pins
+  { 1, 4, 7, 10, 22, 13};
+const uint8_t P1_0 = 15;					// Offset
+const uint8_t sclk = 11;						// SPI clock
+const uint8_t csPin = 12;					// SPI Chip select for I
 
 
 
