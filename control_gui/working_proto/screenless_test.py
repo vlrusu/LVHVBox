@@ -78,8 +78,11 @@ class Test:
     # acquires hv data from pico via pyserial connection
     def get_hv_data(self,test):
         # acquire hv current and voltage
-        hv_current=[]
-        hv_voltage=[]
+        hv_voltage_1=[]
+        hv_current_1=[]
+
+        hv_voltage_2=[]
+        hv_current_2=[]
         if not test:
             try:
                 # make serial connection and close as soon as most recent line of data is acquired
@@ -93,13 +96,18 @@ class Test:
                 # break apart the acquired pyserial output line and parse
                 processed_line = line.split(" ")
                 processed_line1 = line1.split(" ")
+
+                # determine which pico is first
+                picocheck1=line.split("|")[3][1]
+                picocheck2=line1.split("|")[3][1]
+
                 on_voltage=False
                 end=False
                 for i in processed_line:
                     if i != '' and i != '|' and on_voltage is False:
-                        hv_current.append(float(i))
+                        hv_current_1.append(float(i))
                     elif i != '' and i != '|' and on_voltage is True and end is False:
-                        hv_voltage.append(float(i))
+                        hv_voltage_1.append(float(i))
                     elif end is False and i == '|':
                         if on_voltage is False:
                             on_voltage = True
@@ -110,14 +118,24 @@ class Test:
                 end=False
                 for i in processed_line1:
                     if i != '' and i != '|' and on_voltage is False:
-                        hv_current.append(float(i))
+                        hv_current_2.append(float(i))
                     elif i != '' and i != '|' and on_voltage is True and end is False:
-                        hv_voltage.append(float(i))
+                        hv_voltage_2.append(float(i))
                     elif end is False and i == '|':
                         if on_voltage is False:
                             on_voltage = True
                         else:
                             end = True
+
+                # based on picocheck results, form main hv lists
+                if picocheck1 == '2':
+                    hv_voltage = hv_voltage_1 + hv_voltage_2
+                    hv_current = hv_current_1 + hv_current_2
+                else:
+                    hv_voltage = hv_voltage_2 + hv_voltage_1
+                    hv_current = hv_current_2 + hv_current_1
+
+
 
                 # returned lists are flipped
                 hv_current.reverse()
@@ -141,7 +159,6 @@ class Test:
                 hv_voltage.append(round(random.uniform(1450,1550),3))
                 hv_current.append(round(random.uniform(20,30),3))
 
-
         # save data lists for hv
 
         try:
@@ -150,6 +167,8 @@ class Test:
                 self.hv_current=hv_current
         except:
             self.save_error("hv data is of improper length")
+
+
 
     # used to acquire assorted data from exelcys blade modules via I2C protocol
     def get_blade_data(self,test):
@@ -453,11 +472,13 @@ if __name__=="__main__":
     except:
         window.save_error("Error intializing HV in main")
 
-
+    # power on all lv channels
     for i in range(0,6):
         window.power_on(i)
 
-
+    # power on all hv channels
+    for i in range(0,12):
+        window.rampup.rampup_hv(i,1500)
 
     while True:
         print(window.voltage)
