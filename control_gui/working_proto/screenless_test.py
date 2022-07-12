@@ -26,7 +26,7 @@ class Test:
                 self.mcp1.digitalWrite(x, MCP23S17.LEVEL_LOW)
 
             self.I2C_sleep_time = 0.25 # seconds to sleep between each channel reading
-            self.bus = SMBus(3)
+            self.bus = SMBus(1)
 
             # sleep to keep i2c from complaining
             time.sleep(1)
@@ -469,19 +469,21 @@ if __name__=="__main__":
 
     try:
         window.initialize_hv(False)
+        print("high voltage initialized")
     except:
         window.save_error("Error intializing HV in main")
 
     # power on all lv channels
     for i in range(0,6):
         window.power_on(i)
+    print("lv channels powered on")
 
     # power on all hv channels
     for i in range(0,12):
         window.rampup.rampup_hv(i,1500)
+    print("hv channels powered on")
 
     while True:
-        print(window.voltage)
         window.call_lv_data()
         time.sleep(20)
         window.call_hv_data()
