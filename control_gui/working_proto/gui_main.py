@@ -75,7 +75,7 @@ class Session():
                 self.mcp1.digitalWrite(x, MCP23S17.LEVEL_LOW)
 
             self.I2C_sleep_time = 0.25 # seconds to sleep between each channel reading
-            self.bus = SMBus(3)
+            self.bus = SMBus(1)
 
             # sleep to keep i2c from complaining
             time.sleep(1)
@@ -1511,7 +1511,7 @@ class Window(QMainWindow,Session):
             except:
                 self.save_error("Error with update hv plot.")
         else:
-            self.initial_lv_display = True
+            self.initial_lv_display = False
 
     def stability_save(self):
         try:
