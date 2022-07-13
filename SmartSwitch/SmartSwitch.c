@@ -16,7 +16,7 @@
 #define nAdc  6		// Number of SmartSwitches
 #define mChn  6		// Number of channels for trip processing
 
-#define pico 2
+#define pico 1
 
 
 
@@ -103,6 +103,7 @@ void port_init() {
   // Clock line direct port access
   gpio_init(all_pins.sclk);
   gpio_set_dir(all_pins.sclk, GPIO_OUT);
+  gpio_set_drive_strength(all_pins.sclk, GPIO_DRIVE_STRENGTH_2MA);
   gpio_put(all_pins.sclk, 0);
 
 
