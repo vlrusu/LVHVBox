@@ -101,6 +101,9 @@ class Test:
                 picocheck1=line.split("|")[3][1]
                 picocheck2=line1.split("|")[3][1]
 
+                adc_1=line.split("|")[2].strip(" ")
+                adc_2=line1.split("|")[2].strip(" ")
+
                 on_voltage=False
                 end=False
                 for i in processed_line:
@@ -131,11 +134,13 @@ class Test:
                 if picocheck1 == '2':
                     hv_voltage = hv_voltage_1 + hv_voltage_2
                     hv_current = hv_current_1 + hv_current_2
+                    adc_temperature = adc_1
+                    adc_current = adc_2
                 else:
                     hv_voltage = hv_voltage_2 + hv_voltage_1
                     hv_current = hv_current_2 + hv_current_1
-
-
+                    adc_temperature = adc_2
+                    adc_current = adc_1
 
                 # returned lists are flipped
                 hv_current.reverse()
@@ -165,6 +170,8 @@ class Test:
             if len(hv_voltage) == 12 and len(hv_current) == 12:
                 self.hv_voltage=hv_voltage
                 self.hv_current=hv_current
+                self.adc_temperature = adc_temperature
+                self.adc_current = adc_current
         except:
             self.save_error("hv data is of improper length")
 
@@ -340,6 +347,8 @@ class Test:
             output+='ch'+str(i)
             output+=','+str(self.hv_voltage[i])
             output+=','+str(self.hv_current[i])+','
+        output+=str(self.adc_temperature)+','
+        output+=str(self.adc_current)+','
 
         output+=str(time.time())
         output+='\n'
@@ -429,6 +438,9 @@ class Test:
         self.cond_voltage = [0]*6
         self.cond_current = [0]*6
 
+        self.adc_temperature=0
+        self.adc_current=0
+
     def call_lv_data(self):
         try:
             if not self.accessing_lv:
@@ -485,8 +497,11 @@ if __name__=="__main__":
 
     while True:
         window.call_lv_data()
+        print("called lv data")
         time.sleep(20)
         window.call_hv_data()
+        print("called hv data")
         time.sleep(10)
         window.save_txt()
+        print("saved txt")
         time.sleep(2)
