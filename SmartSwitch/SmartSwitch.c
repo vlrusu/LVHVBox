@@ -16,7 +16,7 @@
 #define nAdc  6		// Number of SmartSwitches
 #define mChn  6		// Number of channels for trip processing
 
-#define pico 1
+#define pico 2
 
 
 
@@ -424,8 +424,14 @@ int main(){
     printf( " | ");
     uint32_t totalTime = absolute_time_diff_us (start, get_absolute_time() );
 
-    float result = adc_read()*3.3/8192;
-    printf("%1.2f | ",result);
+    if (pico == 1) {
+      float result = adc_read()*3.3/8192;
+      printf("%1.2f | ",result);
+    }
+    else {
+      float result = (1.8455-adc_read()*3.3/4096)/0.01123;
+      printf("%1.2f | ",result);
+    }
 
     // identifier for the pico
     if (pico == 1) {
