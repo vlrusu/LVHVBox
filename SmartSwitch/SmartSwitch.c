@@ -16,32 +16,7 @@
 #define nAdc  6		// Number of SmartSwitches
 #define mChn  6		// Number of channels for trip processing
 
-
-// Pin definitions for pico 1
-/*
-const uint8_t crowbarPins[mChn] =			// crowbar pins
-  //  { 21, 26, 22, 16, 4, 5 };     //Channels in data are upside down, FIXME!!!
-    { 2, 5, 8, 11, 14, 21 };
-const uint8_t dataPinsV[nAdc] =			// crowbar pins
-  { 0, 3, 6, 9, 12, 26};
-const uint8_t dataPinsI[nAdc] =			// crowbar pins
-  { 1, 4, 7, 10, 13, 22};
-const uint8_t P1_0 = 20;					// Offset
-const uint8_t sclk = 27;						// SPI clock
-const uint8_t csPin = 15;					// SPI Chip select for I
-*/
-
-// Pin definitions for pico 2
-const uint8_t crowbarPins[mChn] =			// crowbar pins
-  //  { 21, 26, 22, 16, 4, 5 };     //Channels in data are upside down, FIXME!!!
-    { 2, 5, 8, 26, 21, 14 };
-const uint8_t dataPinsV[nAdc] =			// crowbar pins
-  { 0, 3, 6, 9, 27, 20};
-const uint8_t dataPinsI[nAdc] =			// crowbar pins
-  { 1, 4, 7, 10, 22, 13};
-const uint8_t P1_0 = 15;					// Offset
-const uint8_t sclk = 11;						// SPI clock
-const uint8_t csPin = 12;					// SPI Chip select for I
+#define pico 2
 
 
 
@@ -51,6 +26,15 @@ const uint8_t csPin = 12;					// SPI Chip select for I
 //#define nSampleFast 1		// No. of samples to average before checking for trip
 //#define nSampleSlow 1		// No. of "Fast" samples to combine for upload
 #define nClk 18// Clock cycles for complete readout
+
+struct Pins {
+  uint8_t crowbarPins[mChn];
+  uint8_t dataPinsV[nAdc];
+  uint8_t dataPinsI[nAdc];
+  uint8_t P1_0;
+  uint8_t sclk;
+  uint8_t csPin;
+} all_pins;
 
 
 
@@ -91,6 +75,8 @@ unsigned char * readLine() {
   return buffer;
 }
 
+// Pin definitions for pico 1
+
 
 
 //******************************************************************************
@@ -101,36 +87,36 @@ void port_init() {
 
   uint8_t port;
   // Reset all trips
-  for (uint8_t i = 0; i < sizeof(crowbarPins); i++) {
-    gpio_init(crowbarPins[i]);
-    gpio_set_dir(crowbarPins[i], GPIO_OUT);
+  for (uint8_t i = 0; i < sizeof(all_pins.crowbarPins); i++) {
+    gpio_init(all_pins.crowbarPins[i]);
+    gpio_set_dir(all_pins.crowbarPins[i], GPIO_OUT);
   }
   // Pedestal/data line
-  gpio_init(P1_0);
-  gpio_set_dir(P1_0, GPIO_OUT);
+  gpio_init(all_pins.P1_0);
+  gpio_set_dir(all_pins.P1_0, GPIO_OUT);
 
   // CS line
-  gpio_init(csPin);
-  gpio_set_dir(csPin, GPIO_OUT);
-  gpio_put(csPin, 1);
+  gpio_init(all_pins.csPin);
+  gpio_set_dir(all_pins.csPin, GPIO_OUT);
+  gpio_put(all_pins.csPin, 1);
 
   // Clock line direct port access
-  gpio_init(sclk);
-  gpio_set_dir(sclk, GPIO_OUT);
-  gpio_put(sclk, 0);
+  gpio_init(all_pins.sclk);
+  gpio_set_dir(all_pins.sclk, GPIO_OUT);
+  gpio_put(all_pins.sclk, 0);
 
 
   // Data lines direct port access. Using all bits so no mask needed
   // Current and Voltage
   uint dataPins_mask = 0;
   for (int i =0 ;i < nAdc; i++)
-    dataPins_mask |= (1<<dataPinsI[i]);
+    dataPins_mask |= (1<<all_pins.dataPinsI[i]);
   gpio_init_mask(dataPins_mask);
   gpio_set_dir_in_masked	(	dataPins_mask);
 
   dataPins_mask = 0;
   for (int i =0 ;i < nAdc; i++)
-    dataPins_mask |= (1<<dataPinsV[i]);
+    dataPins_mask |= (1<<all_pins.dataPinsV[i]);
   gpio_init_mask(dataPins_mask);
   gpio_set_dir_in_masked	(	dataPins_mask);
 
@@ -150,8 +136,8 @@ void variable_init() {
 // Trip logic
 // Reset all trips
 void tripReset() {
-  for (int i = 0; i < sizeof(crowbarPins); i++) {
-    gpio_put(crowbarPins[i], 0);
+  for (int i = 0; i < sizeof(all_pins.crowbarPins); i++) {
+    gpio_put(all_pins.crowbarPins[i], 0);
   }
 }
 //==============================================================================
@@ -171,7 +157,7 @@ void trips(int32_t currents[], int32_t limit) {
       count_over_current[chn]++;
       // Trip if reach limit
       if (count_over_current[chn] > tripCount) {
-	gpio_put(crowbarPins[chn], 1);
+	gpio_put(all_pins.crowbarPins[chn], 1);
 	printf("Trip on channel %d\n",mChn-1 - chn);
       }
     }
@@ -200,9 +186,9 @@ void SM73201_ADC_Raw() {
   const int nBytesPerAdc = 2;
 
   // Drop CS, ALL chips
-  gpio_put(sclk, 1);
+  gpio_put(all_pins.sclk, 1);
   //	*sclkAddr |= sclkMask;		// clock hi
-  gpio_put(csPin, 0);
+  gpio_put(all_pins.csPin, 0);
   // Read 18x8 bits (1st two will be ignored)
   uint16_t* _pByBit = byBit - 1;
   //	uint8_t sclkHi = *sclkAddr;
@@ -212,17 +198,17 @@ void SM73201_ADC_Raw() {
   absolute_time_t start = get_absolute_time();
 
   for (uint8_t i = nClk; i--; ) {
-    gpio_put(sclk, 0);
+    gpio_put(all_pins.sclk, 0);
     *(++_pByBit) = 0;	// Just need increment. Set value to ensure compiler does this step here
-    gpio_put(sclk, 1);
+    gpio_put(all_pins.sclk, 1);
     //    *_pByBit = (gpio_get_all()  & 0xFF ) ;
     uint32_t allPins = gpio_get_all();
-    *_pByBit = (  ((allPins >> dataPinsV[0]) & 0x1) << 0 | ((allPins >> dataPinsV[1]) & 0x1) << 1 |
-		  ((allPins >> dataPinsV[2]) & 0x1) << 2 | ((allPins >> dataPinsV[3]) & 0x1) << 3 |
-		  ((allPins >> dataPinsV[4]) & 0x1) << 4 | ((allPins >> dataPinsV[5]) & 0x1) << 5 |
-		  ((allPins >> dataPinsI[0]) & 0x1) << 6 | ((allPins >> dataPinsI[1]) & 0x1) << 7 |
-		  ((allPins >> dataPinsI[2]) & 0x1) << 8 | ((allPins >> dataPinsI[3]) & 0x1) << 9 |
-		  ((allPins >> dataPinsI[4]) & 0x1) << 10 | ((allPins >> dataPinsI[5]) & 0x1) << 11) ;
+    *_pByBit = (  ((allPins >> all_pins.dataPinsV[0]) & 0x1) << 0 | ((allPins >> all_pins.dataPinsV[1]) & 0x1) << 1 |
+		  ((allPins >> all_pins.dataPinsV[2]) & 0x1) << 2 | ((allPins >> all_pins.dataPinsV[3]) & 0x1) << 3 |
+		  ((allPins >> all_pins.dataPinsV[4]) & 0x1) << 4 | ((allPins >> all_pins.dataPinsV[5]) & 0x1) << 5 |
+		  ((allPins >> all_pins.dataPinsI[0]) & 0x1) << 6 | ((allPins >> all_pins.dataPinsI[1]) & 0x1) << 7 |
+		  ((allPins >> all_pins.dataPinsI[2]) & 0x1) << 8 | ((allPins >> all_pins.dataPinsI[3]) & 0x1) << 9 |
+		  ((allPins >> all_pins.dataPinsI[4]) & 0x1) << 10 | ((allPins >> all_pins.dataPinsI[5]) & 0x1) << 11) ;
 
 
 
@@ -236,7 +222,7 @@ void SM73201_ADC_Raw() {
   restore_interrupts(flags);
 
   // Raise CS
-  gpio_put(csPin, 1);
+  gpio_put(all_pins.csPin, 1);
 
 }
 
@@ -280,7 +266,7 @@ void readCurent(int32_t* result) {
   SM73201_ADC_Raw();
   // Switch to offset, let it stabilize
   // Remap bits while shunt/offset stabilizes
-  gpio_put(P1_0, 0);
+  gpio_put(all_pins.P1_0, 0);
   sleep_us(100);
   SM73201_ADC_Remap();
   //  printf("--------\n");
@@ -294,7 +280,7 @@ void readCurent(int32_t* result) {
   // Read offset
   SM73201_ADC_Raw();
   // Switch back to shunt
-  gpio_put(P1_0, 1);
+  gpio_put(all_pins.P1_0, 1);
   sleep_us(100);
   // Remap offset bits and merge with shunt
   SM73201_ADC_Remap();
@@ -354,6 +340,41 @@ int main(){
   port_init();
 
 
+
+  if (pico == 1) {
+    //all_pins.crowbarPins = (uint8_t []){ 2, 5, 8, 11, 14, 21 };			// crowbar pins
+      //  { 21, 26, 22, 16, 4, 5 };     //Channels in data are upside down, FIXME!!!
+    uint8_t crowbarPins[6] = { 21, 26, 22, 16, 4, 5 };
+    uint8_t dataPinsV[6] = { 0, 3, 6, 9, 12, 26};
+    uint8_t dataPinsI[6] = { 1, 4, 7, 10, 13, 22};
+
+    for (int i = 0; i < 6; i++) {
+      all_pins.crowbarPins[i] = crowbarPins[i];
+      all_pins.dataPinsV[i] = dataPinsV[i];
+      all_pins.dataPinsI[i] = dataPinsI[i];
+    }
+
+    all_pins.P1_0 = 20;					// Offset
+    all_pins.sclk = 27;						// SPI clock
+    all_pins.csPin = 15;					// SPI Chip select for I
+  }
+  else {
+    uint8_t crowbarPins[6] = { 2, 5, 8, 26, 21, 14 };
+    uint8_t dataPinsV[6] = { 0, 3, 6, 9, 27, 20};
+    uint8_t dataPinsI[6] = { 1, 4, 7, 10, 22, 13};
+
+    for (int i = 0; i < 6; i++) {
+      all_pins.crowbarPins[i] = crowbarPins[i];
+      all_pins.dataPinsV[i] = dataPinsV[i];
+      all_pins.dataPinsI[i] = dataPinsI[i];
+    }
+    all_pins.P1_0 = 15;					// Offset
+    all_pins.sclk = 11;						// SPI clock
+    all_pins.csPin = 12;					// SPI Chip select for I
+  }
+
+
+
   while (true){
 
     absolute_time_t start = get_absolute_time();
@@ -376,7 +397,7 @@ int main(){
     else if (input == 'F'){
       uint32_t channel  = atoi(readLine());
       printf("Forcing trip on cha %d\n",channel);
-      gpio_put(crowbarPins[channel], 1);
+      gpio_put(all_pins.crowbarPins[channel], 1);
     }
 
     int32_t sumI[mAdc], sumV[mAdc];
@@ -406,8 +427,12 @@ int main(){
     printf("%1.2f | ",result);
 
     // identifier for the pico
-    //printf("1 | ");
-    printf("2 | ");
+    if (pico == 1) {
+      printf("1 | ");
+    }
+    else {
+      printf("2 | ");
+    }
 
     printf( "ADCTime=%d TotalTime=%d\n",adcTime,totalTime);
 
