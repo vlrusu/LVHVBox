@@ -17,7 +17,7 @@ class Test:
 
     def initialize_lv(self,test):
         if not test:
-            self.mcp1 = MCP23S17(bus=0x00, pin_cs=0x01, device_id=0x00)
+            self.mcp1 = MCP23S17(bus=0x00, pin_cs=0x00, device_id=0x00)
             self.mcp1.open()
             self.mcp1._spi.max_speed_hz = 10000000
 
@@ -87,15 +87,21 @@ class Test:
             try:
                 # make serial connection and close as soon as most recent line of data is acquired
 
-                ser = serial.Serial('/dev/ttyACM0', 115200, timeout=2)
+                ser = serial.Serial('/dev/ttyACM0', 115200, timeout=4)
+                time.sleep(1)
                 line = ser.readline().decode('ascii')
+#                line = ser.readline()               
 
-                ser1 = serial.Serial('/dev/ttyACM1', 115200, timeout=2)
+                ser1 = serial.Serial('/dev/ttyACM1', 115200, timeout=4)
+                time.sleep(1)
                 line1 = ser1.readline().decode('ascii')
 
                 # break apart the acquired pyserial output line and parse
                 processed_line = line.split(" ")
                 processed_line1 = line1.split(" ")
+
+                print(line)
+                print(line1)
 
                 # determine which pico is first
                 picocheck1=line.split("|")[3][1]
@@ -103,6 +109,9 @@ class Test:
 
                 adc_1=line.split("|")[2].strip(" ")
                 adc_2=line1.split("|")[2].strip(" ")
+                
+                print(processed_line)
+                print(processed_line1)
 
                 on_voltage=False
                 end=False
@@ -149,8 +158,9 @@ class Test:
                 # round hv voltage
                 temp=[]
                 for i in hv_voltage:
-                    temp.append(round(int(i),1))
+                    temp.append(i)
                 hv_voltage=temp
+
 
                 assert len(hv_current) == 12
                 assert len(hv_voltage) == 12
@@ -249,7 +259,7 @@ class Test:
                         temp=mantissa*2**exponent
 
                         # append acquired temperature measurement to output list
-                        temperature_values.append(round(temp,3))
+                        temperature_values.append(temp)
                         self.bus.pec=0
                     except:
                         self.bus.pec=0
@@ -260,6 +270,7 @@ class Test:
                     # ensure delay between channel readings
 
             # save data lists for blades
+            print('voltage values: ' + str(voltage_values))
             self.voltage=voltage_values
             self.current=current_values
             self.temperature=temperature_values
@@ -329,33 +340,41 @@ class Test:
                     cond_current.append(temp_vals[2])
                     five_voltage.append(temp_vals[1])
                     five_current.append(temp_vals[0])
+                
+                self.cond_voltage = cond_voltage
+                self.cond_current = cond_current
+                self.five_voltage = five_voltage
+                self.five_current = five_current
             except:
                 self.save_error("Error acquiring board data on channel " + str(channel))
 
     def save_txt(self):
         output=''
-        for i in range(0,6):
-            output+='ch'+str(i)
-            output+=','+str(self.voltage[i])
-            output+=','+str(self.current[i])
-            output+=','+str(self.temperature[i])
-            output+=','+str(self.five_voltage[i])
-            output+=','+str(self.five_current[i])
-            output+=','+str(self.cond_voltage[i])
-            output+=','+str(self.cond_current[i])+','
-        for i in range(0,12):
-            output+='ch'+str(i)
-            output+=','+str(self.hv_voltage[i])
-            output+=','+str(self.hv_current[i])+','
-        output+=str(self.adc_temperature)+','
-        output+=str(self.adc_current)+','
+        try:
+            for i in range(0,6):
+                output+='ch'+str(i)
+                output+=','+str(self.voltage[i])
+                output+=','+str(self.current[i])
+                output+=','+str(self.temperature[i])
+                output+=','+str(self.five_voltage[i])
+                output+=','+str(self.five_current[i])
+                output+=','+str(self.cond_voltage[i])
+                output+=','+str(self.cond_current[i])+','
+            for i in range(0,12):
+                output+='ch'+str(i)
+                output+=','+str(self.hv_voltage[i])
+                output+=','+str(self.hv_current[i])+','
+            output+=str(self.adc_temperature)+','
+            output+=str(self.adc_current)+','
 
-        output+=str(time.time())
-        output+='\n'
+            output+=str(time.time())
+            output+='\n'
 
-        file1=open("/home/pi/working_proto/screenless_logfile.txt", "a")
-        file1.write(output)
-        file1.close()
+            file1=open("/home/pi/working_proto/screenless_logfile.txt", "a")
+            file1.write(output)
+            file1.close()
+        except:
+            self.save_error("save problem")
 
     def save_error(self,text):
         file2=open("/home/pi/working_proto/screenless_error_logfile.txt","a")
@@ -443,8 +462,7 @@ class Test:
 
     def call_lv_data(self):
         try:
-            if not self.accessing_lv:
-                threading.Thread(target=self.get_lv_data,args=[False]).start()
+            threading.Thread(target=self.get_lv_data,args=[False]).start()
         except:
             self.save_error("Error calling lv data")
 
