@@ -17,7 +17,19 @@ gui_main.py:
   interface.
 
 dac8164.c:
-  Driver for hv.
+  ** DAC8164_setup(self, MCP, sync, sclk, sdi, enable_pin, ldac_pin) **
+
+    Initialize connection with DAC8164.
+
+  ** DAC8164_write(self, data) **
+
+    Sends data via previously initialized connection to DAC8164.
+
+  ** DAC8164_setReference(self, reference) **
+
+  ** DAC8164_writeChannel(self, channel, value) **
+
+    Writes a power value to a DAC8164 channel.
 
 dac8164.h:
   Header file for hv.
