@@ -44,7 +44,12 @@ import subprocess
 import re
 
 # initialize gui stuff
+
 os.environ["DISPLAY"] = ':0'
+
+
+
+
 background_color='background-color: white;'
 button_color='background-color: white;'
 
@@ -133,76 +138,93 @@ class Session():
 
         hv_voltage_2=[]
         hv_current_2=[]
+
         if not test:
-            try:
-                # make serial connection and close as soon as most recent line of data is acquired
-
-                ser = serial.Serial('/dev/ttyACM0', 115200, timeout=2)
-                line = ser.readline().decode('ascii')
-
-                ser1 = serial.Serial('/dev/ttyACM1', 115200, timeout=2)
-                line1 = ser1.readline().decode('ascii')
-
-                # break apart the acquired pyserial output line and parse
-                processed_line = line.split(" ")
-                processed_line1 = line1.split(" ")
-
-                # determine which pico is first
-                picocheck1=line.split("|")[3][1]
-                picocheck2=line1.split("|")[3][1]
-
-                on_voltage=False
-                end=False
-                for i in processed_line:
-                    if i != '' and i != '|' and on_voltage is False:
-                        hv_current_1.append(float(i))
-                    elif i != '' and i != '|' and on_voltage is True and end is False:
-                        hv_voltage_1.append(float(i))
-                    elif end is False and i == '|':
-                        if on_voltage is False:
-                            on_voltage = True
-                        else:
-                            end = True
-
-                on_voltage=False
-                end=False
-                for i in processed_line1:
-                    if i != '' and i != '|' and on_voltage is False:
-                        hv_current_2.append(float(i))
-                    elif i != '' and i != '|' and on_voltage is True and end is False:
-                        hv_voltage_2.append(float(i))
-                    elif end is False and i == '|':
-                        if on_voltage is False:
-                            on_voltage = True
-                        else:
-                            end = True
-
-                # based on picocheck results, form main hv lists
-                if picocheck1 == '2':
-                    hv_voltage = hv_voltage_1 + hv_voltage_2
-                    hv_current = hv_current_1 + hv_current_2
-                else:
-                    hv_voltage = hv_voltage_2 + hv_voltage_1
-                    hv_current = hv_current_2 + hv_current_1
 
 
 
-                # returned lists are flipped
-                hv_current.reverse()
-                hv_voltage.reverse()
 
-                # round hv voltage
-                temp=[]
-                for i in hv_voltage:
-                    temp.append(round(int(i),1))
-                hv_voltage=temp
 
-                assert len(hv_current) == 12
-                assert len(hv_voltage) == 12
-                # todo ensure proper length of hv current and voltage
+            # make serial connection and close as soon as most recent line of data is acquired
 
+            ser = serial.Serial('/dev/ttyACM0', 115200, timeout=2)
+            line = ser.readline().decode('ascii')
+
+            ser1 = serial.Serial('/dev/ttyACM1', 115200, timeout=2)
+            line1 = ser1.readline().decode('ascii')
+
+            # break apart the acquired pyserial output line and parse
+            processed_line = line.split(" ")
+            processed_line1 = line1.split(" ")
+
+            # determine which pico is first
+            picocheck1=line.split("|")[3][1]
+            picocheck2=line1.split("|")[3][1]
+
+            # get the hv overall current and temperature
+            pico_add_1=line.split("|")[2][1:-2]
+            pico_add_2=line1.split("|")[2][1:-2]
+            print(pico_add_1)
+            print(pico_add_2)
+
+            on_voltage=False
+            end=False
+            for i in processed_line:
+                if i != '' and i != '|' and on_voltage is False:
+                    hv_current_1.append(float(i))
+                elif i != '' and i != '|' and on_voltage is True and end is False:
+                    hv_voltage_1.append(float(i))
+                elif end is False and i == '|':
+                    if on_voltage is False:
+                        on_voltage = True
+                    else:
+                        end = True
+
+            on_voltage=False
+            end=False
+            for i in processed_line1:
+                if i != '' and i != '|' and on_voltage is False:
+                    hv_current_2.append(float(i))
+                elif i != '' and i != '|' and on_voltage is True and end is False:
+                    hv_voltage_2.append(float(i))
+                elif end is False and i == '|':
+                    if on_voltage is False:
+                        on_voltage = True
+                    else:
+                        end = True
+
+            # based on picocheck results, form main hv lists
+            if picocheck1 == '2':
+                hv_voltage = hv_voltage_1 + hv_voltage_2
+                hv_current = hv_current_1 + hv_current_2
+                self.hv_board_temp=float(pico_add_1)
+                self.hv_board_current=float(pico_add_2)
+            else:
+                hv_voltage = hv_voltage_2 + hv_voltage_1
+                hv_current = hv_current_2 + hv_current_1
+                self.hv_board_temp=float(pico_add_2)
+                self.hv_board_current=float(pico_add_1)
+
+
+
+            # returned lists are flipped
+            hv_current.reverse()
+            hv_voltage.reverse()
+
+            # round hv voltage
+            temp=[]
+            for i in hv_voltage:
+                temp.append(round(int(i),1))
+            hv_voltage=temp
+
+            assert len(hv_current) == 12
+            assert len(hv_voltage) == 12
+            # todo ensure proper length of hv current and voltage
+
+            '''
             except:
                 self.save_error("Error acquiring hv data")
+            '''
         else:
             # if data acquisition function is in test mode, populate with bogus data for testing purposes
             for i in range(0,12):
@@ -397,15 +419,18 @@ class Session():
             output+=','+str(self.hv_voltage[i])
             output+=','+str(self.hv_current[i])+','
 
+        output+=str(self.hv_board_temp)+','
+        output+=str(self.hv_board_current)+','
+
         output+=str(time.time())
         output+='\n'
 
-        file1=open("/home/pi/working_proto/logfile.txt", "a")
+        file1=open("/home/mu2e/LVHVBox/control_gui/working_proto/logfile.txt", "a")
         file1.write(output)
         file1.close()
 
     def save_error(self,text):
-        file2=open("/home/pi/working_proto/error_logfile.txt","a")
+        file2=open("/home/mu2e/LVHVBox/control_gui/working_proto/error_logfile.txt","a")
         file2.write(text)
         file2.write(str(time.time()) + "\n")
         file2.close()
@@ -1511,7 +1536,7 @@ class Window(QMainWindow,Session):
             except:
                 self.save_error("Error with update hv plot.")
         else:
-            self.initial_lv_display = False
+            self.initial_lv_display = True
 
     def stability_save(self):
         try:
@@ -1606,6 +1631,9 @@ class Window(QMainWindow,Session):
         self.hv_voltage = [0]*12
         self.hv_current = [0]*12
 
+        self.hv_board_temp=0
+        self.hv_board_current=0
+
     def run(self):
         try:
             # initialize timers required to update gui/get and log data
@@ -1657,7 +1685,7 @@ if __name__=="__main__":
             window.save_error("Error initializing LV in main")
 
         # import c functions for hv
-        rampup = "/home/pi/working_proto/python_connect.so"
+        rampup = "/home/mu2e/LVHVBox/control_gui/working_proto/python_connect.so"
         window.rampup=CDLL(rampup)
         window.test = False
 
