@@ -428,7 +428,7 @@ class Session():
 
 
         # also save data to the logfile
-        output='lvhvbox1'
+        output='lvhvbox1 '
         for i in range(0,6):
             output += 'ch' + str(i) + 'v: ' + str(self.voltage[i]) + ' '
             output += 'ch' + str(i) + 'c: ' + str(self.current[i]) + ' '
