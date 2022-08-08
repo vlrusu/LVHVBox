@@ -43,6 +43,8 @@ import os
 import subprocess
 import re
 
+import logging
+
 # initialize gui stuff
 
 os.environ["DISPLAY"] = ':0'
@@ -140,11 +142,6 @@ class Session():
         hv_current_2=[]
 
         if not test:
-
-
-
-
-
             # make serial connection and close as soon as most recent line of data is acquired
 
             ser = serial.Serial('/dev/ttyACM0', 115200, timeout=2)
@@ -164,8 +161,6 @@ class Session():
             # get the hv overall current and temperature
             pico_add_1=line.split("|")[2][1:-2]
             pico_add_2=line1.split("|")[2][1:-2]
-            print(pico_add_1)
-            print(pico_add_2)
 
             on_voltage=False
             end=False
@@ -192,7 +187,6 @@ class Session():
                         on_voltage = True
                     else:
                         end = True
-
             # based on picocheck results, form main hv lists
             if picocheck1 == '2':
                 hv_voltage = hv_voltage_1 + hv_voltage_2
@@ -216,6 +210,9 @@ class Session():
             for i in hv_voltage:
                 temp.append(round(int(i),1))
             hv_voltage=temp
+
+            print(len(hv_current))
+            print(len(hv_voltage))
 
             assert len(hv_current) == 12
             assert len(hv_voltage) == 12
@@ -429,6 +426,28 @@ class Session():
         file1.write(output)
         file1.close()
 
+
+        # also save data to the logfile
+        output=''
+        for i in range(0,6):
+            output += 'ch' + str(i) + 'v: ' + str(self.voltage[i]) + ' '
+            output += 'ch' + str(i) + 'c: ' + str(self.current[i]) + ' '
+            output += 'ch' + str(i) + 't: ' + str(self.temperature[i]) + ' '
+            output += 'ch' + str(i) + '5v: ' + str(self.five_voltage[i]) + ' '
+            output += 'ch' + str(i) + '5c: ' + str(self.five_current[i]) + ' '
+            output += 'ch' + str(i) + 'cv: ' + str(self.cond_voltage[i]) + ' '
+            output += 'ch' + str(i) + 'cc: ' + str(self.cond_current[i]) + ' '
+        for i in range(0,12):
+            output += 'ch' + str(i) + 'hvv: ' + str(self.hv_voltage[i]) + ' '
+            output += 'ch' + str(i) + 'hvc: ' + str(self.hv_current[i]) + ' '
+
+        output += 'hvbt: ' + str(self.hv_board_temp) + ' '
+        output += 'hvbc: ' + str(self.hv_board_current) + ' '
+        output += 'timestamp: ' + str(time.time)
+
+
+        logging.info(output)
+
     def save_error(self,text):
         file2=open("/home/mu2e/LVHVBox/control_gui/working_proto/error_logfile.txt","a")
         file2.write(text)
@@ -438,6 +457,8 @@ class Session():
 class Window(QMainWindow,Session):
     def __init__(self):
         super(Window,self).__init__()
+
+        logging.basicConfig(level=logging.INFO, filename='../../../../../var/log/data.log')
 
         # initialize variables to store data
         self.initialize_data()
