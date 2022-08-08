@@ -73,7 +73,7 @@ class Session():
 
     def initialize_lv(self,test):
         if not test:
-            self.mcp1 = MCP23S17(bus=0x00, pin_cs=0x01, device_id=0x00)
+            self.mcp1 = MCP23S17(bus=0x00, pin_cs=0x00, device_id=0x00)
             self.mcp1.open()
             self.mcp1._spi.max_speed_hz = 10000000
 
