@@ -211,9 +211,6 @@ class Session():
                 temp.append(round(int(i),1))
             hv_voltage=temp
 
-            print(len(hv_current))
-            print(len(hv_voltage))
-
             assert len(hv_current) == 12
             assert len(hv_voltage) == 12
             # todo ensure proper length of hv current and voltage
@@ -1557,7 +1554,7 @@ class Window(QMainWindow,Session):
             except:
                 self.save_error("Error with update hv plot.")
         else:
-            self.initial_lv_display = True
+            self.initial_lv_display = False
 
     def stability_save(self):
         try:
@@ -1589,7 +1586,7 @@ class Window(QMainWindow,Session):
     def initialize_data(self):
         # set vars to control timers
         self.board_time=20000
-        self.hv_time=2500
+        self.hv_time=4000
         self.save_time=60000
         self.hv_display_time=2000
 
