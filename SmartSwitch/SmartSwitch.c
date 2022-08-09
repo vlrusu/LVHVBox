@@ -16,7 +16,7 @@
 #define nAdc  6		// Number of SmartSwitches
 #define mChn  6		// Number of channels for trip processing
 
-#define pico 2
+#define pico 1
 
 
 
@@ -44,7 +44,7 @@ const float adc_to_uA = 2.048 / pow(2, 15) / 8200.0 * 1.E6;	// ADC full-scale vo
 
 // Trip constants and variables
 const uint8_t liveChn = 0b00111111;		// Zeros for any channel you do NOT want trip logic applied to
-int32_t tripLimit = 200.;// / (adc_to_uA); //trip at 200uA
+int32_t tripLimit = 300.;// / (adc_to_uA); //trip at 200uA
 const uint16_t tripCount = 5;
 uint8_t count_over_current[mChn];
 
@@ -128,6 +128,38 @@ void port_init() {
 
 // Variables
 void variable_init() {
+
+  if (pico == 1) {
+    //all_pins.crowbarPins = (uint8_t []){ 2, 5, 8, 11, 14, 21 };			// crowbar pins
+      //  { 21, 26, 22, 16, 4, 5 };     //Channels in data are upside down, FIXME!!!
+    uint8_t crowbarPins[6] = { 2, 5, 8, 11, 14, 21};
+    uint8_t dataPinsV[6] = { 0, 3, 6, 9, 12, 26};
+    uint8_t dataPinsI[6] = { 1, 4, 7, 10, 13, 22};
+
+    for (int i = 0; i < 6; i++) {
+      all_pins.crowbarPins[i] = crowbarPins[i];
+      all_pins.dataPinsV[i] = dataPinsV[i];
+      all_pins.dataPinsI[i] = dataPinsI[i];
+    }
+
+    all_pins.P1_0 = 20;					// Offset
+    all_pins.sclk = 27;						// SPI clock
+    all_pins.csPin = 15;					// SPI Chip select for I
+  }
+  else {
+    uint8_t crowbarPins[6] = { 21, 26, 22, 16, 4, 5 };
+    uint8_t dataPinsV[6] = { 0, 3, 6, 9, 27, 20};
+    uint8_t dataPinsI[6] = { 1, 4, 7, 10, 22, 13};
+
+    for (int i = 0; i < 6; i++) {
+      all_pins.crowbarPins[i] = crowbarPins[i];
+      all_pins.dataPinsV[i] = dataPinsV[i];
+      all_pins.dataPinsI[i] = dataPinsI[i];
+    }
+    all_pins.P1_0 = 15;					// Offset
+    all_pins.sclk = 11;						// SPI clock
+    all_pins.csPin = 12;					// SPI Chip select for I
+  }
 
   tripLimit = tripLimit / (adc_to_uA); //convert trip limit to ADC counts from uA
   memset(count_over_current, 0, sizeof(count_over_current));
@@ -342,37 +374,7 @@ int main(){
 
 
 
-  if (pico == 1) {
-    //all_pins.crowbarPins = (uint8_t []){ 2, 5, 8, 11, 14, 21 };			// crowbar pins
-      //  { 21, 26, 22, 16, 4, 5 };     //Channels in data are upside down, FIXME!!!
-    uint8_t crowbarPins[6] = { 21, 26, 22, 16, 4, 5 };
-    uint8_t dataPinsV[6] = { 0, 3, 6, 9, 12, 26};
-    uint8_t dataPinsI[6] = { 1, 4, 7, 10, 13, 22};
 
-    for (int i = 0; i < 6; i++) {
-      all_pins.crowbarPins[i] = crowbarPins[i];
-      all_pins.dataPinsV[i] = dataPinsV[i];
-      all_pins.dataPinsI[i] = dataPinsI[i];
-    }
-
-    all_pins.P1_0 = 20;					// Offset
-    all_pins.sclk = 27;						// SPI clock
-    all_pins.csPin = 15;					// SPI Chip select for I
-  }
-  else {
-    uint8_t crowbarPins[6] = { 2, 5, 8, 26, 21, 14 };
-    uint8_t dataPinsV[6] = { 0, 3, 6, 9, 27, 20};
-    uint8_t dataPinsI[6] = { 1, 4, 7, 10, 22, 13};
-
-    for (int i = 0; i < 6; i++) {
-      all_pins.crowbarPins[i] = crowbarPins[i];
-      all_pins.dataPinsV[i] = dataPinsV[i];
-      all_pins.dataPinsI[i] = dataPinsI[i];
-    }
-    all_pins.P1_0 = 15;					// Offset
-    all_pins.sclk = 11;						// SPI clock
-    all_pins.csPin = 12;					// SPI Chip select for I
-  }
 
 
 
@@ -425,7 +427,7 @@ int main(){
     uint32_t totalTime = absolute_time_diff_us (start, get_absolute_time() );
 
     if (pico == 1) {
-      float result = adc_read()*3.3/8192;
+      float result = adc_read()*3.3/8192*1.5;
       printf("%1.2f | ",result);
     }
     else {
