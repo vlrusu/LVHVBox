@@ -9,6 +9,9 @@
 #include "pico/stdlib.h"
 #include "hardware/sync.h"
 #include "hardware/adc.h"
+#include "hardware/pio.h"
+#include "hardware/clocks.h"
+#include "combined.pio.h"
 
 
 // Channel count
@@ -214,7 +217,7 @@ void trips(int32_t currents[], int32_t limit) {
 #pragma GCC optimize ("Ofast")
 
 
-void SM73201_ADC_Raw() {
+void SM73201_ADC_Raw(PIO pio, uint sm) {
   const int nBitPerByte = 8;
   const int nBytesPerAdc = 2;
 
@@ -235,7 +238,7 @@ void SM73201_ADC_Raw() {
     *(++_pByBit) = 0;	// Just need increment. Set value to ensure compiler does this step here
     gpio_put(all_pins.sclk, 1);
     //    *_pByBit = (gpio_get_all()  & 0xFF ) ;
-    uint32_t allPins = gpio_get_all();
+    uint32_t allPins = pio_sm_get_blocking(pio, sm);
     *_pByBit = (  ((allPins >> all_pins.dataPinsV[0]) & 0x1) << 0 | ((allPins >> all_pins.dataPinsV[1]) & 0x1) << 1 |
 		  ((allPins >> all_pins.dataPinsV[2]) & 0x1) << 2 | ((allPins >> all_pins.dataPinsV[3]) & 0x1) << 3 |
 		  ((allPins >> all_pins.dataPinsV[4]) & 0x1) << 4 | ((allPins >> all_pins.dataPinsV[5]) & 0x1) << 5 |
@@ -292,11 +295,11 @@ void SM73201_ADC_Remap() {
 //******************************************************************************
 // Read out
 // All currents or voltages once
-void readCurent(int32_t* result) {
+void readCurent(int32_t* result, PIO pio, uint sm) {
   // Read Shunt
   //P1_0 = 0 reads the offset
 
-  SM73201_ADC_Raw();
+  SM73201_ADC_Raw(pio, sm);
   // Switch to offset, let it stabilize
   // Remap bits while shunt/offset stabilizes
   gpio_put(all_pins.P1_0, 0);
@@ -311,7 +314,7 @@ void readCurent(int32_t* result) {
     result[chn] = (int16_t)byChn[chn];
   }
   // Read offset
-  SM73201_ADC_Raw();
+  SM73201_ADC_Raw(pio, sm);
   // Switch back to shunt
   gpio_put(all_pins.P1_0, 1);
   sleep_us(100);
@@ -324,14 +327,14 @@ void readCurent(int32_t* result) {
 
 //==============================================================================
 // All channels (voltage and current) multiple times
-void readMultiple(int32_t* sumI, int32_t *sumV) {
+void readMultiple(int32_t* sumI, int32_t *sumV, PIO pio, uint sm) {
   for (uint16_t i = nSampleSlow; i--; ) {
     int32_t fastSum[nAdc];
     memset(fastSum, 0, sizeof(fastSum));
     // Read specified number of fast samples plus two
     for (uint16_t j = nSampleFast; j--; ) {
       int32_t single[nAdc];
-      readCurent(single);
+      readCurent(single, pio, sm);
       for (uint8_t chn = nAdc; chn--; ) {
 	fastSum[chn] += single[chn];
       }
@@ -372,6 +375,34 @@ int main(){
   variable_init();
   port_init();
 
+  static const uint sclk_pin = 1;
+  static const uint cs_pin = 0;
+  static const float pio_freq = 2000;
+
+
+  // Choose PIO instance (0 or 1)
+  PIO pio = pio0;
+
+  // Get first free state machine in PIO 0
+  uint sm = pio_claim_unused_sm(pio, true);
+
+  // Add PIO program to PIO instruction memory. SDK will find location and
+  // return with the memory offset of the program.
+  uint offset = pio_add_program(pio, &combined_program);
+
+  // Calculate the PIO clock divider
+
+  // Initialize the program using the helper function in our .pio file
+  if (pico == 1) {
+    combined_program_init_1(pio, sm, offset, cs_pin, 1);
+  }
+  else {
+    combined_program_init_2(pio, sm, offset, cs_pin, 1);
+  }
+
+  // Start running our PIO program in the state machine
+  pio_sm_set_enabled(pio, sm, true);
+
 
 
 
@@ -407,7 +438,7 @@ int main(){
     adcTime = 0;
     memset(sumI, 0, sizeof(sumI));
     memset(sumV, 0, sizeof(sumV));
-    readMultiple(sumI,sumV);
+    readMultiple(sumI,sumV,pio,sm);
     // Print currents
     for (uint8_t i = 0; i < nAdc; i++) {
       // Convert sum to uA
