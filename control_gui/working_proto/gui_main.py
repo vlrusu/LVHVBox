@@ -199,7 +199,9 @@ class Session():
                 self.hv_board_temp=float(pico_add_2)
                 self.hv_board_current=float(pico_add_1)
 
-
+            # ensure that hv currents have proper signs
+            for i in range(len(hv_current)):
+                hv_current[i] = hv_current[i] * -1
 
             # returned lists are flipped
             hv_current.reverse()
