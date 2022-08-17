@@ -462,6 +462,22 @@ class Session():
         for i in range(0,12):
             self.rampup_list.append([i,False])
 
+        all_hv_off = False
+
+        while all_hv_off == False:
+            threading.Thread(target=self.hv_rampup_on_off).start()
+            time.sleep(2)
+
+            # determine whether or not all hv channels are turned off
+            self.get_hv_data()
+            voltage_present = False
+            for i in self.hv_voltage:
+                if i >= 1:
+                    voltage_present = True
+
+            if voltage_present == False:
+                all_hv_off = True
+
 class Window(QMainWindow,Session):
     def __init__(self):
         super(Window,self).__init__()
