@@ -460,7 +460,7 @@ class Session():
 
         # turn off all of the lv channels
         for i in range(0,12):
-            self.rampup_list.append([number,False])
+            self.rampup_list.append([i,False])
 
 class Window(QMainWindow,Session):
     def __init__(self):
