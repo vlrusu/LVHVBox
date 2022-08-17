@@ -63,12 +63,12 @@ class Session():
 
 
     def power_on(self,channel):
-        channel=abs(channel-5)
+        channel=abs(channel)
         GPIO.output(self.GLOBAL_ENABLE_PIN,GPIO.HIGH)
         self.mcp1.digitalWrite(channel+8, MCP23S17.LEVEL_HIGH)
 
     def power_off(self,channel):
-        channel=abs(channel-5)
+        channel=abs(channel)
         self.mcp1.digitalWrite(channel+8, MCP23S17.LEVEL_LOW)
 
     def initialize_lv(self,test):

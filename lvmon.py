@@ -160,7 +160,7 @@ def process_command(line):
 
 
         else:
-             channel = abs (channel -5)
+             channel = abs (channel)
        	     GPIO.output(GLOBAL_ENABLE_PIN,GPIO.HIGH)
              mcp1.digitalWrite(channel+8, MCP23S17.LEVEL_HIGH)
 
@@ -172,7 +172,7 @@ def process_command(line):
                  mcp1.digitalWrite(ich+8, MCP23S17.LEVEL_LOW)
 
         else:
-             channel = abs(channel -5)
+             channel = abs(channel)
 
 #       	     GPIO.output(GLOBAL_ENABLE_PIN,GPIO.LOW)
              mcp1.digitalWrite(channel+8, MCP23S17.LEVEL_LOW)
