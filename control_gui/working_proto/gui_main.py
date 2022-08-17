@@ -515,6 +515,9 @@ class Window(QMainWindow,Session):
         # initialize hv controls setup
         self.hv_controls_setup()
 
+        # initialize misc tab
+        self.misc_setup()
+
         # initialize blade plotting Window
         self.blade_plotting_setup()
 
@@ -539,6 +542,7 @@ class Window(QMainWindow,Session):
         self.tabs.addTab(self.tab2,"LV Actuation")
         self.tabs.addTab(self.tab3,"HV Actuation")
         self.tabs.addTab(self.plotting,"Plots")
+        self.tabs.addTab(self.misc_functions,"Misc")
         self.plotting_tabs.addTab(self.tab4,"Blade Plots")
         self.plotting_tabs.addTab(self.tab5,"Board Plots")
         self.plotting_tabs.addTab(self.tab6,"HV Plots")
@@ -828,6 +832,19 @@ class Window(QMainWindow,Session):
         self.lv_power_button_6.clicked.connect(lambda: self.actuate_lv_power(5))
 
         self.tab2.setLayout(self.tab2.layout)
+
+    # sets up the misc tab
+    def misc_setup(self):
+        self.misc_functions=QWidget()
+        self.misc_functions.layout=QGridLayout()
+
+        self.close_button=QPushButton("Close GUI")
+
+        self.misc_functions.layout.addWidget(self.hv_power_button_1,1,0)
+
+        self.close_button.clicked.connect(lambda: self.close_gui())
+
+        self.misc_functions.setLayout(self.misc_functions.layout)
 
     # sets up the hv control tab for the GUI
     def hv_controls_setup(self):
@@ -1678,6 +1695,10 @@ class Window(QMainWindow,Session):
 
         self.hv_board_temp=0
         self.hv_board_current=0
+
+    def close_gui(self):
+        self.prepare_close()
+        self.close()
 
     def run(self):
         try:
