@@ -150,7 +150,7 @@ void variable_init() {
     all_pins.csPin = 15;					// SPI Chip select for I
   }
   else {
-    uint8_t crowbarPins[6] = { 21, 26, 22, 16, 4, 5 };
+    uint8_t crowbarPins[6] = { 2, 5, 8, 26, 21};
     uint8_t dataPinsV[6] = { 0, 3, 6, 9, 27, 20};
     uint8_t dataPinsI[6] = { 1, 4, 7, 10, 22, 13};
 
