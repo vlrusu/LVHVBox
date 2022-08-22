@@ -19,7 +19,7 @@
 #define nAdc  6		// Number of SmartSwitches
 #define mChn  6		// Number of channels for trip processing
 
-#define pico 1
+#define pico 2
 
 
 
@@ -150,7 +150,7 @@ void variable_init() {
     all_pins.csPin = 15;					// SPI Chip select for I
   }
   else {
-    uint8_t crowbarPins[6] = { 2, 5, 8, 26, 21};
+    uint8_t crowbarPins[6] = { 2, 5, 8, 26, 21, 14};
     uint8_t dataPinsV[6] = { 0, 3, 6, 9, 27, 20};
     uint8_t dataPinsI[6] = { 1, 4, 7, 10, 22, 13};
 
