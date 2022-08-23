@@ -22,7 +22,7 @@
 
 #define SPISPEED 40000000
 #define NSTEPS 200
-#define SPICS 1
+#define SPICS 0
 //#define SPISPEED 320000
 
 DAC8164 dac[3];
