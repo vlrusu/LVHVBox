@@ -21,7 +21,7 @@ from RPiMCP23S17.MCP23S17 import MCP23S17
 cmds = ['readMon','powerOn','powerOff','readvoltage', 'readcurrent','readtemp']
 
 
-mcp1 = MCP23S17(bus=0x00, pin_cs=0x01, device_id=0x00)
+mcp1 = MCP23S17(bus=0x00, pin_cs=0x00, device_id=0x00)
 
 mcp1.open()
 mcp1._spi.max_speed_hz = 10000000
@@ -160,7 +160,7 @@ def process_command(line):
 
 
         else:
-             channel = abs (channel -5)
+             channel = abs (channel)
        	     GPIO.output(GLOBAL_ENABLE_PIN,GPIO.HIGH)
              mcp1.digitalWrite(channel+8, MCP23S17.LEVEL_HIGH)
 
@@ -172,7 +172,7 @@ def process_command(line):
                  mcp1.digitalWrite(ich+8, MCP23S17.LEVEL_LOW)
 
         else:
-             channel = abs(channel -5)
+             channel = abs(channel)
 
 #       	     GPIO.output(GLOBAL_ENABLE_PIN,GPIO.LOW)
              mcp1.digitalWrite(channel+8, MCP23S17.LEVEL_LOW)

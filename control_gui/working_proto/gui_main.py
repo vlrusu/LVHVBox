@@ -43,8 +43,15 @@ import os
 import subprocess
 import re
 
+import logging
+
 # initialize gui stuff
+
 os.environ["DISPLAY"] = ':0'
+
+
+
+
 background_color='background-color: white;'
 button_color='background-color: white;'
 
@@ -56,17 +63,17 @@ class Session():
 
 
     def power_on(self,channel):
-        channel=abs(channel-5)
+        channel=abs(channel)
         GPIO.output(self.GLOBAL_ENABLE_PIN,GPIO.HIGH)
         self.mcp1.digitalWrite(channel+8, MCP23S17.LEVEL_HIGH)
 
     def power_off(self,channel):
-        channel=abs(channel-5)
+        channel=abs(channel)
         self.mcp1.digitalWrite(channel+8, MCP23S17.LEVEL_LOW)
 
     def initialize_lv(self,test):
         if not test:
-            self.mcp1 = MCP23S17(bus=0x00, pin_cs=0x01, device_id=0x00)
+            self.mcp1 = MCP23S17(bus=0x00, pin_cs=0x00, device_id=0x00)
             self.mcp1.open()
             self.mcp1._spi.max_speed_hz = 10000000
 
@@ -133,76 +140,87 @@ class Session():
 
         hv_voltage_2=[]
         hv_current_2=[]
+
         if not test:
-            try:
-                # make serial connection and close as soon as most recent line of data is acquired
+            # make serial connection and close as soon as most recent line of data is acquired
 
-                ser = serial.Serial('/dev/ttyACM0', 115200, timeout=2)
-                line = ser.readline().decode('ascii')
+            ser = serial.Serial('/dev/ttyACM0', 115200, timeout=2)
+            line = ser.readline().decode('ascii')
 
-                ser1 = serial.Serial('/dev/ttyACM1', 115200, timeout=2)
-                line1 = ser1.readline().decode('ascii')
+            ser1 = serial.Serial('/dev/ttyACM1', 115200, timeout=2)
+            line1 = ser1.readline().decode('ascii')
 
-                # break apart the acquired pyserial output line and parse
-                processed_line = line.split(" ")
-                processed_line1 = line1.split(" ")
+            # break apart the acquired pyserial output line and parse
+            processed_line = line.split(" ")
+            processed_line1 = line1.split(" ")
 
-                # determine which pico is first
-                picocheck1=line.split("|")[3][1]
-                picocheck2=line1.split("|")[3][1]
+            # determine which pico is first
+            picocheck1=line.split("|")[3][1]
+            picocheck2=line1.split("|")[3][1]
 
-                on_voltage=False
-                end=False
-                for i in processed_line:
-                    if i != '' and i != '|' and on_voltage is False:
-                        hv_current_1.append(float(i))
-                    elif i != '' and i != '|' and on_voltage is True and end is False:
-                        hv_voltage_1.append(float(i))
-                    elif end is False and i == '|':
-                        if on_voltage is False:
-                            on_voltage = True
-                        else:
-                            end = True
+            # get the hv overall current and temperature
+            pico_add_1=line.split("|")[2][1:-2]
+            pico_add_2=line1.split("|")[2][1:-2]
 
-                on_voltage=False
-                end=False
-                for i in processed_line1:
-                    if i != '' and i != '|' and on_voltage is False:
-                        hv_current_2.append(float(i))
-                    elif i != '' and i != '|' and on_voltage is True and end is False:
-                        hv_voltage_2.append(float(i))
-                    elif end is False and i == '|':
-                        if on_voltage is False:
-                            on_voltage = True
-                        else:
-                            end = True
+            on_voltage=False
+            end=False
+            for i in processed_line:
+                if i != '' and i != '|' and on_voltage is False:
+                    hv_current_1.append(float(i))
+                elif i != '' and i != '|' and on_voltage is True and end is False:
+                    hv_voltage_1.append(float(i))
+                elif end is False and i == '|':
+                    if on_voltage is False:
+                        on_voltage = True
+                    else:
+                        end = True
 
-                # based on picocheck results, form main hv lists
-                if picocheck1 == '2':
-                    hv_voltage = hv_voltage_1 + hv_voltage_2
-                    hv_current = hv_current_1 + hv_current_2
-                else:
-                    hv_voltage = hv_voltage_2 + hv_voltage_1
-                    hv_current = hv_current_2 + hv_current_1
+            on_voltage=False
+            end=False
+            for i in processed_line1:
+                if i != '' and i != '|' and on_voltage is False:
+                    hv_current_2.append(float(i))
+                elif i != '' and i != '|' and on_voltage is True and end is False:
+                    hv_voltage_2.append(float(i))
+                elif end is False and i == '|':
+                    if on_voltage is False:
+                        on_voltage = True
+                    else:
+                        end = True
+            # based on picocheck results, form main hv lists
+            if picocheck1 == '2':
+                hv_voltage = hv_voltage_1 + hv_voltage_2
+                hv_current = hv_current_1 + hv_current_2
+                self.hv_board_temp=float(pico_add_1)
+                self.hv_board_current=float(pico_add_2)
+            else:
+                hv_voltage = hv_voltage_2 + hv_voltage_1
+                hv_current = hv_current_2 + hv_current_1
+                self.hv_board_temp=float(pico_add_2)
+                self.hv_board_current=float(pico_add_1)
 
+            # ensure that hv currents have proper signs
+            for i in range(len(hv_current)):
+                hv_current[i] = hv_current[i] * -1
 
+            # returned lists are flipped
+            hv_current.reverse()
+            hv_voltage.reverse()
 
-                # returned lists are flipped
-                hv_current.reverse()
-                hv_voltage.reverse()
+            # round hv voltage
+            temp=[]
+            for i in hv_voltage:
+                temp.append(round(int(i),1))
+            hv_voltage=temp
 
-                # round hv voltage
-                temp=[]
-                for i in hv_voltage:
-                    temp.append(round(int(i),1))
-                hv_voltage=temp
+            assert len(hv_current) == 12
+            assert len(hv_voltage) == 12
+            # todo ensure proper length of hv current and voltage
 
-                assert len(hv_current) == 12
-                assert len(hv_voltage) == 12
-                # todo ensure proper length of hv current and voltage
-
+            '''
             except:
                 self.save_error("Error acquiring hv data")
+            '''
         else:
             # if data acquisition function is in test mode, populate with bogus data for testing purposes
             for i in range(0,12):
@@ -397,22 +415,74 @@ class Session():
             output+=','+str(self.hv_voltage[i])
             output+=','+str(self.hv_current[i])+','
 
+        output+=str(self.hv_board_temp)+','
+        output+=str(self.hv_board_current)+','
+
         output+=str(time.time())
         output+='\n'
 
-        file1=open("/home/pi/working_proto/logfile.txt", "a")
+        file1=open("/home/mu2e/LVHVBox/control_gui/working_proto/logfile.txt", "a")
         file1.write(output)
         file1.close()
 
+
+        # also save data to the logfile
+        output='lvhvbox1 '
+        for i in range(0,6):
+            output += 'ch' + str(i) + 'v: ' + str(self.voltage[i]) + ' '
+            output += 'ch' + str(i) + 'c: ' + str(self.current[i]) + ' '
+            output += 'ch' + str(i) + 't: ' + str(self.temperature[i]) + ' '
+            output += 'ch' + str(i) + '5v: ' + str(self.five_voltage[i]) + ' '
+            output += 'ch' + str(i) + '5c: ' + str(self.five_current[i]) + ' '
+            output += 'ch' + str(i) + 'cv: ' + str(self.cond_voltage[i]) + ' '
+            output += 'ch' + str(i) + 'cc: ' + str(self.cond_current[i]) + ' '
+        for i in range(0,12):
+            output += 'ch' + str(i) + 'hvv: ' + str(self.hv_voltage[i]) + ' '
+            output += 'ch' + str(i) + 'hvc: ' + str(self.hv_current[i]) + ' '
+
+        output += 'hvbt: ' + str(self.hv_board_temp) + ' '
+        output += 'hvbc: ' + str(self.hv_board_current) + ' '
+        output += 'timestamp: ' + str(time.time)
+
+
+        logging.info(output)
+
     def save_error(self,text):
-        file2=open("/home/pi/working_proto/error_logfile.txt","a")
+        file2=open("/home/mu2e/LVHVBox/control_gui/working_proto/error_logfile.txt","a")
         file2.write(text)
         file2.write(str(time.time()) + "\n")
         file2.close()
 
+    def prepare_close(self):
+        # turn off all of the lv channels
+        for i in range(0,6):
+            self.power_off(i)
+
+        # turn off all of the lv channels
+        for i in range(0,12):
+            self.rampup_list.append([i,False])
+
+        all_hv_off = False
+
+        while all_hv_off == False:
+            threading.Thread(target=self.hv_rampup_on_off).start()
+            time.sleep(2)
+
+            # determine whether or not all hv channels are turned off
+            self.get_hv_data()
+            voltage_present = False
+            for i in self.hv_voltage:
+                if i >= 1:
+                    voltage_present = True
+
+            if voltage_present == False:
+                all_hv_off = True
+
 class Window(QMainWindow,Session):
     def __init__(self):
         super(Window,self).__init__()
+
+        logging.basicConfig(level=logging.INFO, filename='../../../../../var/log/data.log')
 
         # initialize variables to store data
         self.initialize_data()
@@ -445,6 +515,9 @@ class Window(QMainWindow,Session):
         # initialize hv controls setup
         self.hv_controls_setup()
 
+        # initialize misc tab
+        self.misc_setup()
+
         # initialize blade plotting Window
         self.blade_plotting_setup()
 
@@ -469,6 +542,7 @@ class Window(QMainWindow,Session):
         self.tabs.addTab(self.tab2,"LV Actuation")
         self.tabs.addTab(self.tab3,"HV Actuation")
         self.tabs.addTab(self.plotting,"Plots")
+        self.tabs.addTab(self.misc_functions,"Misc")
         self.plotting_tabs.addTab(self.tab4,"Blade Plots")
         self.plotting_tabs.addTab(self.tab5,"Board Plots")
         self.plotting_tabs.addTab(self.tab6,"HV Plots")
@@ -758,6 +832,19 @@ class Window(QMainWindow,Session):
         self.lv_power_button_6.clicked.connect(lambda: self.actuate_lv_power(5))
 
         self.tab2.setLayout(self.tab2.layout)
+
+    # sets up the misc tab
+    def misc_setup(self):
+        self.misc_functions=QWidget()
+        self.misc_functions.layout=QGridLayout()
+
+        self.close_button=QPushButton("Close GUI")
+
+        self.misc_functions.layout.addWidget(self.hv_power_button_1,1,0)
+
+        self.close_button.clicked.connect(lambda: self.close_gui())
+
+        self.misc_functions.setLayout(self.misc_functions.layout)
 
     # sets up the hv control tab for the GUI
     def hv_controls_setup(self):
@@ -1543,7 +1630,7 @@ class Window(QMainWindow,Session):
     def initialize_data(self):
         # set vars to control timers
         self.board_time=20000
-        self.hv_time=2500
+        self.hv_time=4000
         self.save_time=60000
         self.hv_display_time=2000
 
@@ -1606,6 +1693,13 @@ class Window(QMainWindow,Session):
         self.hv_voltage = [0]*12
         self.hv_current = [0]*12
 
+        self.hv_board_temp=0
+        self.hv_board_current=0
+
+    def close_gui(self):
+        self.prepare_close()
+        self.close()
+
     def run(self):
         try:
             # initialize timers required to update gui/get and log data
@@ -1657,7 +1751,7 @@ if __name__=="__main__":
             window.save_error("Error initializing LV in main")
 
         # import c functions for hv
-        rampup = "/home/pi/working_proto/python_connect.so"
+        rampup = "/home/mu2e/LVHVBox/control_gui/working_proto/python_connect.so"
         window.rampup=CDLL(rampup)
         window.test = False
 
