@@ -82,16 +82,32 @@ class CmdLoop(cmd2.Cmd):
 
     pprint_parser = cmd2.Cmd2ArgumentParser()
     pprint_parser.add_argument('-c', '--channel', type=int, help='Channel number')
+    pprint_parser.add_argument('-u', '--rampup', action='store_true', help='Ramp up')
     @cmd2.with_argparser(pprint_parser)
     def do_test(self, args):
+        """Print the options and argument list this options command was called with."""
+        lvqueue.put([args.cmd2_statement.get().command, args.channel, args.rampup])
+
+    pprint_parser = cmd2.Cmd2ArgumentParser()
+    pprint_parser.add_argument('-c', '--channel', type=int, help='Channel number')
+    @cmd2.with_argparser(pprint_parser)
+    def do_powerOn(self, args):
+        """Print the options and argument list this options command was called with."""
+        lvqueue.put([args.cmd2_statement.get().command, args.channel])
+
+    pprint_parser = cmd2.Cmd2ArgumentParser()
+    pprint_parser.add_argument('-c', '--channel', type=int, help='Channel number')
+    @cmd2.with_argparser(pprint_parser)
+    def do_powerOff(self, args):
         """Print the options and argument list this options command was called with."""
         lvqueue.put([args.cmd2_statement.get().command, args.channel])
 
  
     pprint_parser = cmd2.Cmd2ArgumentParser()
     pprint_parser.add_argument('-c', '--channel', type=int, help='Channel number')
+    pprint_parser.add_argument('-u', '--rampup', action ='store_true', help='Rampup')
     @cmd2.with_argparser(pprint_parser)
-    def do_rampup(self, args):
+    def do_ramp(self, args):
         """Print the options and argument list this options command was called with."""
         lvqueue.put([args.cmd2_statement.get().command, args.channel])
        

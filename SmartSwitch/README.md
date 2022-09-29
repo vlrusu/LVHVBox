@@ -1,2 +1,0 @@
-# SmartSwitch
-SmartSwitch driver

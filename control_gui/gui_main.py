@@ -421,7 +421,7 @@ class Session():
         output+=str(time.time())
         output+='\n'
 
-        file1=open("/home/mu2e/LVHVBox/control_gui/working_proto/logfile.txt", "a")
+        file1=open("/home/pi/LVHVBox/control_gui/logfile.txt", "a")
         file1.write(output)
         file1.close()
 
@@ -448,7 +448,7 @@ class Session():
         logging.info(output)
 
     def save_error(self,text):
-        file2=open("/home/mu2e/LVHVBox/control_gui/working_proto/error_logfile.txt","a")
+        file2=open("/home/pi/LVHVBox/control_gui/error_logfile.txt","a")
         file2.write(text)
         file2.write(str(time.time()) + "\n")
         file2.close()
