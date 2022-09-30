@@ -40,7 +40,12 @@ addresses = [0x14,0x16,0x26]
 
 
 class LVHVBox:
-    def __init__ (self,cmdapp):
+    def __init__ (self,cmdapp,ser1,ser2):
+
+        self.ser1 = ser1
+        self.ser2 = ser2
+
+        
         self.mcp = MCP23S17(bus=0x00, pin_cs=0x00, device_id=0x00)
 
         self.mcp.open()
@@ -65,16 +70,16 @@ class LVHVBox:
         self.cmdapp = cmdapp
     
 
-    def ramphvupdown(self,arglist):
+    def ramphvupdown(self,channel,rampitup):
         hvlock.acquire()
-        if arglist[1] == True:
-            self.rampup.rampup_hv(arglist[0],1500)
+        if rampitup == True:
+            self.rampup.rampup_hv(channel,1500)
         else:
-            self.rampup.rampup_hv(arglist[0],0)
+            self.rampup.rampup_hv(channel,0)
         #        for i in tqdm(range(10)):
 #            time.sleep(3)
 
-        self.cmdapp.async_alert('Channel '+str(arglist[0])+' done ramping')
+        self.cmdapp.async_alert('Channel '+str(channel)+' done ramping')
         hvlock.release()
         
     def ramp(self,arglist):
@@ -82,10 +87,32 @@ class LVHVBox:
         only need to worry about the HV, since other LV stuff is on different pins and the MCP writes should 
         not affect them"""
 
-        rampThrd = threading.Thread(target=self.ramphvupdown,args=arglist)
+        rampThrd = threading.Thread(target=self.ramphvupdown,args=(arglist[0],arglist[1]))
         rampThrd.start()
         return [0]
 
+    def resetHV(self,arglist):
+        if arglist[0] == 0:
+            self.ser1.write(str.encode('R'))
+        else:
+            self.ser2.write(str.encode('R'))
+
+        return [0]
+
+    def setHVtrip(self,arglist):
+#        cmd = "T"+str(arglist[1]) #T100 changes trip point to 100nA
+        cmd = "T"
+        if arglist[0] == 0:
+            self.ser1.write(str.encode(cmd))
+        else:
+            self.ser2.write(str.encode(cmd))
+        cmd = str(arglist[1]) + "\r\n"
+        if arglist[0] == 0:
+            self.ser1.write(str.encode(cmd))
+        else:
+            self.ser2.write(str.encode(cmd))
+
+        return [arglist[0],arglist[1]]
 
     def powerOn(self,channel):
         ret = []
@@ -119,6 +146,7 @@ class LVHVBox:
 
         ret = []
 
+        print(channel)
         if channel[0] == None:
             for i in range(NCHANNELS):
                 ret.append(i)

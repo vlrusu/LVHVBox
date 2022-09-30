@@ -14,13 +14,22 @@ import math
 import rlcompleter
 from pprint import pprint
 import atexit
+import serial
 
 import cmd2
 from  commands import *
 
 
+def loghvdata():
 
+    line1 = ser1.readline().decode('ascii')
+    line2 = ser2.readline().decode('ascii')
 
+    hvlog.write(line1)
+    hvlog.flush()
+    hvlog.write(line2)
+    hvlog.flush()
+    
 def loglvdata():
 
     # this has to use the commands in commands.py to read: voltages, currents, temps and whatever else we put in GUI
@@ -52,6 +61,7 @@ def lvloop():
             retc = process_command(lvdata)
         
         except queue.Empty:
+            loghvdata();
             loglvdata()
             time.sleep(1)
 
@@ -70,7 +80,7 @@ class CmdLoop(cmd2.Cmd):
 
 
 
-#there has to bbe a command for every interaction we need. So, readvoltage, readcurrents, readtemps, etc. Each one has to have its counterpart in commands.py
+#there has to be a command for every interaction we need. So, readvoltage, readcurrents, readtemps, etc. Each one has to have its counterpart in commands.py
     pprint_parser = cmd2.Cmd2ArgumentParser()
     pprint_parser.add_argument('-c', '--channel', type=int, help='Channel number')
     @cmd2.with_argparser(pprint_parser)
@@ -109,10 +119,25 @@ class CmdLoop(cmd2.Cmd):
     @cmd2.with_argparser(pprint_parser)
     def do_ramp(self, args):
         """Print the options and argument list this options command was called with."""
-        lvqueue.put([args.cmd2_statement.get().command, args.channel])
+        lvqueue.put([args.cmd2_statement.get().command, args.channel, args.rampup])
        
 
+    pprint_parser = cmd2.Cmd2ArgumentParser()
+    pprint_parser.add_argument('-c', '--channel', type=int, help='Channel number')
+    @cmd2.with_argparser(pprint_parser)
+    def do_resetHV(self, args):
+        """Print the options and argument list this options command was called with."""
+        lvqueue.put([args.cmd2_statement.get().command, args.channel])
 
+
+    pprint_parser = cmd2.Cmd2ArgumentParser()
+    pprint_parser.add_argument('-c', '--channel', type=int, help='Channel number')
+    pprint_parser.add_argument('-T', '--trippoint', type=int, help='Trip point in nA')
+    @cmd2.with_argparser(pprint_parser)
+    def do_setHVtrip(self, args):
+        """Print the options and argument list this options command was called with."""
+        lvqueue.put([args.cmd2_statement.get().command, args.channel, args.trippoint])
+        
       
 
 if __name__ == '__main__':
@@ -133,9 +158,34 @@ if __name__ == '__main__':
     lvqueue = queue.Queue()
     hvqueue = queue.Queue()
 
+    sertmp1 = serial.Serial('/dev/ttyACM0', 115200, timeout=0.1,write_timeout = 1)
+    sertmp2 = serial.Serial('/dev/ttyACM1', 115200, timeout=0.1,write_timeout = 1)
+    
+    #decide which on the 1 and which is 2
+    sertmp1.timeout = None
+    line = sertmp1.readline().decode('ascii')
+    whichone = line.split("|")[3][1]
+    print("ser1 is " + str(whichone))    
 
+    if whichone == 1:
+        ser1=sertmp1
+        ser2=sertmp2
+    else:
+        ser1 = sertmp2
+        ser2 = sertmp1
+
+    sertmp2.timeout = None    
+    line = sertmp2.readline().decode('ascii')
+    whichone = line.split("|")[3][1]
+    print("ser2 is " + str(whichone))    
+
+
+
+    
     lvlogname = "lvdata.log"
     lvlog = open(os.path.join(topdir,lvlogname),"w")
+    hvlogname = "hvdata.log"
+    hvlog = open(os.path.join(topdir,hvlogname),"w")
 
     lvThrd = threading.Thread(target=lvloop, daemon = True)
     lvThrd.start()
@@ -143,11 +193,12 @@ if __name__ == '__main__':
 
     
     app = CmdLoop()
-    lvhvbox = LVHVBox(app)
+    lvhvbox = LVHVBox(app,ser1,ser2)
 
     
     app.cmdloop()
     lvlog.close()
+    hvlog.close()
     sys.exit()
 
     

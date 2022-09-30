@@ -79,7 +79,8 @@ void rampup_hv(int channel, int value){
     usleep(50000);
     setvalue += increment;
     uint32_t digvalue = ( (int) (16383.*(setvalue/2.5))) & 0x3FFF;
-
+    //    printf("Test %d \n",digvalue);
+    
     DAC8164_writeChannel(&dac[idac], channel, digvalue);
 
   }
