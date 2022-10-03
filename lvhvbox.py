@@ -16,24 +16,30 @@ from pprint import pprint
 import atexit
 
 import cmd2
-from commands import *
+from  commands import *
+
+
+
 
 def loglvdata():
 
     # this has to use the commands in commands.py to read: voltages, currents, temps and whatever else we put in GUI
     lvlog.write("1 2 3\n")
-
-
+#    voltages = readvoltage()
+#    lvlog.write(voltages)
+    
 def process_command(command):
+
     app.async_alert ("Processing command ")
     app.async_alert(' '.join(str(e) for e in command))
-#    func = getattr(commands,command[0])
-#    ret = func(command[1:])
+    func = getattr(lvhvbox,command[0])
+    ret = func(command[1:])
 
 #this would be better as a real module, avoid global
-    ret = globals()[command[0]](command[1:])
+#    ret = globals()[command[0]](command[1:])
 
     app.async_alert(' '.join(str(e) for e in ret))
+
     return 0
 
 def lvloop():
@@ -80,7 +86,16 @@ class CmdLoop(cmd2.Cmd):
     def do_test(self, args):
         """Print the options and argument list this options command was called with."""
         lvqueue.put([args.cmd2_statement.get().command, args.channel])
-        
+
+ 
+    pprint_parser = cmd2.Cmd2ArgumentParser()
+    pprint_parser.add_argument('-c', '--channel', type=int, help='Channel number')
+    @cmd2.with_argparser(pprint_parser)
+    def do_rampup(self, args):
+        """Print the options and argument list this options command was called with."""
+        lvqueue.put([args.cmd2_statement.get().command, args.channel])
+       
+
 
       
 
@@ -100,16 +115,21 @@ if __name__ == '__main__':
 
 
     lvqueue = queue.Queue()
+    hvqueue = queue.Queue()
 
 
     lvlogname = "lvdata.log"
-
     lvlog = open(os.path.join(topdir,lvlogname),"w")
 
     lvThrd = threading.Thread(target=lvloop, daemon = True)
     lvThrd.start()
+ 
+
     
     app = CmdLoop()
+    lvhvbox = LVHVBox(app)
+
+    
     app.cmdloop()
     lvlog.close()
     sys.exit()
