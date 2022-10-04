@@ -542,7 +542,7 @@ class Window(QMainWindow,Session):
         self.tabs.addTab(self.tab2,"LV Actuation")
         self.tabs.addTab(self.tab3,"HV Actuation")
         self.tabs.addTab(self.plotting,"Plots")
-        self.tabs.addTab(self.misc_functions,"Misc")
+        #self.tabs.addTab(self.misc_functions,"Misc")
         self.plotting_tabs.addTab(self.tab4,"Blade Plots")
         self.plotting_tabs.addTab(self.tab5,"Board Plots")
         self.plotting_tabs.addTab(self.tab6,"HV Plots")
