@@ -421,7 +421,7 @@ class Session():
         output+=str(time.time())
         output+='\n'
 
-        file1=open("/home/mu2e/LVHVBox/control_gui/working_proto/logfile.txt", "a")
+        file1=open("/home/pi/LVHVBox/control_gui/logfile.txt", "a")
         file1.write(output)
         file1.close()
 
@@ -448,7 +448,7 @@ class Session():
         logging.info(output)
 
     def save_error(self,text):
-        file2=open("/home/mu2e/LVHVBox/control_gui/working_proto/error_logfile.txt","a")
+        file2=open("/home/pi/LVHVBox/control_gui/error_logfile.txt","a")
         file2.write(text)
         file2.write(str(time.time()) + "\n")
         file2.close()
@@ -516,7 +516,7 @@ class Window(QMainWindow,Session):
         self.hv_controls_setup()
 
         # initialize misc tab
-        self.misc_setup()
+        #self.misc_setup()
 
         # initialize blade plotting Window
         self.blade_plotting_setup()
@@ -1751,7 +1751,7 @@ if __name__=="__main__":
             window.save_error("Error initializing LV in main")
 
         # import c functions for hv
-        rampup = "/home/mu2e/LVHVBox/control_gui/working_proto/python_connect.so"
+        rampup = "/home/pi/LVHVBox/control_gui/python_connect.so"
         window.rampup=CDLL(rampup)
         window.test = False
 
