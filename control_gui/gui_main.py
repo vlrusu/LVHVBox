@@ -26,7 +26,7 @@ import smbus
 from smbus import SMBus
 #import Adafruit_BBIO.GPIO as GPIO
 import RPi.GPIO as GPIO
-from RPiMCP23S17.MCP23S17 import MCP23S17
+from RPiMCP23S17 import MCP23S17
 import random
 
 # ensure that the window closes on control c
