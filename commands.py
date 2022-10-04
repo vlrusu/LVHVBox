@@ -7,9 +7,18 @@ import RPi.GPIO as GPIO
 from RPiMCP23S17.MCP23S17 import MCP23S17
 import smbus
 from smbus import SMBus
+import logging
+
+from datetime import datetime
+
+from influxdb_client import InfluxDBClient, Point, WritePrecision
+from influxdb_client.client.write_api import SYNCHRONOUS
+
 
 
 NCHANNELS = 6
+NHVCHANNELS=12
+HVSERIALDATALENGTH  = 20
 
 # def test(channel):
     
@@ -40,11 +49,11 @@ addresses = [0x14,0x16,0x26]
 
 
 class LVHVBox:
-    def __init__ (self,cmdapp,ser1,ser2):
+    def __init__ (self,cmdapp,ser1,ser2,hvlog):
 
         self.ser1 = ser1
         self.ser2 = ser2
-
+        self.hvlog = hvlog
         
         self.mcp = MCP23S17(bus=0x00, pin_cs=0x00, device_id=0x00)
 
@@ -63,12 +72,110 @@ class LVHVBox:
         GPIO.output(RESET_PIN,GPIO.HIGH)
 
 
-        rampup = "/home/pi/LVHVBox/control_gui/python_connect.so"
+        rampup = "/home/mu2e/LVHVBox/control_gui/python_connect.so"
         self.rampup=CDLL(rampup)
         self.rampup.initialization()
         
         self.cmdapp = cmdapp
-    
+
+        logging.basicConfig(filename='lvhvbox.log',format='%(asctime)s %(message)s',encoding='utf-8',level=logging.DEBUG)
+
+        token = "xjE_bqzFrPvO6W7zbVBYOa3BnAZPO_Y6bxpTBPEpAI10SDbC-69VjVMu4-SL2Y9Az6UJghE77kGO9JYI9f6naQ=="
+        self.org = "Tracker"
+        self.bucket = "TEST"
+
+        self.client = InfluxDBClient(url="http://raspberrypi.local:8086", token=token, org=self.org)
+
+        self.write_api = self.client.write_api(write_options=SYNCHRONOUS)
+
+
+    def __del__(self):
+#        self.client.close()
+        self.hvlog.close()
+        
+    def loghvdata(self):
+
+        line1 = self.ser1.readline().decode('ascii')
+        line2 = self.ser2.readline().decode('ascii')
+
+        d1 = line1.split()
+        if (len(d1) != HVSERIALDATALENGTH):
+            logging.error('HV data from serial not the right length')
+            logging.error(line1)
+            return 0
+        if (d1[6] != "|" or d1[13] != "|" or d1[15]!= "|" or d1[17]!= "|"):
+            logging.error('HV data from serial not right format')
+            logging.error(line1)
+            return 0
+
+        d2 = line2.split()
+        if (len(d2) != HVSERIALDATALENGTH):
+            logging.error('HV data from serial not the right length')
+            logging.error(line2)
+            return 0
+
+        if (d2[6] != "|" or d2[13] != "|" or d2[15]!= "|" or d2[17]!= "|"):
+            logging.error('HV data from serial not right format')
+            logging.error(line1)
+            return 0
+
+        hvlist = []
+        self.ihv = [0]*NHVCHANNELS
+        self.vhv = [0]*NHVCHANNELS
+        for ich in range(6):
+            self.ihv[ich] = float(d1[5-ich])
+            self.vhv[ich] = float(d1[12-ich])
+            self.ihv[ich+6] = float(d2[5-ich])
+            self.vhv[ich+6] = float(d2[12-ich])
+            hvlist.append(self.ihv[ich])
+            hvlist.append(self.vhv[ich])
+            hvlist.append(self.ihv[ich+6])
+            hvlist.append(self.vhv[ich+6])
+            
+        self.i12V = float(d1[14])
+        hvlist.append(self.i12V)
+        
+        self.hvpcbtemp = float(d2[14])        
+        hvlist.append(self.hvpcbtemp)
+        
+        
+        self.hvlog.write(" ".join(str(e) for e in hvlist))
+        self.hvlog.write("\n")
+        self.hvlog.flush()
+        
+        point = Point("hvdata3") \
+            .tag("user", "vrusu") \
+            .field("ihv0", self.ihv[0]) \
+            .field("vhv0", self.vhv[0]) \
+            .field("ihv1", self.ihv[1]) \
+            .field("vhv1", self.vhv[1]) \
+            .field("ihv2", self.ihv[2]) \
+            .field("vhv2", self.vhv[2]) \
+            .field("ihv3", self.ihv[3]) \
+            .field("vhv3", self.vhv[3]) \
+            .field("ihv4", self.ihv[4]) \
+            .field("vhv4", self.vhv[4]) \
+            .field("ihv5", self.ihv[5]) \
+            .field("vhv5", self.vhv[5]) \
+            .field("ihv6", self.ihv[6]) \
+            .field("vhv6", self.vhv[6]) \
+            .field("ihv7", self.ihv[7]) \
+            .field("vhv7", self.vhv[7]) \
+            .field("ihv8", self.ihv[8]) \
+            .field("vhv8", self.vhv[8]) \
+            .field("ihv9", self.ihv[9]) \
+            .field("vhv9", self.vhv[9]) \
+            .field("ihv10", self.ihv[10]) \
+            .field("vhv10", self.vhv[10]) \
+            .field("ihv11", self.ihv[11]) \
+            .field("vhv11", self.vhv[11]) \
+            .field("i12V", self.i12V) \
+            .field("hvpcbtemp", self.hvpcbtemp) \
+            .time(datetime.utcnow(), WritePrecision.NS)
+
+        self.write_api.write(self.bucket, self.org, point)
+
+        
 
     def ramphvupdown(self,channel,rampitup):
         hvlock.acquire()

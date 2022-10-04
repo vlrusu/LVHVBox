@@ -19,16 +19,12 @@ import serial
 import cmd2
 from  commands import *
 
+from datetime import datetime
 
-def loghvdata():
+from influxdb_client import InfluxDBClient, Point, WritePrecision
+from influxdb_client.client.write_api import SYNCHRONOUS
 
-    line1 = ser1.readline().decode('ascii')
-    line2 = ser2.readline().decode('ascii')
 
-    hvlog.write(line1)
-    hvlog.flush()
-    hvlog.write(line2)
-    hvlog.flush()
     
 def loglvdata():
 
@@ -61,7 +57,7 @@ def lvloop():
             retc = process_command(lvdata)
         
         except queue.Empty:
-            loghvdata();
+            lvhvbox.loghvdata()
             loglvdata()
             time.sleep(1)
 
@@ -180,20 +176,24 @@ if __name__ == '__main__':
     print("ser2 is " + str(whichone))    
 
 
-
-    
     lvlogname = "lvdata.log"
     lvlog = open(os.path.join(topdir,lvlogname),"w")
     hvlogname = "hvdata.log"
     hvlog = open(os.path.join(topdir,hvlogname),"w")
+
+
+    
+    app = CmdLoop()
+    lvhvbox = LVHVBox(app,ser1,ser2,hvlog)
+
+    
+    
 
     lvThrd = threading.Thread(target=lvloop, daemon = True)
     lvThrd.start()
  
 
     
-    app = CmdLoop()
-    lvhvbox = LVHVBox(app,ser1,ser2)
 
     
     app.cmdloop()
