@@ -26,12 +26,6 @@ from influxdb_client.client.write_api import SYNCHRONOUS
 
 
     
-def loglvdata():
-
-    # this has to use the commands in commands.py to read: voltages, currents, temps and whatever else we put in GUI
-    lvlog.write("1 2 3\n")
-#    voltages = readvoltage()
-#    lvlog.write(voltages)
     
 def process_command(command):
 
@@ -58,7 +52,7 @@ def lvloop():
         
         except queue.Empty:
             lvhvbox.loghvdata()
-            loglvdata()
+            lvhvbox.loglvdata()
             time.sleep(1)
 
 
@@ -184,7 +178,7 @@ if __name__ == '__main__':
 
     
     app = CmdLoop()
-    lvhvbox = LVHVBox(app,ser1,ser2,hvlog)
+    lvhvbox = LVHVBox(app,ser1,ser2,hvlog,lvlog)
 
     
     

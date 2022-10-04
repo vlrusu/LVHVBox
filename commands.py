@@ -49,11 +49,12 @@ addresses = [0x14,0x16,0x26]
 
 
 class LVHVBox:
-    def __init__ (self,cmdapp,ser1,ser2,hvlog):
+    def __init__ (self,cmdapp,ser1,ser2,hvlog,lvlog):
 
         self.ser1 = ser1
         self.ser2 = ser2
         self.hvlog = hvlog
+        self.lvlog = lvlog
         
         self.mcp = MCP23S17(bus=0x00, pin_cs=0x00, device_id=0x00)
 
@@ -92,6 +93,35 @@ class LVHVBox:
     def __del__(self):
 #        self.client.close()
         self.hvlog.close()
+        self.lvlog.close()
+
+
+    def loglvdata(self):
+
+    # this has to use the commands in commands.py to read: voltages, currents, temps and whatever else we put in GUI
+#    lvlog.write("1 2 3\n")
+        voltages = self.readvoltage([None])
+        self.v48 = [0]*NCHANNELS
+        for ich in range(NCHANNELS):
+            self.v48[ich] = voltages[ich]
+
+        self.lvlog.write(" ".join(str(e) for e in  voltages))
+        self.lvlog.write("\n")
+        self.lvlog.flush()
+
+        point = Point("lvdata") \
+            .tag("user", "vrusu") \
+            .field("v48_0", self.v48[0]) \
+            .field("v48_1", self.v48[1]) \
+            .field("v48_2", self.v48[2]) \
+            .field("v48_3", self.v48[3]) \
+            .field("v48_4", self.v48[4]) \
+            .field("v48_5", self.v48[5]) \
+            .time(datetime.utcnow(), WritePrecision.NS)
+
+        self.write_api.write(self.bucket, self.org, point)
+
+
         
     def loghvdata(self):
 
