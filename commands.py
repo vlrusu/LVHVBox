@@ -81,9 +81,10 @@ class LVHVBox:
 
         logging.basicConfig(filename='lvhvbox.log',format='%(asctime)s %(message)s',encoding='utf-8',level=logging.DEBUG)
 
-        token = "xjE_bqzFrPvO6W7zbVBYOa3BnAZPO_Y6bxpTBPEpAI10SDbC-69VjVMu4-SL2Y9Az6UJghE77kGO9JYI9f6naQ=="
-        self.org = "Tracker"
-        self.bucket = "TEST"
+        token = "0K7grsktz-6TCb3PRlieKXpfy_ZRTxtjXgh0GciQ7N5d0sjv9Dc6Ao2gkIMo-erNGVohdv7Aseq5UXqXbisXpw=="
+        self.org = "MU2E"
+        self.bucket = "TESTTRACKER"
+        
 
         self.client = InfluxDBClient(url="http://raspberrypi.local:8086", token=token, org=self.org)
 
