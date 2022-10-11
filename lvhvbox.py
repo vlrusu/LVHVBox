@@ -38,13 +38,12 @@ def process_command(command):
 #    ret = globals()[command[0]](command[1:])
 
     app.async_alert(' '.join(str(e) for e in ret))
-
     return 0
+
 
 def lvloop():
 
     while (1):
-
         try:
             lvdata = lvqueue.get(block=False)
             app.async_alert("I got a command")
@@ -54,7 +53,6 @@ def lvloop():
             lvhvbox.loghvdata()
             lvhvbox.loglvdata()
             time.sleep(1)
-
 
 
 
@@ -70,16 +68,33 @@ class CmdLoop(cmd2.Cmd):
 
 
 
-#there has to be a command for every interaction we need. So, readvoltage, readcurrents, readtemps, etc. Each one has to have its counterpart in commands.py
+# There has to be a command for every interaction we need. So, readvoltage, readcurrents, readtemps, etc. Each one has to have its counterpart in commands.py
+
+    # readvoltage()
     pprint_parser = cmd2.Cmd2ArgumentParser()
     pprint_parser.add_argument('-c', '--channel', type=int, help='Channel number')
     @cmd2.with_argparser(pprint_parser)
     def do_readvoltage(self, args):
         """Print the options and argument list this options command was called with."""
         lvqueue.put([args.cmd2_statement.get().command, args.channel])
-
-
-
+    
+    # readcurrent()
+    pprint_parser = cmd2.Cmd2ArgumentParser()
+    pprint_parser.add_argument('-c', '--channel', type=int, help='Channel number')
+    @cmd2.with_argparser(pprint_parser)
+    def do_readcurrent(self, args):
+        """Print the options and argument list this options command was called with."""
+        lvqueue.put([args.cmd2_statement.get().command, args.channel])
+        
+    # readtemp()
+    pprint_parser = cmd2.Cmd2ArgumentParser()
+    pprint_parser.add_argument('-c', '--channel', type=int, help='Channel number')
+    @cmd2.with_argparser(pprint_parser)
+    def do_readtemp(self, args):
+        """Print the options and argument list this options command was called with."""
+        lvqueue.put([args.cmd2_statement.get().command, args.channel])
+    
+    # test()
     pprint_parser = cmd2.Cmd2ArgumentParser()
     pprint_parser.add_argument('-c', '--channel', type=int, help='Channel number')
     pprint_parser.add_argument('-u', '--rampup', action='store_true', help='Ramp up')
@@ -87,22 +102,24 @@ class CmdLoop(cmd2.Cmd):
     def do_test(self, args):
         """Print the options and argument list this options command was called with."""
         lvqueue.put([args.cmd2_statement.get().command, args.channel, args.rampup])
-
+        
+    # powerOn()
     pprint_parser = cmd2.Cmd2ArgumentParser()
     pprint_parser.add_argument('-c', '--channel', type=int, help='Channel number')
     @cmd2.with_argparser(pprint_parser)
     def do_powerOn(self, args):
         """Print the options and argument list this options command was called with."""
         lvqueue.put([args.cmd2_statement.get().command, args.channel])
-
+        
+    # powerOff()
     pprint_parser = cmd2.Cmd2ArgumentParser()
     pprint_parser.add_argument('-c', '--channel', type=int, help='Channel number')
     @cmd2.with_argparser(pprint_parser)
     def do_powerOff(self, args):
         """Print the options and argument list this options command was called with."""
         lvqueue.put([args.cmd2_statement.get().command, args.channel])
-
- 
+        
+    # ramp()
     pprint_parser = cmd2.Cmd2ArgumentParser()
     pprint_parser.add_argument('-c', '--channel', type=int, help='Channel number')
     pprint_parser.add_argument('-u', '--rampup', action ='store_true', help='Rampup')
@@ -110,16 +127,16 @@ class CmdLoop(cmd2.Cmd):
     def do_ramp(self, args):
         """Print the options and argument list this options command was called with."""
         lvqueue.put([args.cmd2_statement.get().command, args.channel, args.rampup])
-       
-
+        
+    # resetHV()
     pprint_parser = cmd2.Cmd2ArgumentParser()
     pprint_parser.add_argument('-c', '--channel', type=int, help='Channel number')
     @cmd2.with_argparser(pprint_parser)
     def do_resetHV(self, args):
         """Print the options and argument list this options command was called with."""
         lvqueue.put([args.cmd2_statement.get().command, args.channel])
-
-
+        
+    # setHVtrip()
     pprint_parser = cmd2.Cmd2ArgumentParser()
     pprint_parser.add_argument('-c', '--channel', type=int, help='Channel number')
     pprint_parser.add_argument('-T', '--trippoint', type=int, help='Trip point in nA')
@@ -130,11 +147,11 @@ class CmdLoop(cmd2.Cmd):
         
       
 
+## Main function
+## =============
+
 if __name__ == '__main__':
 
-
-
-    
     history_file = os.path.expanduser('.lvhv_history')
     if not os.path.exists(history_file):
         with open(history_file, "w") as fobj:
@@ -174,21 +191,12 @@ if __name__ == '__main__':
     lvlog = open(os.path.join(topdir,lvlogname),"w")
     hvlogname = "hvdata.log"
     hvlog = open(os.path.join(topdir,hvlogname),"w")
-
-
     
     app = CmdLoop()
     lvhvbox = LVHVBox(app,ser1,ser2,hvlog,lvlog)
 
-    
-    
-
     lvThrd = threading.Thread(target=lvloop, daemon = True)
     lvThrd.start()
- 
-
-    
-
     
     app.cmdloop()
     lvlog.close()

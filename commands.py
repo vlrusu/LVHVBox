@@ -80,10 +80,10 @@ class LVHVBox:
         self.cmdapp = cmdapp
 
         logging.basicConfig(filename='lvhvbox.log',format='%(asctime)s %(message)s',encoding='utf-8',level=logging.DEBUG)
-
-        token = "xjE_bqzFrPvO6W7zbVBYOa3BnAZPO_Y6bxpTBPEpAI10SDbC-69VjVMu4-SL2Y9Az6UJghE77kGO9JYI9f6naQ=="
-        self.org = "Tracker"
-        self.bucket = "TEST"
+        
+        token = "0K7grsktz-6TCb3PRlieKXpfy_ZRTxtjXgh0GciQ7N5d0sjv9Dc6Ao2gkIMo-erNGVohdv7Aseq5UXqXbisXpw=="
+        self.org = "MU2E"
+        self.bucket = "TESTTRACKER"
 
         self.client = InfluxDBClient(url="http://raspberrypi.local:8086", token=token, org=self.org)
 
@@ -219,6 +219,7 @@ class LVHVBox:
         self.cmdapp.async_alert('Channel '+str(channel)+' done ramping')
         hvlock.release()
         
+        
     def ramp(self,arglist):
         """spi linux driver is thread safe but the exteder operations are not. However, I 
         only need to worry about the HV, since other LV stuff is on different pins and the MCP writes should 
@@ -235,7 +236,8 @@ class LVHVBox:
             self.ser2.write(str.encode('R'))
 
         return [0]
-
+        
+        
     def setHVtrip(self,arglist):
 #        cmd = "T"+str(arglist[1]) #T100 changes trip point to 100nA
         cmd = "T"
@@ -250,46 +252,41 @@ class LVHVBox:
             self.ser2.write(str.encode(cmd))
 
         return [arglist[0],arglist[1]]
-
+        
+    
     def powerOn(self,channel):
         ret = []
         if channel[0] ==  None:
             GPIO.output(GLOBAL_ENABLE_PIN,GPIO.HIGH)
             for ich in range(0,6):
                 self.self.mcp.digitalWrite(ich+8, MCP23S17.LEVEL_HIGH)
-
-
         else:
              ch = abs (channel[0])
              GPIO.output(GLOBAL_ENABLE_PIN,GPIO.HIGH)
              self.mcp.digitalWrite(ch+8, MCP23S17.LEVEL_HIGH)
         return ret
-
+        
+        
     def powerOff(self,channel):
         ret = []
         if channel[0] ==  None:
             GPIO.output(GLOBAL_ENABLE_PIN,GPIO.LOW)
             for ich in range(0,6):
                 self.self.mcp.digitalWrite(ich+8, MCP23S17.LEVEL_LOW)
-
-
         else:
              ch = abs (channel[0])
              GPIO.output(GLOBAL_ENABLE_PIN,GPIO.LOW)
              self.mcp.digitalWrite(ch+8, MCP23S17.LEVEL_LOW)
         return ret
-
+        
+        
     def test(self,channel):
-
         ret = []
-
         print(channel)
         if channel[0] == None:
             for i in range(NCHANNELS):
                 ret.append(i)
-
         else:
-
     #        for i in range(10):
     #            app.async_alert("Testing " + str(i))
     #            time.sleep(1)
@@ -297,34 +294,88 @@ class LVHVBox:
                 ret.append(channel[0])
             else:
                 ret.append(-channel[0])
-
         return ret
 
 
 
+    ## readvoltage()
+    ## =============
     def readvoltage(self,channel):
 
         ret = []
-
-
-
-
         if channel[0] == None:
             for ich in range(NCHANNELS):
-                self.bus.write_byte_data(0x50,0x0,ich+1)# first is the coolpac
+                self.bus.write_byte_data(0x50,0x0,ich+1)  # first is the coolpac
                 reading=self.bus.read_byte_data(0x50,0xD0)
                 reading=self.bus.read_i2c_block_data(0x50,0x8B,2)
                 value = float(reading[0]+256*reading[1])/256.
-
                 ret.append(value)
 
         else:
-            self.bus.write_byte_data(0x50,0x0,channel[0]+1)# first is the coolpac
+            self.bus.write_byte_data(0x50,0x0,channel[0]+1)
             reading=self.bus.read_byte_data(0x50,0xD0)
             reading=self.bus.read_i2c_block_data(0x50,0x8B,2)
             value = float(reading[0]+256*reading[1])/256.
-
             ret.append(value)
 
+        return ret
+    
+    
+    ## readcurrent()
+    ## =============
+    def readcurrent(self,channel):
+
+        ret = []
+        if channel[0] == None:
+            for ich in range(NCHANNELS):
+                self.bus.write_byte_data(0x50,0x0,ich+1)  # first is the coolpac
+                reading=self.bus.read_byte_data(0x50,0xD0)
+                reading=self.bus.read_i2c_block_data(0x50,0x8C,2)
+                value = reading[0]+256*reading[1]
+                exponent = ( value >> 11 ) & 0x1f
+                exponent = exponent-32
+                mantissa = value & 0x7ff
+                current = mantissa*2**exponent
+                ret.append(current)
+                
+        else:
+            self.bus.write_byte_data(0x50,0x0,channel[0]+1)
+            reading=self.bus.read_byte_data(0x50,0xD0)
+            reading=self.bus.read_i2c_block_data(0x50,0x8C,2)
+            value = reading[0]+256*reading[1]
+            exponent = ( value >> 11 ) & 0x1f
+            exponent = exponent-32
+            mantissa = value & 0x7ff
+            current = mantissa*2**exponent
+            ret.append(current)
+
+        return ret
+    
+    
+    ## readtemp()
+    ## ==========
+    def readtemp(self,channel):
+
+        ret = []
+        if channel[0] == None:
+            for ich in range(NCHANNELS):
+                self.bus.write_byte_data(0x50,0x0,ich+1)  # first is the coolpac
+                reading=self.bus.read_byte_data(0x50,0xD0)
+                reading=self.bus.read_i2c_block_data(0x50,0x8D,2)
+                value = reading[0]+256*reading[1]
+                exponent = ( value >> 11 ) & 0x1f
+                mantissa = value & 0x7ff
+                temp = mantissa*2**exponent
+                ret.append(temp)
+            
+        else:
+            self.bus.write_byte_data(0x50,0x0,channel[0]+1)
+            reading=self.bus.read_byte_data(0x50,0xD0)
+            reading=self.bus.read_i2c_block_data(0x50,0x8D,2)
+            value = reading[0]+256*reading[1]
+            exponent = ( value >> 11 ) & 0x1f
+            mantissa = value & 0x7ff
+            temp = mantissa*2**exponent
+            ret.append(temp)
 
         return ret
