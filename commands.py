@@ -17,7 +17,7 @@ from influxdb_client.client.write_api import SYNCHRONOUS
 
 
 NCHANNELS = 6
-NHVCHANNELS=12
+NHVCHANNELS = 12
 HVSERIALDATALENGTH  = 20
 
 # def test(channel):
@@ -91,21 +91,38 @@ class LVHVBox:
 
 
     def __del__(self):
-#        self.client.close()
+        # self.client.close()
         self.hvlog.close()
         self.lvlog.close()
 
 
-    def loglvdata(self):
+    
+    ## ===========
+    ## Log LV data
+    ## ===========
 
-    # this has to use the commands in commands.py to read: voltages, currents, temps and whatever else we put in GUI
-#    lvlog.write("1 2 3\n")
+    def loglvdata(self):
+        # This has to use the commands in commands.py to read: voltages, currents, temps and whatever else we put in GUI
+        # In the format: lvlog.write("1 2 3\n")voltages = self.readvoltage([None])
         voltages = self.readvoltage([None])
         self.v48 = [0]*NCHANNELS
+
+        currents = self.readcurrent([None])
+        self.i48 = [0]*NCHANNELS
+
+        temps = self.readtemp([None])
+        self.T48 = [0]*NCHANNELS
+
         for ich in range(NCHANNELS):
             self.v48[ich] = voltages[ich]
+            self.i48[ich] = currents[ich]
+            self.T48[ich] = temps[ich]
 
         self.lvlog.write(" ".join(str(e) for e in  voltages))
+        self.lvlog.write(" ")
+        self.lvlog.write(" ".join(str(e) for e in currents))
+        self.lvlog.write(" ")
+        self.lvlog.write(" ".join(str(e) for e in temps))
         self.lvlog.write("\n")
         self.lvlog.flush()
 
@@ -117,11 +134,27 @@ class LVHVBox:
             .field("v48_3", self.v48[3]) \
             .field("v48_4", self.v48[4]) \
             .field("v48_5", self.v48[5]) \
+            .field("i48_0", self.i48[0]) \
+            .field("i48_1", self.i48[1]) \
+            .field("i48_2", self.i48[2]) \
+            .field("i48_3", self.i48[3]) \
+            .field("i48_4", self.i48[4]) \
+            .field("i48_5", self.i48[5]) \
+            .field("T48_0", self.T48[0]) \
+            .field("T48_1", self.T48[1]) \
+            .field("T48_2", self.T48[2]) \
+            .field("T48_3", self.T48[3]) \
+            .field("T48_4", self.T48[4]) \
+            .field("T48_5", self.T48[5]) \
             .time(datetime.utcnow(), WritePrecision.NS)
-
+        
         self.write_api.write(self.bucket, self.org, point)
 
 
+
+    ## ===========
+    ## Log HV data
+    ## ===========
         
     def loghvdata(self):
 
@@ -205,7 +238,11 @@ class LVHVBox:
 
         self.write_api.write(self.bucket, self.org, point)
 
-        
+
+
+    ## =========================
+    ## Vadim's default functions
+    ## =========================
 
     def ramphvupdown(self,channel,rampitup):
         hvlock.acquire()
@@ -229,6 +266,7 @@ class LVHVBox:
         rampThrd.start()
         return [0]
 
+
     def resetHV(self,arglist):
         if arglist[0] == 0:
             self.ser1.write(str.encode('R'))
@@ -236,8 +274,8 @@ class LVHVBox:
             self.ser2.write(str.encode('R'))
 
         return [0]
-        
-        
+
+
     def setHVtrip(self,arglist):
 #        cmd = "T"+str(arglist[1]) #T100 changes trip point to 100nA
         cmd = "T"
@@ -298,8 +336,10 @@ class LVHVBox:
 
 
 
+    ## =============
     ## readvoltage()
     ## =============
+
     def readvoltage(self,channel):
 
         ret = []
@@ -321,8 +361,11 @@ class LVHVBox:
         return ret
     
     
+
+    ## =============
     ## readcurrent()
     ## =============
+
     def readcurrent(self,channel):
 
         ret = []
@@ -352,8 +395,11 @@ class LVHVBox:
         return ret
     
     
+
+    ## ==========
     ## readtemp()
     ## ==========
+
     def readtemp(self,channel):
 
         ret = []

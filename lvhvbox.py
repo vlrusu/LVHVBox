@@ -17,7 +17,7 @@ import atexit
 import serial
 
 import cmd2
-from  commands import *
+from commands import *
 
 from datetime import datetime
 
@@ -66,9 +66,8 @@ class CmdLoop(cmd2.Cmd):
         super().__init__(shortcuts=shortcuts)
 
 
-
-
-# There has to be a command for every interaction we need. So, readvoltage, readcurrents, readtemps, etc. Each one has to have its counterpart in commands.py
+    # There has to be a command for every interaction we need. So, readvoltage, readcurrents, readtemps, etc.
+    # Each one has to have its counterpart in commands.py
 
     # readvoltage()
     pprint_parser = cmd2.Cmd2ArgumentParser()
