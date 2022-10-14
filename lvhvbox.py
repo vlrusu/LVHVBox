@@ -16,6 +16,8 @@ from pprint import pprint
 import atexit
 import serial
 
+import logging
+
 import cmd2
 from commands import *
 
@@ -163,6 +165,8 @@ if __name__ == '__main__':
 
     lvqueue = queue.Queue()
     hvqueue = queue.Queue()
+
+    logging.basicConfig(filename='lvhvbox.log', format='%(asctime)s:%(levelname)s:%(message)s', encoding='utf-8', level=logging.DEBUG)
 
     sertmp1 = serial.Serial('/dev/ttyACM0', 115200, timeout=0.1,write_timeout = 1)
     sertmp2 = serial.Serial('/dev/ttyACM1', 115200, timeout=0.1,write_timeout = 1)

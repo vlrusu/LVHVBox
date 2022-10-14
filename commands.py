@@ -104,52 +104,54 @@ class LVHVBox:
     def loglvdata(self):
         # This has to use the commands in commands.py to read: voltages, currents, temps and whatever else we put in GUI
         # In the format: lvlog.write("1 2 3\n")voltages = self.readvoltage([None])
-        voltages = self.readvoltage([None])
-        self.v48 = [0]*NCHANNELS
+        try:
+            voltages = self.readvoltage([None])
+            self.v48 = [0]*NCHANNELS
 
-        currents = self.readcurrent([None])
-        self.i48 = [0]*NCHANNELS
+            currents = self.readcurrent([None])
+            self.i48 = [0]*NCHANNELS
 
-        temps = self.readtemp([None])
-        self.T48 = [0]*NCHANNELS
+            temps = self.readtemp([None])
+            self.T48 = [0]*NCHANNELS
 
-        for ich in range(NCHANNELS):
-            self.v48[ich] = voltages[ich]
-            self.i48[ich] = currents[ich]
-            self.T48[ich] = temps[ich]
+            for ich in range(NCHANNELS):
+                self.v48[ich] = voltages[ich]
+                self.i48[ich] = currents[ich]
+                self.T48[ich] = temps[ich]
 
-        self.lvlog.write(" ".join(str(e) for e in  voltages))
-        self.lvlog.write(" ")
-        self.lvlog.write(" ".join(str(e) for e in currents))
-        self.lvlog.write(" ")
-        self.lvlog.write(" ".join(str(e) for e in temps))
-        self.lvlog.write("\n")
-        self.lvlog.flush()
+            self.lvlog.write(" ".join(str(e) for e in  voltages))
+            self.lvlog.write(" ")
+            self.lvlog.write(" ".join(str(e) for e in currents))
+            self.lvlog.write(" ")
+            self.lvlog.write(" ".join(str(e) for e in temps))
+            self.lvlog.write("\n")
+            self.lvlog.flush()
 
-        point = Point("lvdata") \
-            .tag("user", "vrusu") \
-            .field("v48_0", self.v48[0]) \
-            .field("v48_1", self.v48[1]) \
-            .field("v48_2", self.v48[2]) \
-            .field("v48_3", self.v48[3]) \
-            .field("v48_4", self.v48[4]) \
-            .field("v48_5", self.v48[5]) \
-            .field("i48_0", self.i48[0]) \
-            .field("i48_1", self.i48[1]) \
-            .field("i48_2", self.i48[2]) \
-            .field("i48_3", self.i48[3]) \
-            .field("i48_4", self.i48[4]) \
-            .field("i48_5", self.i48[5]) \
-            .field("T48_0", self.T48[0]) \
-            .field("T48_1", self.T48[1]) \
-            .field("T48_2", self.T48[2]) \
-            .field("T48_3", self.T48[3]) \
-            .field("T48_4", self.T48[4]) \
-            .field("T48_5", self.T48[5]) \
-            .time(datetime.utcnow(), WritePrecision.NS)
-        
-        self.write_api.write(self.bucket, self.org, point)
+            point = Point("lvdata") \
+                .tag("user", "vrusu") \
+                .field("v48_0", self.v48[0]) \
+                .field("v48_1", self.v48[1]) \
+                .field("v48_2", self.v48[2]) \
+                .field("v48_3", self.v48[3]) \
+                .field("v48_4", self.v48[4]) \
+                .field("v48_5", self.v48[5]) \
+                .field("i48_0", self.i48[0]) \
+                .field("i48_1", self.i48[1]) \
+                .field("i48_2", self.i48[2]) \
+                .field("i48_3", self.i48[3]) \
+                .field("i48_4", self.i48[4]) \
+                .field("i48_5", self.i48[5]) \
+                .field("T48_0", self.T48[0]) \
+                .field("T48_1", self.T48[1]) \
+                .field("T48_2", self.T48[2]) \
+                .field("T48_3", self.T48[3]) \
+                .field("T48_4", self.T48[4]) \
+                .field("T48_5", self.T48[5]) \
+                .time(datetime.utcnow(), WritePrecision.NS)
 
+            self.write_api.write(self.bucket, self.org, point)
+        except:
+            logging.error("LV logging failed")
 
 
     ## ===========
@@ -343,21 +345,25 @@ class LVHVBox:
     def readvoltage(self,channel):
 
         ret = []
-        if channel[0] == None:
-            for ich in range(NCHANNELS):
-                self.bus.write_byte_data(0x50,0x0,ich+1)  # first is the coolpac
+
+        try:
+            if channel[0] == None:
+                for ich in range(NCHANNELS):
+                    self.bus.write_byte_data(0x50,0x0,ich+1)  # first is the coolpac
+                    reading=self.bus.read_byte_data(0x50,0xD0)
+                    reading=self.bus.read_i2c_block_data(0x50,0x8B,2)
+                    value = float(reading[0]+256*reading[1])/256.
+                    ret.append(value)
+
+            else:
+                self.bus.write_byte_data(0x50,0x0,channel[0]+1)
                 reading=self.bus.read_byte_data(0x50,0xD0)
                 reading=self.bus.read_i2c_block_data(0x50,0x8B,2)
                 value = float(reading[0]+256*reading[1])/256.
                 ret.append(value)
-
-        else:
-            self.bus.write_byte_data(0x50,0x0,channel[0]+1)
-            reading=self.bus.read_byte_data(0x50,0xD0)
-            reading=self.bus.read_i2c_block_data(0x50,0x8B,2)
-            value = float(reading[0]+256*reading[1])/256.
-            ret.append(value)
-
+        except:
+            logging.error("I2C read error")
+                
         return ret
     
     

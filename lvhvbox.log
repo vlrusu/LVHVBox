@@ -1,0 +1,16 @@
+ERROR:I2C read error
+ERROR:I2C read error
+ERROR:LV logging failed
+ERROR:LV logging failed
+ERROR:I2C read error
+ERROR:LV logging failed
+ERROR:LV logging failed
+2022-10-14 11:37:33,642:ERROR:I2C read error
+2022-10-14 11:37:33,676:ERROR:LV logging failed
+2022-10-14 11:38:02,516:ERROR:LV logging failed
+2022-10-14 11:43:56,422:ERROR:LV logging failed
+2022-10-14 11:51:45,667:ERROR:LV logging failed
+2022-10-14 11:56:36,617:ERROR:LV logging failed
+2022-10-14 11:58:59,476:ERROR:I2C read error
+2022-10-14 11:58:59,522:ERROR:LV logging failed
+2022-10-14 12:08:08,698:ERROR:LV logging failed
