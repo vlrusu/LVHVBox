@@ -246,6 +246,9 @@ class LVHVBox:
     ## Vadim's default functions
     ## =========================
 
+    #def rampup(self,channel,voltage):   
+
+
     def ramphvupdown(self,channel,rampitup):
         hvlock.acquire()
         if rampitup == True:
@@ -354,13 +357,13 @@ class LVHVBox:
                     reading=self.bus.read_i2c_block_data(0x50,0x8B,2)
                     value = float(reading[0]+256*reading[1])/256.
                     ret.append(value)
-
             else:
                 self.bus.write_byte_data(0x50,0x0,channel[0]+1)
                 reading=self.bus.read_byte_data(0x50,0xD0)
                 reading=self.bus.read_i2c_block_data(0x50,0x8B,2)
                 value = float(reading[0]+256*reading[1])/256.
                 ret.append(value)
+
         except:
             logging.error("I2C read error")
                 
@@ -375,9 +378,21 @@ class LVHVBox:
     def readcurrent(self,channel):
 
         ret = []
-        if channel[0] == None:
-            for ich in range(NCHANNELS):
-                self.bus.write_byte_data(0x50,0x0,ich+1)  # first is the coolpac
+
+        try:
+            if channel[0] == None:
+                for ich in range(NCHANNELS):
+                    self.bus.write_byte_data(0x50,0x0,ich+1)  # first is the coolpac
+                    reading=self.bus.read_byte_data(0x50,0xD0)
+                    reading=self.bus.read_i2c_block_data(0x50,0x8C,2)
+                    value = reading[0]+256*reading[1]
+                    exponent = ( value >> 11 ) & 0x1f
+                    exponent = exponent-32
+                    mantissa = value & 0x7ff
+                    current = mantissa*2**exponent
+                    ret.append(current)
+            else:
+                self.bus.write_byte_data(0x50,0x0,channel[0]+1)
                 reading=self.bus.read_byte_data(0x50,0xD0)
                 reading=self.bus.read_i2c_block_data(0x50,0x8C,2)
                 value = reading[0]+256*reading[1]
@@ -386,17 +401,9 @@ class LVHVBox:
                 mantissa = value & 0x7ff
                 current = mantissa*2**exponent
                 ret.append(current)
-                
-        else:
-            self.bus.write_byte_data(0x50,0x0,channel[0]+1)
-            reading=self.bus.read_byte_data(0x50,0xD0)
-            reading=self.bus.read_i2c_block_data(0x50,0x8C,2)
-            value = reading[0]+256*reading[1]
-            exponent = ( value >> 11 ) & 0x1f
-            exponent = exponent-32
-            mantissa = value & 0x7ff
-            current = mantissa*2**exponent
-            ret.append(current)
+
+        except:
+            logging.error("I2C reading error")
 
         return ret
     
@@ -409,9 +416,20 @@ class LVHVBox:
     def readtemp(self,channel):
 
         ret = []
-        if channel[0] == None:
-            for ich in range(NCHANNELS):
-                self.bus.write_byte_data(0x50,0x0,ich+1)  # first is the coolpac
+
+        try:
+            if channel[0] == None:
+                for ich in range(NCHANNELS):
+                    self.bus.write_byte_data(0x50,0x0,ich+1)  # first is the coolpac
+                    reading=self.bus.read_byte_data(0x50,0xD0)
+                    reading=self.bus.read_i2c_block_data(0x50,0x8D,2)
+                    value = reading[0]+256*reading[1]
+                    exponent = ( value >> 11 ) & 0x1f
+                    mantissa = value & 0x7ff
+                    temp = mantissa*2**exponent
+                    ret.append(temp)
+            else:
+                self.bus.write_byte_data(0x50,0x0,channel[0]+1)
                 reading=self.bus.read_byte_data(0x50,0xD0)
                 reading=self.bus.read_i2c_block_data(0x50,0x8D,2)
                 value = reading[0]+256*reading[1]
@@ -419,15 +437,7 @@ class LVHVBox:
                 mantissa = value & 0x7ff
                 temp = mantissa*2**exponent
                 ret.append(temp)
-            
-        else:
-            self.bus.write_byte_data(0x50,0x0,channel[0]+1)
-            reading=self.bus.read_byte_data(0x50,0xD0)
-            reading=self.bus.read_i2c_block_data(0x50,0x8D,2)
-            value = reading[0]+256*reading[1]
-            exponent = ( value >> 11 ) & 0x1f
-            mantissa = value & 0x7ff
-            temp = mantissa*2**exponent
-            ret.append(temp)
 
+        except:
+            logging.error("I2C reading error")
         return ret

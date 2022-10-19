@@ -14,3 +14,9 @@ ERROR:LV logging failed
 2022-10-14 11:58:59,476:ERROR:I2C read error
 2022-10-14 11:58:59,522:ERROR:LV logging failed
 2022-10-14 12:08:08,698:ERROR:LV logging failed
+2022-10-15 01:47:33,532:ERROR:HV data from serial not the right length
+2022-10-15 01:47:33,533:ERROR:  0.362  0.447  0.258  0.533  0.387  0.400 |   1.269  2.596  3.393 -0.627  2.716  0.736 | 1.11 | 1 | ADCTime=63000 TotalTime=31069  0.391  0.429  0.185  0.547  0.435  0.370 |   1.192  2.621  3.709 -0.404  2.753  0.954 | 1.14 | 1 | ADCTime=63055 TotalTime=310096
+
+2022-10-15 04:25:39,505:ERROR:HV data from serial not the right length
+2022-10-15 04:25:39,506:ERROR: -3.240  0.399  0.192  0.584  0.440  0.419 |   1.231  2.328  3.334 -0.642  2.801  0.789 | 1.11 | 1 | ADCTime=63001 TotalTime=31069 -3.291  0.428  0.238  0.533  0.447  0.395 |   1.013  2.435  3.454 -0.556  2.999  1.094 | 1.11 | 1 | ADCTime=63000 TotalTime=311333
+
