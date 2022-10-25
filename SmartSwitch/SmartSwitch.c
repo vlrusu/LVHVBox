@@ -19,7 +19,7 @@
 #define nAdc  6		// Number of SmartSwitches
 #define mChn  6		// Number of channels for trip processing
 
-#define pico 2
+#define pico 1
 
 
 
@@ -47,8 +47,9 @@ const float adc_to_uA = 2.048 / pow(2, 15) / 8200.0 * 1.E6;	// ADC full-scale vo
 
 // Trip constants and variables
 const uint8_t liveChn = 0b00111111;		// Zeros for any channel you do NOT want trip logic applied to
+//const uint8_t liveChn = 0b01;		// Zeros for any channel you do NOT want trip logic applied to
 int32_t tripLimit = 20.;// / (adc_to_uA); //trip at 200uA
-const uint16_t tripCount = 5;
+const uint16_t tripCount = 50;
 uint8_t count_over_current[mChn];
 
 uint8_t state = 0;
@@ -205,7 +206,7 @@ void trips(int32_t currents[], int32_t limit) {
 
     //Channels in data are upside down, FIXME!!!
 
-//    printf("Trip count on channel %d changed to %d\n",mChn-1-chn,count_over_current[chn]);
+    printf("Trip count on channel %d changed to %d\n",mChn-1-chn,count_over_current[chn]);
 
   }
 }

@@ -104,6 +104,7 @@ class LVHVBox:
     def loglvdata(self):
         # This has to use the commands in commands.py to read: voltages, currents, temps and whatever else we put in GUI
         # In the format: lvlog.write("1 2 3\n")voltages = self.readvoltage([None])
+
         try:
             voltages = self.readvoltage([None])
             self.v48 = [0]*NCHANNELS
@@ -150,115 +151,158 @@ class LVHVBox:
                 .time(datetime.utcnow(), WritePrecision.NS)
 
             self.write_api.write(self.bucket, self.org, point)
+
         except:
-            logging.error("LV logging failed")
+            logging.error("LV channels logging failed")
 
 
-    ## ===========
-    ## Log HV data
-    ## ===========
+
+    ## =============
+    ## Log HV 2 data
+    ## =============
         
-    def loghvdata(self):
+    def loghvdata2(self):
+        # HV channels from 6 to 11
 
-        line1 = self.ser1.readline().decode('ascii')
-        line2 = self.ser2.readline().decode('ascii')
+        try:
+            line2 = self.ser2.readline().decode('ascii')
 
-        d1 = line1.split()
-        if (len(d1) != HVSERIALDATALENGTH):
-            logging.error('HV data from serial not the right length')
-            logging.error(line1)
-            return 0
-        if (d1[6] != "|" or d1[13] != "|" or d1[15]!= "|" or d1[17]!= "|"):
-            logging.error('HV data from serial not right format')
-            logging.error(line1)
-            return 0
+            if line2.startswith("Trip"):
+                self.cmdapp.async_alert(line2)
+                return 0
 
-        d2 = line2.split()
-        if (len(d2) != HVSERIALDATALENGTH):
-            logging.error('HV data from serial not the right length')
-            logging.error(line2)
-            return 0
+            d2 = line2.split()
+            if (len(d2) != HVSERIALDATALENGTH):
+                logging.error('HV data from serial not the right length')
+                logging.error(line2)
+                return 0
 
-        if (d2[6] != "|" or d2[13] != "|" or d2[15]!= "|" or d2[17]!= "|"):
-            logging.error('HV data from serial not right format')
-            logging.error(line1)
-            return 0
+            if (d2[6] != "|" or d2[13] != "|" or d2[15]!= "|" or d2[17]!= "|"):
+                logging.error('HV data from serial not right format')
+                logging.error(line1)
+                return 0
 
-        hvlist = []
-        self.ihv = [0]*NHVCHANNELS
-        self.vhv = [0]*NHVCHANNELS
-        for ich in range(6):
-            self.ihv[ich] = float(d1[5-ich])
-            self.vhv[ich] = float(d1[12-ich])
-            self.ihv[ich+6] = float(d2[5-ich])
-            self.vhv[ich+6] = float(d2[12-ich])
-            hvlist.append(self.ihv[ich])
-            hvlist.append(self.vhv[ich])
-            hvlist.append(self.ihv[ich+6])
-            hvlist.append(self.vhv[ich+6])
+            hvlist = []
+            self.ihv = [0]*NHVCHANNELS
+            self.vhv = [0]*NHVCHANNELS
+            for ich in range(6):
+                self.ihv[ich+6] = float(d2[5-ich])
+                self.vhv[ich+6] = float(d2[12-ich])
+                hvlist.append(self.ihv[ich+6])
+                hvlist.append(self.vhv[ich+6])
+
+            self.hvpcbtemp = float(d2[14])        
+            hvlist.append(self.hvpcbtemp)
+
+            self.hvlog.write(" ".join(str(e) for e in hvlist))
+            self.hvlog.write("\n")
+            self.hvlog.flush()
+
+            point = Point("hvdata2") \
+                .tag("user", "vrusu") \
+                .field("ihv6", self.ihv[6]) \
+                .field("vhv6", self.vhv[6]) \
+                .field("ihv7", self.ihv[7]) \
+                .field("vhv7", self.vhv[7]) \
+                .field("ihv8", self.ihv[8]) \
+                .field("vhv8", self.vhv[8]) \
+                .field("ihv9", self.ihv[9]) \
+                .field("vhv9", self.vhv[9]) \
+                .field("ihv10", self.ihv[10]) \
+                .field("vhv10", self.vhv[10]) \
+                .field("ihv11", self.ihv[11]) \
+                .field("vhv11", self.vhv[11]) \
+                .field("hvpcbtemp", self.hvpcbtemp) \
+                .time(datetime.utcnow(), WritePrecision.NS)
+
+            self.write_api.write(self.bucket, self.org, point)
+
+        except:
+            logging.error("HV channels 6 to 11 logging failed")
             
-        self.i12V = float(d1[14])
-        hvlist.append(self.i12V)
+
+
+    ## =============
+    ## Log HV 1 data
+    ## =============
         
-        self.hvpcbtemp = float(d2[14])        
-        hvlist.append(self.hvpcbtemp)
-        
-        
-        self.hvlog.write(" ".join(str(e) for e in hvlist))
-        self.hvlog.write("\n")
-        self.hvlog.flush()
-        
-        point = Point("hvdata3") \
-            .tag("user", "vrusu") \
-            .field("ihv0", self.ihv[0]) \
-            .field("vhv0", self.vhv[0]) \
-            .field("ihv1", self.ihv[1]) \
-            .field("vhv1", self.vhv[1]) \
-            .field("ihv2", self.ihv[2]) \
-            .field("vhv2", self.vhv[2]) \
-            .field("ihv3", self.ihv[3]) \
-            .field("vhv3", self.vhv[3]) \
-            .field("ihv4", self.ihv[4]) \
-            .field("vhv4", self.vhv[4]) \
-            .field("ihv5", self.ihv[5]) \
-            .field("vhv5", self.vhv[5]) \
-            .field("ihv6", self.ihv[6]) \
-            .field("vhv6", self.vhv[6]) \
-            .field("ihv7", self.ihv[7]) \
-            .field("vhv7", self.vhv[7]) \
-            .field("ihv8", self.ihv[8]) \
-            .field("vhv8", self.vhv[8]) \
-            .field("ihv9", self.ihv[9]) \
-            .field("vhv9", self.vhv[9]) \
-            .field("ihv10", self.ihv[10]) \
-            .field("vhv10", self.vhv[10]) \
-            .field("ihv11", self.ihv[11]) \
-            .field("vhv11", self.vhv[11]) \
-            .field("i12V", self.i12V) \
-            .field("hvpcbtemp", self.hvpcbtemp) \
+    def loghvdata1(self):
+        # HV channels 0 to 5
+
+        try:
+            line1 = self.ser1.readline().decode('ascii')
+
+            if line1.startswith("Trip"):
+                self.cmdapp.async_alert(line1)
+                return 0
+
+            d1 = line1.split()
+            if (len(d1) != HVSERIALDATALENGTH):
+                logging.error('HV data from serial not the right length')
+                logging.error(line1)
+                return 0
+
+            if (d1[6] != "|" or d1[13] != "|" or d1[15]!= "|" or d1[17]!= "|"):
+                logging.error('HV data from serial not right format')
+                logging.error(line1)
+                return 0
+
+            hvlist = []
+            self.ihv = [0]*NHVCHANNELS
+            self.vhv = [0]*NHVCHANNELS
+            for ich in range(6):
+                self.ihv[ich] = float(d1[5-ich])
+                self.vhv[ich] = float(d1[12-ich])
+                hvlist.append(self.ihv[ich])
+                hvlist.append(self.vhv[ich])
+
+            self.i12V = float(d1[14])
+            hvlist.append(self.i12V)
+
+            self.hvlog.write(" ".join(str(e) for e in hvlist))
+            self.hvlog.write("\n")
+            self.hvlog.flush()
+
+            point = Point("hvdata1") \
+                .tag("user", "vrusu") \
+                .field("ihv0", self.ihv[0]) \
+                .field("vhv0", self.vhv[0]) \
+                .field("ihv1", self.ihv[1]) \
+                .field("vhv1", self.vhv[1]) \
+                .field("ihv2", self.ihv[2]) \
+                .field("vhv2", self.vhv[2]) \
+                .field("ihv3", self.ihv[3]) \
+                .field("vhv3", self.vhv[3]) \
+                .field("ihv4", self.ihv[4]) \
+                .field("vhv4", self.vhv[4]) \
+                .field("ihv5", self.ihv[5]) \
+                .field("vhv5", self.vhv[5]) \
+                .field("i12V", self.i12V) \
             .time(datetime.utcnow(), WritePrecision.NS)
 
-        self.write_api.write(self.bucket, self.org, point)
+            self.write_api.write(self.bucket, self.org, point)
 
+        except:
+            logging.error("HV channels 0 to 5 logging failed")
 
+        
 
     ## =========================
     ## Vadim's default functions
-    ## =========================
+    ## ========================= 
 
-    #def rampup(self,channel,voltage):   
-
-
-    def ramphvupdown(self,channel,rampitup):
+    def ramphvup(self,channel,voltage):
         hvlock.acquire()
-        if rampitup == True:
-            self.rampup.rampup_hv(channel,1500)
-        else:
-            self.rampup.rampup_hv(channel,0)
-        #        for i in tqdm(range(10)):
-#            time.sleep(3)
+        print ("TEST:",channel,voltage)
+        self.rampup.rampup_hv(channel,voltage)
+        self.cmdapp.async_alert('Channel '+str(channel)+' done ramping'+' to '+str(voltage))
+        hvlock.release()
 
-        self.cmdapp.async_alert('Channel '+str(channel)+' done ramping')
+
+    def sethv(self,channel,voltage):
+        hvlock.acquire()
+        self.rampup.set_hv(channel,voltage)
+        self.cmdapp.async_alert('Channel '+str(channel)+' set '+' to '+str(0.))
         hvlock.release()
         
         
@@ -267,87 +311,18 @@ class LVHVBox:
         only need to worry about the HV, since other LV stuff is on different pins and the MCP writes should 
         not affect them"""
 
-        rampThrd = threading.Thread(target=self.ramphvupdown,args=(arglist[0],arglist[1]))
+        rampThrd = threading.Thread(target=self.ramphvup,args=(arglist[0],arglist[1]))
         rampThrd.start()
         return [0]
 
 
-    def resetHV(self,arglist):
-        if arglist[0] == 0:
-            self.ser1.write(str.encode('R'))
-        else:
-            self.ser2.write(str.encode('R'))
+    def down(self,arglist):
+        """spi linux driver is thread safe but the exteder operations are not. However, I 
+        only need to worry about the HV, since other LV stuff is on different pins and the MCP writes should 
+        not affect them"""
 
-        return [0]
-
-
-    def setHVtrip(self,arglist):
-#        cmd = "T"+str(arglist[1]) #T100 changes trip point to 100nA
-        cmd = "T"
-        if arglist[0] == 0:
-            self.ser1.write(str.encode(cmd))
-        else:
-            self.ser2.write(str.encode(cmd))
-        cmd = str(arglist[1]) + "\r\n"
-        if arglist[0] == 0:
-            self.ser1.write(str.encode(cmd))
-        else:
-            self.ser2.write(str.encode(cmd))
-
-        return [arglist[0],arglist[1]]
-        
-    
-    def powerOn(self,channel):
-        ret = []
-        if channel[0] ==  None:
-            GPIO.output(GLOBAL_ENABLE_PIN,GPIO.HIGH)
-            for ich in range(0,6):
-                self.self.mcp.digitalWrite(ich+8, MCP23S17.LEVEL_HIGH)
-        else:
-             ch = abs (channel[0])
-             GPIO.output(GLOBAL_ENABLE_PIN,GPIO.HIGH)
-             self.mcp.digitalWrite(ch+8, MCP23S17.LEVEL_HIGH)
-        return ret
-        
-        
-    def powerOff(self,channel):
-        ret = []
-        if channel[0] ==  None:
-            GPIO.output(GLOBAL_ENABLE_PIN,GPIO.LOW)
-            for ich in range(0,6):
-                self.self.mcp.digitalWrite(ich+8, MCP23S17.LEVEL_LOW)
-        else:
-             ch = abs (channel[0])
-             GPIO.output(GLOBAL_ENABLE_PIN,GPIO.LOW)
-             self.mcp.digitalWrite(ch+8, MCP23S17.LEVEL_LOW)
-        return ret
-        
-        
-    def test(self,channel):
-        ret = []
-        print(channel)
-        if channel[0] == None:
-            for i in range(NCHANNELS):
-                ret.append(i)
-        else:
-    #        for i in range(10):
-    #            app.async_alert("Testing " + str(i))
-    #            time.sleep(1)
-            if channel[1] == True:
-                ret.append(channel[0])
-            else:
-                ret.append(-channel[0])
-        return ret
-
-
-
-    ## =============
-    ## readvoltage()
-    ## =============
-
-    def readvoltage(self,channel):
-
-        ret = []
+        rampThrd = threading.Thread(target=self.sethv,args=(arglist[0],0))
+        rampThrd.start()
 
         try:
             if channel[0] == None:

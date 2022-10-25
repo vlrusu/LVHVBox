@@ -69,6 +69,16 @@ void initialization(){
   DAC8164_setup (&dac[2], MCPPINBASE, 6, 2, 0, -1, -1);
 }
 
+void set_hv(int channel, float value){
+  int idac = (int) (channel/4);
+
+
+  uint32_t digvalue = ( (int) (16383.*(value/2.5))) & 0x3FFF;
+  printf("%d\n",digvalue);
+
+  DAC8164_writeChannel(&dac[idac], channel, digvalue);
+
+}
 
 void rampup_hv(int channel, int value){
   int idac = (int) (channel/4);

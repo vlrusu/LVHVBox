@@ -48,14 +48,38 @@ def lvloop():
     while (1):
         try:
             lvdata = lvqueue.get(block=False)
-            app.async_alert("I got a command")
+            app.async_alert("I got a LV command")
             retc = process_command(lvdata)
         
         except queue.Empty:
-            lvhvbox.loghvdata()
             lvhvbox.loglvdata()
-            time.sleep(1)
+            time.sleep(0.1)
 
+def hvloop1():
+
+    while (1):
+        try:
+            hvdata = hvqueue1.get(block=False)
+            app.async_alert("I got a HV command")
+            retc = process_command(hvdata)
+        
+        except queue.Empty:
+            lvhvbox.loghvdata1()
+            time.sleep(0.1)
+
+
+def hvloop2():
+
+    while (1):
+        try:
+            hvdata = hvqueue2.get(block=False)
+            app.async_alert("I got a HV command")
+            retc = process_command(hvdata)
+        
+        except queue.Empty:
+            lvhvbox.loghvdata2()
+            time.sleep(0.1)
+            
 
 
 class CmdLoop(cmd2.Cmd):
@@ -97,12 +121,14 @@ class CmdLoop(cmd2.Cmd):
     
     # test()
     pprint_parser = cmd2.Cmd2ArgumentParser()
+    pprint_parser.add_argument('-v', '--voltage', type=float, help='Volatge to ramp to')
     pprint_parser.add_argument('-c', '--channel', type=int, help='Channel number')
-    pprint_parser.add_argument('-u', '--rampup', action='store_true', help='Ramp up')
+
     @cmd2.with_argparser(pprint_parser)
     def do_test(self, args):
         """Print the options and argument list this options command was called with."""
-        lvqueue.put([args.cmd2_statement.get().command, args.channel, args.rampup])
+        lvqueue.put([args.cmd2_statement.get().command, args.channel, args.voltage])
+
         
     # powerOn()
     pprint_parser = cmd2.Cmd2ArgumentParser()
@@ -123,11 +149,20 @@ class CmdLoop(cmd2.Cmd):
     # ramp()
     pprint_parser = cmd2.Cmd2ArgumentParser()
     pprint_parser.add_argument('-c', '--channel', type=int, help='Channel number')
-    pprint_parser.add_argument('-u', '--rampup', action ='store_true', help='Rampup')
+    pprint_parser.add_argument('-v', '--voltage', type=int, help='Volatge to ramp to')    
+
     @cmd2.with_argparser(pprint_parser)
     def do_ramp(self, args):
         """Print the options and argument list this options command was called with."""
-        lvqueue.put([args.cmd2_statement.get().command, args.channel, args.rampup])
+        hvqueue1.put([args.cmd2_statement.get().command, args.channel, args.voltage])
+    # down()
+    pprint_parser = cmd2.Cmd2ArgumentParser()
+    pprint_parser.add_argument('-c', '--channel', type=int, help='Channel number')
+
+    @cmd2.with_argparser(pprint_parser)
+    def do_down(self, args):
+        """Print the options and argument list this options command was called with."""
+        hvqueue1.put([args.cmd2_statement.get().command, args.channel])
         
     # resetHV()
     pprint_parser = cmd2.Cmd2ArgumentParser()
@@ -135,7 +170,7 @@ class CmdLoop(cmd2.Cmd):
     @cmd2.with_argparser(pprint_parser)
     def do_resetHV(self, args):
         """Print the options and argument list this options command was called with."""
-        lvqueue.put([args.cmd2_statement.get().command, args.channel])
+        hvqueue1.put([args.cmd2_statement.get().command, args.channel])
         
     # setHVtrip()
     pprint_parser = cmd2.Cmd2ArgumentParser()
@@ -144,7 +179,7 @@ class CmdLoop(cmd2.Cmd):
     @cmd2.with_argparser(pprint_parser)
     def do_setHVtrip(self, args):
         """Print the options and argument list this options command was called with."""
-        lvqueue.put([args.cmd2_statement.get().command, args.channel, args.trippoint])
+        hvqueue1.put([args.cmd2_statement.get().command, args.channel, args.trippoint])
         
       
 
@@ -164,16 +199,21 @@ if __name__ == '__main__':
 
 
     lvqueue = queue.Queue()
-    hvqueue = queue.Queue()
+    hvqueue1 = queue.Queue()
+    hvqueue2 = queue.Queue() # this is such a hack!!!!
 
     logging.basicConfig(filename='lvhvbox.log', format='%(asctime)s:%(levelname)s:%(message)s', encoding='utf-8', level=logging.DEBUG)
 
-    sertmp1 = serial.Serial('/dev/ttyACM0', 115200, timeout=0.1,write_timeout = 1)
-    sertmp2 = serial.Serial('/dev/ttyACM1', 115200, timeout=0.1,write_timeout = 1)
+    sertmp1 = serial.Serial('/dev/ttyACM0', 115200, timeout=10,write_timeout = 1)
+    sertmp2 = serial.Serial('/dev/ttyACM1', 115200, timeout=10,write_timeout = 1)
     
     #decide which on the 1 and which is 2
     sertmp1.timeout = None
-    line = sertmp1.readline().decode('ascii')
+
+    line = ""
+    while(len(line)) <30:
+        line = sertmp1.readline().decode('ascii')
+
     whichone = line.split("|")[3][1]
     print("ser1 is " + str(whichone))    
 
@@ -184,8 +224,11 @@ if __name__ == '__main__':
         ser1 = sertmp2
         ser2 = sertmp1
 
-    sertmp2.timeout = None    
-    line = sertmp2.readline().decode('ascii')
+    sertmp2.timeout = None
+    line = ""
+    while(len(line)) < 30:
+        line = sertmp2.readline().decode('ascii')
+#    print(len(line))
     whichone = line.split("|")[3][1]
     print("ser2 is " + str(whichone))    
 
@@ -200,6 +243,10 @@ if __name__ == '__main__':
 
     lvThrd = threading.Thread(target=lvloop, daemon = True)
     lvThrd.start()
+    hvThrd1 = threading.Thread(target=hvloop1, daemon = True)
+    hvThrd1.start()
+    hvThrd2 = threading.Thread(target=hvloop2, daemon = True)
+    hvThrd2.start()
     
     app.cmdloop()
     lvlog.close()

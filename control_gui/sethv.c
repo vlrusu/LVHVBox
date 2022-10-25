@@ -73,8 +73,16 @@ void initialization(){
 void set_hv(int channel, float value){
   int idac = (int) (channel/4);
 
+  float alpha = 1.;
+  if ( channel == 0 ) alpha = 0.9013;
+  if ( channel == 1 ) alpha = 0.9081;
+  if ( channel == 2 ) alpha = 0.9055;
+  if ( channel == 3 ) alpha = 0.9028;
+  if ( channel == 4 ) alpha = 0.9023;
+  if ( channel == 5 ) alpha = 0.9046;
 
-  uint32_t digvalue = ( (int) (16383.*(value/2.5))) & 0x3FFF;
+  
+  uint32_t digvalue = ( (int) (alpha*16383.*(value/2.5))) & 0x3FFF;
   printf("%d\n",digvalue);
 
   DAC8164_writeChannel(&dac[idac], channel, digvalue);
@@ -87,7 +95,11 @@ int main(int argc, char *argv[])
 {
   int channel = atoi(argv[1]);
 	float value = atoi(argv[2]);
-  value = value*2.3/1510.;
+
+
+
+
+	value = value*2.3/1510.;
 
 	initialization();
 
