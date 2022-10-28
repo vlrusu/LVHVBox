@@ -8,7 +8,6 @@
 #include <unistd.h>
 #include <termios.h>
 
-
 #include <wiringPi.h>
 #include <wiringPiSPI.h>
 #include <mcp23x0817.h>
@@ -16,7 +15,6 @@
 #include <softPwm.h>
 #include <linux/spi/spidev.h>
 #include <dac8164.h>
-
 
 #define MCPPINBASE 2000
 
@@ -43,6 +41,7 @@ int mygetch ( void )
   return ch;
 }
 
+
 void initialization(){
   wiringPiSetup();
   wiringPiSPISetup(SPICS, SPISPEED);
@@ -68,27 +67,34 @@ void initialization(){
   DAC8164_setup (&dac[2], MCPPINBASE, 6, 2, 0, -1, -1);
 }
 
+
 void set_hv(int channel, float value){
   int idac = (int) (channel/4);
 
   float alpha = 1.;
-  if ( channel == 0 ) alpha = 0.9013;
-  if ( channel == 1 ) alpha = 0.9081;
-  if ( channel == 2 ) alpha = 0.9055;
-  if ( channel == 3 ) alpha = 0.9028;
-  if ( channel == 4 ) alpha = 0.9023;
-  if ( channel == 5 ) alpha = 0.9046;
+  if ( channel == 0 ) alpha = 0.9055;
+  if ( channel == 1 ) alpha = 0.9073;
+  if ( channel == 2 ) alpha = 0.9051;
+  if ( channel == 3 ) alpha = 0.9012;
+  if ( channel == 4 ) alpha = 0.9012;
+  if ( channel == 5 ) alpha = 0.9034;
+  if ( channel == 6 ) alpha = 0.9009;
+  if ( channel == 7 ) alpha = 0.9027;
+  if ( channel == 8 ) alpha = 0.8977;
+  if ( channel == 9 ) alpha = 0.9012;
+  if ( channel == 10 ) alpha = 0.9015;
+  if ( channel == 11 ) alpha = 1.;  // BURNED BOARD - FIX ME!!
 
   uint32_t digvalue = ( (int) (alpha * 16383.*(value/2.5))) & 0x3FFF;
 
   DAC8164_writeChannel(&dac[idac], channel, digvalue);
-
 }
 
 
+// Main function
+// =============
 int main(int argc, char *argv[])
 {
-
   initialization();
 
   int channel = atoi(argv[1]);
@@ -96,7 +102,6 @@ int main(int argc, char *argv[])
 
   int idac = (int) (channel/4);
   printf(" Chan %i HV idac %i  is set to %7.2f\n", channel, idac, value);
-
 
   float increment = value*2.3/NSTEPS/1510.;
 
@@ -106,11 +111,7 @@ int main(int argc, char *argv[])
     setvalue += increment;
 
     set_hv(channel,setvalue);
-
   }
 
-
-
-  return 0 ;
-
+  return 0;
 }
