@@ -183,7 +183,7 @@ class CmdLoop(cmd2.Cmd):
     # rampHV()
     pprint_parser = cmd2.Cmd2ArgumentParser()
     pprint_parser.add_argument('-c', '--channel', type=int,   help='HV channel number')
-    pprint_parser.add_argument('-v', '--voltage', type=int, help='Voltage to ramp up to')    
+    pprint_parser.add_argument('-v', '--voltage', type=float, help='Voltage to ramp up to')    
     @cmd2.with_argparser(pprint_parser)
     def do_rampHV(self, args):
         """Print the options and argument list this options command was called with."""
@@ -207,7 +207,7 @@ class CmdLoop(cmd2.Cmd):
     # setHV()
     pprint_parser = cmd2.Cmd2ArgumentParser()
     pprint_parser.add_argument('-c', '--channel', type=int,   help='HV channel number')
-    pprint_parser.add_argument('-v', '--voltage', type=int, help='Voltage to set')    
+    pprint_parser.add_argument('-v', '--voltage', type=float, help='Voltage to set')    
     @cmd2.with_argparser(pprint_parser)
     def do_setHV(self, args):
         """Print the options and argument list this options command was called with."""

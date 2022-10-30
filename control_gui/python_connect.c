@@ -68,28 +68,25 @@ void initialization(){
 }
 
 
-// set_hv()
-// ========
-void set_hv(int channel, int value)
+void test(int channel, float value)
 {
 
-    float alpha = 1.;
-  if ( channel == 0 ) alpha = 0.9055;
-  if ( channel == 1 ) alpha = 0.9073;
-  if ( channel == 2 ) alpha = 0.9051;
-  if ( channel == 3 ) alpha = 0.9012;
-  if ( channel == 4 ) alpha = 0.9012;
-  if ( channel == 5 ) alpha = 0.9034;
-  if ( channel == 6 ) alpha = 0.9009;
-  if ( channel == 7 ) alpha = 0.9027;
-  if ( channel == 8 ) alpha = 0.8977;
-  if ( channel == 9 ) alpha = 0.9012;
-  if ( channel == 10 ) alpha = 0.9015;
-  if ( channel == 11 ) alpha = 1.;  // BURNED BOARD - FIX ME!!
+  printf("%d %6.3f\n",channel, value);
+
+
+}
+
+
+// set_hv()
+// ========
+void set_hv(int channel, float value)
+{
+
+
 
   int idac = (int) (channel/4);
 
-  uint32_t digvalue = ( (int) (alpha * 16383.*(value*2.3/(1510*2.5)))) & 0x3FFF;
+  uint32_t digvalue = ( (int) (16383.*(value*2.3/(1510*2.5)))) & 0x3FFF;
   printf("%d\n",digvalue);
 
   DAC8164_writeChannel(&dac[idac], channel, digvalue);
@@ -98,23 +95,11 @@ void set_hv(int channel, int value)
 
 // rampup_hv()
 // ===========
-void rampup_hv(int channel, int value)
+void rampup_hv(int channel, float value)
 {
   int idac = (int) (channel/4);
 
-  float alpha = 1.;
-  if ( channel == 0 ) alpha = 0.9055;
-  if ( channel == 1 ) alpha = 0.9073;
-  if ( channel == 2 ) alpha = 0.9051;
-  if ( channel == 3 ) alpha = 0.9012;
-  if ( channel == 4 ) alpha = 0.9012;
-  if ( channel == 5 ) alpha = 0.9034;
-  if ( channel == 6 ) alpha = 0.9009;
-  if ( channel == 7 ) alpha = 0.9027;
-  if ( channel == 8 ) alpha = 0.8977;
-  if ( channel == 9 ) alpha = 0.9012;
-  if ( channel == 10 ) alpha = 0.9015;
-  if ( channel == 11 ) alpha = 1.;  // BURNED BOARD - FIX ME!!
+  printf("TEST %d %6.2f\n",channel,value);
   
 
   float increment = value*2.3/NSTEPS/1510.;
@@ -123,7 +108,7 @@ void rampup_hv(int channel, int value)
   for (int itick =0; itick < NSTEPS; itick++){
     usleep(50000);
     setvalue += increment;
-    uint32_t digvalue = ( (int) (alpha * 16383.*(setvalue/2.5))) & 0x3FFF;
+    uint32_t digvalue = ( (int) (16383.*(setvalue/2.5))) & 0x3FFF;
     //printf("Test %d \n",digvalue);
     
     DAC8164_writeChannel(&dac[idac], channel, digvalue);

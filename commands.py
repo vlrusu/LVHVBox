@@ -67,7 +67,7 @@ class LVHVBox:
         GPIO.output(RESET_PIN,GPIO.HIGH)
 
         # HV manipulating stuff
-        rampup = "/home/mu2e/LVHVBox/control_gui/python_connect.so"
+        rampup = os.getcwd()+"/control_gui/python_connect.so"
         self.rampup=CDLL(rampup)
         self.rampup.initialization()
         
@@ -321,8 +321,8 @@ class LVHVBox:
             return [0]
 
         print("Ramping up HV channel " + str(channel) + " to " + str(voltage) + " V...")
-#        voltage = int(voltage)
-        self.rampup.rampup_hv(channel,voltage)
+        self.rampup.rampup_hv.argtypes = [c_int , c_float]
+        self.rampup.rampup_hv(channel,alpha*voltage)
         self.cmdapp.async_alert("HV channel " + str(channel) + " done ramping " + " to " + str(voltage) + "V")
         hvlock.release()
 
@@ -375,8 +375,9 @@ class LVHVBox:
             return [0]
 
         print("Setting HV channel " + str(channel) + " to " + str(voltage) + " V...")
-#        voltage = int(alpha*voltage)
-        self.rampup.set_hv(channel,voltage) #FIXME why does it need int on lvhvbox.py???
+
+        self.rampup.set_hv.argtypes = [c_int , c_float]
+        self.rampup.set_hv(channel,alpha*voltage) #FIXME why does it need int on lvhvbox.py???
         #I changed the python connect as well. Must be some mem alignemnt issue
         self.cmdapp.async_alert("HV channel " + str(channel) + " set " + " to " + str(voltage) + " V")
         hvlock.release()
