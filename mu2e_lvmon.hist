@@ -32,3 +32,19 @@ powerOn -c 0
 readvoltage -c 0
 powerOff -c 0
 readvoltage -c 0
+powerOff
+readvoltage -c 0
+powerOff
+readvoltage -c 0
+readvoltage -c 1
+readvoltage -c 2
+readvoltage -c 3
+readvoltage -c 4
+readvoltage -c 5
+readtemp -c 5
+readvoltage -c 5
+readvoltage -c 0
+readvoltage -c 1
+readvoltage -c 2
+readvoltage -c 3
+readvoltage -c 4

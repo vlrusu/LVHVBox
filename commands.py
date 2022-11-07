@@ -42,7 +42,7 @@ addresses = [0x14,0x16,0x26]
 ## ==========================================================================================
 
 class LVHVBox:
-    def __init__ (self,cmdapp,ser1,ser2,hvlog0, hvlog1 ,lvlog):
+    def __init__ (self,ser1,ser2,hvlog0, hvlog1 ,lvlog):
 
         self.ser1 = ser1
         self.ser2 = ser2
@@ -72,7 +72,6 @@ class LVHVBox:
         self.rampup.initialization()
         
         # CMD stuff
-        self.cmdapp = cmdapp
 
         # Logfile stuff
         logging.basicConfig(filename='lvhvbox.log',format='%(asctime)s %(message)s',encoding='utf-8',level=logging.DEBUG)
@@ -114,6 +113,7 @@ class LVHVBox:
                 self.i48[ich] = currents[ich]
                 self.T48[ich] = temps[ich]
 
+            self.lvlog.write(str(datetime.now().strftime("%Y:%m:%d-%H:%M:%S ")))
             self.lvlog.write(" ".join(str(e) for e in voltages))
             self.lvlog.write(" ")
             self.lvlog.write(" ".join(str(e) for e in currents))
@@ -155,13 +155,13 @@ class LVHVBox:
     ## Log HV data (channels 6 to 11)
     ## ===========================================
         
-    def loghvdata2(self):
+    def loghvdata1(self):
 
         try:
             line2 = self.ser2.readline().decode('ascii')
 
             if line2.startswith("Trip"):
-                self.cmdapp.async_alert(line2)
+                logging.error(line2)
                 return 0
 
             d2 = line2.split()
@@ -187,6 +187,7 @@ class LVHVBox:
             self.hvpcbtemp = float(d2[14])
             hvlist.append(self.hvpcbtemp)
 
+            self.hvlog1.write(datetime.now().strftime("%Y:%m:%d-%H:%M:%S "))            
             self.hvlog1.write(" ".join(str(e) for e in hvlist))
             self.hvlog1.write("\n")
             self.hvlog1.flush()
@@ -219,13 +220,13 @@ class LVHVBox:
     ## Log HV data (channels 0 to 5)
     ## ===========================================
         
-    def loghvdata1(self):
+    def loghvdata0(self):
 
         try:
             line1 = self.ser1.readline().decode('ascii')
 
             if line1.startswith("Trip"):
-                self.cmdapp.async_alert(line1)
+                logging.error(line1)
                 return 0
 
             d1 = line1.split()
@@ -250,6 +251,7 @@ class LVHVBox:
 
             self.i12V = float(d1[14])
             hvlist.append(self.i12V)
+            self.hvlog0.write(str(datetime.now().strftime("%Y:%m:%d-%H:%M:%S ")))            
 
             self.hvlog0.write(" ".join(str(e) for e in hvlist))
             self.hvlog0.write("\n")
@@ -317,15 +319,16 @@ class LVHVBox:
         elif (channel == 11):
             alpha = 1.0  # BURNED BOARD - FIX ME!!
         else:
-            print("Select an HV channel from 0 to 11!")
-            return [0]
 
-        print("Ramping up HV channel " + str(channel) + " to " + str(voltage) + " V...")
+            hvlock.release()
+            return "Select an HV channel from 0 to 11!"
+
+        
         self.rampup.rampup_hv.argtypes = [c_int , c_float]
         self.rampup.rampup_hv(channel,alpha*voltage)
-        self.cmdapp.async_alert("HV channel " + str(channel) + " done ramping " + " to " + str(voltage) + "V")
-        hvlock.release()
 
+        hvlock.release()
+        return ("HV channel " + str(channel) + " done ramping " + " to " + str(voltage) + "V")
 
     # rampHV()
     def rampHV(self,arglist):
@@ -334,7 +337,7 @@ class LVHVBox:
         not affect them"""
         rampThrd = threading.Thread(target=self.ramphvup,args=(arglist[0],arglist[1]))
         rampThrd.start()
-        return [0]
+        return 0
 
 
     # Set voltage
@@ -371,17 +374,16 @@ class LVHVBox:
         elif (channel == 11):
             alpha = 1.0  # BURNED BOARD - FIX ME!!
         else:
-            print("Select an HV channel from 0 to 11!")
-            return [0]
 
-        print("Setting HV channel " + str(channel) + " to " + str(voltage) + " V...")
+            hvlock.release()
+            return  "Select an HV channel from 0 to 11!"
 
         self.rampup.set_hv.argtypes = [c_int , c_float]
         self.rampup.set_hv(channel,alpha*voltage) #FIXME why does it need int on lvhvbox.py???
         #I changed the python connect as well. Must be some mem alignemnt issue
-        self.cmdapp.async_alert("HV channel " + str(channel) + " set " + " to " + str(voltage) + " V")
+
         hvlock.release()
-        
+        return "HV channel " + str(channel) + " set " + " to " + str(voltage) + " V"        
         
     # downHV()
     def downHV(self,arglist):
@@ -390,7 +392,7 @@ class LVHVBox:
         not affect them"""
         rampThrd = threading.Thread(target=self.sethv,args=(arglist[0],0))
         rampThrd.start()
-        return [0]
+        return 0
 
 
     # setHV()
@@ -400,7 +402,7 @@ class LVHVBox:
         not affect them"""
         rampThrd = threading.Thread(target=self.sethv,args=(arglist[0],arglist[1]))
         rampThrd.start()
-        return [0]
+        return 0
 
 
     # Reset HV serial
@@ -414,7 +416,7 @@ class LVHVBox:
             self.ser1.write(str.encode('R'))
         else:
             self.ser2.write(str.encode('R'))
-        return [0]
+        return 0
 
 
     # Set HV trip
@@ -435,7 +437,7 @@ class LVHVBox:
         else:
             self.ser2.write(str.encode(cmd))
 
-        return [arglist[0],arglist[1]]
+        return 0
 
 
 
@@ -446,7 +448,6 @@ class LVHVBox:
     # Turn on LV channel
     # ==================
     def powerOn(self,channel):
-        ret = []
 
         if channel[0] ==  None:
             GPIO.output(GLOBAL_ENABLE_PIN,GPIO.HIGH)
@@ -457,13 +458,12 @@ class LVHVBox:
             GPIO.output(GLOBAL_ENABLE_PIN,GPIO.HIGH)
             self.mcp.digitalWrite(ch+8, MCP23S17.LEVEL_HIGH)
         
-        return ret
+        return 0
 
 
     # Turn off LV channel
     # ===================
     def powerOff(self,channel):
-        ret = []
 
         if channel[0] ==  None:
             GPIO.output(GLOBAL_ENABLE_PIN,GPIO.LOW)
@@ -474,14 +474,14 @@ class LVHVBox:
             GPIO.output(GLOBAL_ENABLE_PIN,GPIO.LOW)
             self.mcp.digitalWrite(ch+8, MCP23S17.LEVEL_LOW)
 
-        return ret
+        return 0
 
 
     # Read LV channel voltage
     # =======================
     def readvoltage(self,channel):
-        ret = []
 
+        ret= []
         try:
             if channel[0] == None:
                 for ich in range(NLVCHANNELS):
@@ -496,7 +496,7 @@ class LVHVBox:
                 reading=self.bus.read_i2c_block_data(0x50,0x8B,2)
                 value = float(reading[0]+256*reading[1])/256.
                 ret.append(value)
-
+            
         except:
             logging.error("I2C reading error")
                 
@@ -530,7 +530,6 @@ class LVHVBox:
                 mantissa = value & 0x7ff
                 current = mantissa*2**exponent
                 ret.append(current)
-
         except:
             logging.error("I2C reading error")
 

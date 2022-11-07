@@ -82,3 +82,306 @@
 2022-10-29 08:18:35,591:ERROR:HV data from serial not the right length
 2022-10-29 08:18:35,592:ERROR:Resetting trip
 
+2022-11-07 12:32:15,163:ERROR:(Thread-4 ):HV data from serial not the right length
+2022-11-07 12:32:15,164:ERROR:(Thread-4 ):  0.459  0.417  0.159  0.577  0.345  0.663 |  -2.200 1450.717 1450.548 -0.345  2.766  1.326 | 1.17 | 1 | ADCTime=46002 TotalTi  0.475  0.378  0.149  0.552  0.432  0.602 |  -1.788 1450.424 1450.769 -0.738  3.283  1.096 | 1.17 | 1 | ADCTime=46007 TotalTime=289224
+
+2022-11-07 12:33:03,213:ERROR:(Thread-4 ):HV data from serial not the right length
+2022-11-07 12:33:03,214:ERROR:(Thread-4 ):  0.000  0.399  0.349  0.315  0.441  0.246 |   0.000  4.008  2.729  1.810  1.306  1.764 | 25.87 | 2 | ADCTime=46881 TotalTime=287  0.000  0.442  0.312  0.291  0.427  0.192 |   0.000  3.310  3.676  1.702  1.117  1.664 | 26.74 | 2 | ADCTime=47001 TotalTime=289944
+
+2022-11-07 12:34:59,372:DEBUG:(commands ):Finshed queue: readvoltage
+2022-11-07 12:35:12,271:DEBUG:(commands ):Finshed queue: readvoltage
+2022-11-07 12:37:30,150:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 12:37:30,403:ERROR:(Thread-4 ):HV data from serial not the right length
+2022-11-07 12:37:30,404:ERROR:(Thread-4 ):  0.000  0.401  0.327  0.384  0.385  0.213 |   0.000  3.600  3.417  1.924  1.298  1.982 | 25.95 | 2 | ADCTime=46861 TotalTime=287  0.000  0.417  0.294  0.320  0.367  0.162 |   0.000  3.607  2.859  1.711  1.028  1.787 | 26.52 | 2 | ADCTime=46888 TotalTime=287462
+
+2022-11-07 12:37:31,151:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 12:37:32,153:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 12:37:33,154:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 12:37:34,156:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 12:37:35,157:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 12:37:36,159:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 12:37:37,160:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 12:37:38,162:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 12:37:39,164:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 12:37:40,165:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 12:37:56,722:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 12:37:57,723:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 12:37:58,725:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 12:37:59,726:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 12:38:00,728:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 12:38:01,729:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 12:38:02,731:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 12:38:03,733:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 12:38:04,735:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 12:38:05,737:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 12:38:06,738:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 12:38:07,740:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 12:38:08,742:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 12:38:09,743:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 12:38:10,745:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 12:38:11,747:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 12:38:12,748:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 12:39:24,843:DEBUG:(commands ):Finshed queue: readvoltage
+2022-11-07 12:39:29,143:DEBUG:(commands ):Finshed queue: readvoltage
+2022-11-07 12:39:37,741:DEBUG:(commands ):Finshed queue: readvoltage
+2022-11-07 12:40:15,596:ERROR:(Thread-3 ):HV data from serial not the right length
+2022-11-07 12:40:15,596:ERROR:(Thread-3 ):  0.405  0.327  0.035  0.509  0.397  0.555 |  -1.919 1450.589 1450.722 -0.855  2.743  1.196 | 1.17 | 1 | ADCTime=46000 TotalTi  0.397  0.400  0.152  0.512  0.420  0.593 |  -1.676 1450.597 1450.713 -0.824  2.761  1.122 | 1.18 | 1 | ADCTime=46077 TotalTime=287491
+
+2022-11-07 12:52:59,325:DEBUG:(commands ):Finshed queue: powerOn
+2022-11-07 12:53:06,847:DEBUG:(commands ):Finshed queue: readvoltage
+2022-11-07 12:53:18,649:DEBUG:(commands ):Finshed queue: powerOff
+2022-11-07 12:53:22,938:DEBUG:(commands ):Finshed queue: readvoltage
+2022-11-07 12:53:42,273:ERROR:(Thread-2 ):I2C reading error
+2022-11-07 12:53:42,310:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 12:54:16,869:DEBUG:(commands ):Finshed queue: downHV
+2022-11-07 12:54:27,185:DEBUG:(commands ):Finshed queue: downHV
+2022-11-07 12:54:32,379:DEBUG:(commands ):Finshed queue: downHV
+2022-11-07 12:54:59,398:DEBUG:(commands ):Finshed queue: rampHV
+2022-11-07 12:55:27,751:DEBUG:(commands ):Finshed queue: rampHV
+2022-11-07 12:55:45,785:DEBUG:(commands ):Finshed queue: downHV
+2022-11-07 12:55:53,533:DEBUG:(commands ):Finshed queue: resetHV
+2022-11-07 12:55:54,417:ERROR:(Thread-3 ):HV data from serial not the right length
+2022-11-07 12:55:54,417:ERROR:(Thread-3 ):Resetting trip
+
+2022-11-07 12:55:59,984:DEBUG:(commands ):Finshed queue: rampHV
+2022-11-07 13:13:13,968:DEBUG:(commands ):Finshed queue: readvoltage
+2022-11-07 13:13:47,283:DEBUG:(commands ):Finshed queue: downHV
+2022-11-07 13:17:12,572:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 13:17:12,721:ERROR:(Thread-4 ):HV data from serial not the right length
+2022-11-07 13:17:12,721:ERROR:(Thread-4 ):  0.000  0.409  0.296  0.351  0.436  0.217 |   0.000  3.653  2.970  1.706  1.420  1.851 | 26.16 | 2 | ADCTime=47004 TotalTime=289  0.000  0.383  0.333  0.333  0.401  0.293 |   0.000  4.217  2.989  1.881  1.531  1.797 | 26.38 | 2 | ADCTime=46877 TotalTime=287472
+
+2022-11-07 13:17:13,602:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 13:17:14,632:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 13:17:15,662:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 13:17:16,712:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 13:17:17,768:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 13:17:18,831:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 13:17:19,893:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 13:17:20,956:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 13:17:22,017:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 13:17:23,081:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 13:17:24,145:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 13:17:25,209:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 13:17:26,265:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 13:17:27,327:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 13:17:28,390:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 13:17:29,447:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 13:17:30,509:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 13:17:31,571:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 13:17:32,634:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 13:17:33,696:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 13:17:34,754:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 13:17:35,808:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 13:17:36,871:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 13:17:37,927:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 13:17:38,989:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 13:17:40,052:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 13:17:41,117:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 13:17:42,178:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 13:17:43,241:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 13:17:44,303:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 13:17:45,366:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 13:17:46,428:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 13:17:47,486:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 13:17:48,548:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 13:17:49,604:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 13:17:50,667:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 13:17:51,730:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 13:17:52,787:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 13:17:53,845:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 13:17:54,875:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 13:17:55,906:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 13:18:30,512:ERROR:(Thread-4 ):HV data from serial not the right length
+2022-11-07 13:18:30,512:ERROR:(Thread-4 ):  0.000  0.403  0.420  0.336  0.450  0.334 |   0.000  4.021  2.857  2.148  0.957  1.974 | 26.74 | 2 | ADCTime=46881 TotalTime=287  0.000  0.409  0.338  0.269  0.422  0.318 |   0.000  3.540  2.678  1.572  1.171  1.609 | 26.45 | 2 | ADCTime=46879 TotalTime=287478
+
+2022-11-07 13:19:04,473:DEBUG:(commands ):Finshed queue: powerOff
+2022-11-07 13:19:24,857:DEBUG:(commands ):Finshed queue: powerOff
+2022-11-07 13:19:32,398:DEBUG:(commands ):Finshed queue: readvoltage
+2022-11-07 13:19:43,155:DEBUG:(commands ):Finshed queue: readvoltage
+2022-11-07 13:19:50,670:DEBUG:(commands ):Finshed queue: powerOn
+2022-11-07 13:20:07,727:DEBUG:(commands ):Finshed queue: readvoltage
+2022-11-07 13:20:21,729:DEBUG:(commands ):Finshed queue: powerOff
+2022-11-07 13:20:40,021:DEBUG:(commands ):Finshed queue: readvoltage
+2022-11-07 13:20:45,402:DEBUG:(commands ):Finshed queue: powerOff
+2022-11-07 13:20:49,704:DEBUG:(commands ):Finshed queue: readvoltage
+2022-11-07 13:21:07,974:DEBUG:(commands ):Finshed queue: powerOff
+2022-11-07 13:21:19,782:DEBUG:(commands ):Finshed queue: readvoltage
+2022-11-07 13:22:08,950:ERROR:(Thread-2 ):I2C reading error
+2022-11-07 13:22:08,972:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 13:46:03,375:ERROR:(Thread-2 ):I2C reading error
+2022-11-07 13:46:03,397:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 13:46:52,444:DEBUG:(commands ):Finshed queue: powerOn
+2022-11-07 13:47:04,270:DEBUG:(commands ):Finshed queue: readvoltage
+2022-11-07 13:47:20,415:DEBUG:(commands ):Finshed queue: powerOff
+2022-11-07 14:02:14,746:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 14:02:15,776:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 14:02:15,918:ERROR:(Thread-4 ):HV channels 6 to 11 logging failed
+2022-11-07 14:02:15,954:ERROR:(Thread-3 ):HV channels 0 to 5 logging failed
+2022-11-07 14:02:16,806:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 14:02:17,206:ERROR:(Thread-4 ):HV channels 6 to 11 logging failed
+2022-11-07 14:02:17,242:ERROR:(Thread-3 ):HV channels 0 to 5 logging failed
+2022-11-07 14:02:17,836:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 14:02:18,496:ERROR:(Thread-4 ):HV channels 6 to 11 logging failed
+2022-11-07 14:02:18,529:ERROR:(Thread-3 ):HV channels 0 to 5 logging failed
+2022-11-07 14:02:18,891:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 14:02:19,788:ERROR:(Thread-4 ):HV channels 6 to 11 logging failed
+2022-11-07 14:02:19,821:ERROR:(Thread-3 ):HV channels 0 to 5 logging failed
+2022-11-07 14:02:19,947:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 14:02:21,010:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 14:02:21,078:ERROR:(Thread-4 ):HV channels 6 to 11 logging failed
+2022-11-07 14:02:21,109:ERROR:(Thread-3 ):HV channels 0 to 5 logging failed
+2022-11-07 14:02:22,072:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 14:02:22,367:ERROR:(Thread-4 ):HV channels 6 to 11 logging failed
+2022-11-07 14:02:22,398:ERROR:(Thread-3 ):HV channels 0 to 5 logging failed
+2022-11-07 14:02:23,134:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 14:02:23,655:ERROR:(Thread-4 ):HV channels 6 to 11 logging failed
+2022-11-07 14:02:23,684:ERROR:(Thread-3 ):HV channels 0 to 5 logging failed
+2022-11-07 14:02:45,644:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 14:02:46,674:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 14:02:46,819:ERROR:(Thread-4 ):HV channels 6 to 11 logging failed
+2022-11-07 14:02:46,848:ERROR:(Thread-3 ):HV channels 0 to 5 logging failed
+2022-11-07 14:02:47,704:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 14:02:48,107:ERROR:(Thread-4 ):HV channels 6 to 11 logging failed
+2022-11-07 14:02:48,135:ERROR:(Thread-3 ):HV channels 0 to 5 logging failed
+2022-11-07 14:02:48,734:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 14:02:49,397:ERROR:(Thread-4 ):HV channels 6 to 11 logging failed
+2022-11-07 14:02:49,425:ERROR:(Thread-3 ):HV channels 0 to 5 logging failed
+2022-11-07 14:02:49,797:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 14:02:50,689:ERROR:(Thread-4 ):HV channels 6 to 11 logging failed
+2022-11-07 14:02:50,718:ERROR:(Thread-3 ):HV channels 0 to 5 logging failed
+2022-11-07 14:02:50,853:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 14:07:05,723:DEBUG:(commands ):Finshed queue: downHV
+2022-11-07 14:07:08,303:DEBUG:(commands ):Finshed queue: downHV
+2022-11-07 14:07:10,879:DEBUG:(commands ):Finshed queue: downHV
+2022-11-07 14:12:13,148:ERROR:(Thread-2 ):I2C reading error
+2022-11-07 14:12:13,150:ERROR:(Thread-2 ):I2C reading error
+2022-11-07 14:12:13,150:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 14:14:23,162:ERROR:(Thread-2 ):I2C reading error
+2022-11-07 14:14:23,163:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 14:14:40,311:ERROR:(Thread-2 ):I2C reading error
+2022-11-07 14:14:40,332:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 14:17:53,589:ERROR:(Thread-2 ):I2C reading error
+2022-11-07 14:17:53,590:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 14:20:05,698:ERROR:(Thread-2 ):I2C reading error
+2022-11-07 14:20:05,719:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 14:26:41,142:ERROR:(Thread-2 ):I2C reading error
+2022-11-07 14:26:41,164:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 14:31:56,779:ERROR:(Thread-2 ):I2C reading error
+2022-11-07 14:31:56,820:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 14:34:31,453:ERROR:(Thread-2 ):I2C reading error
+2022-11-07 14:34:31,454:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 14:34:36,802:ERROR:(Thread-2 ):I2C reading error
+2022-11-07 14:34:36,802:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 14:34:59,366:ERROR:(Thread-2 ):I2C reading error
+2022-11-07 14:34:59,385:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 14:44:05,133:ERROR:(Thread-2 ):I2C reading error
+2022-11-07 14:44:05,134:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 14:50:41,537:ERROR:(Thread-2 ):I2C reading error
+2022-11-07 14:50:41,558:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 14:58:44,587:ERROR:(Thread-2 ):I2C reading error
+2022-11-07 14:58:44,587:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 15:04:11,620:ERROR:(Thread-2 ):I2C reading error
+2022-11-07 15:04:11,661:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 15:05:36,464:ERROR:(Thread-2 ):I2C reading error
+2022-11-07 15:05:36,485:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 15:14:55,459:ERROR:(Thread-2 ):I2C reading error
+2022-11-07 15:14:55,480:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 15:20:34,366:ERROR:(Thread-2 ):I2C reading error
+2022-11-07 15:20:34,407:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 15:23:17,503:ERROR:(Thread-2 ):I2C reading error
+2022-11-07 15:23:17,548:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 15:26:09,484:ERROR:(Thread-2 ):I2C reading error
+2022-11-07 15:26:09,505:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 15:27:30,029:ERROR:(Thread-2 ):I2C reading error
+2022-11-07 15:27:30,031:ERROR:(Thread-2 ):I2C reading error
+2022-11-07 15:27:30,051:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 15:30:09,131:ERROR:(Thread-2 ):I2C reading error
+2022-11-07 15:30:09,131:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 15:34:49,645:DEBUG:(commands ):Finshed queue: rampHV
+2022-11-07 15:35:14,128:DEBUG:(commands ):Finshed queue: downHV
+2022-11-07 15:35:30,879:DEBUG:(commands ):Finshed queue: resetHV
+2022-11-07 15:35:31,787:ERROR:(Thread-3 ):HV data from serial not the right length
+2022-11-07 15:35:31,788:ERROR:(Thread-3 ):Resetting trip
+
+2022-11-07 15:35:39,901:DEBUG:(commands ):Finshed queue: rampHV
+2022-11-07 15:35:59,231:DEBUG:(commands ):Finshed queue: downHV
+2022-11-07 15:36:30,155:DEBUG:(commands ):Finshed queue: rampHV
+2022-11-07 15:36:53,396:DEBUG:(commands ):Finshed queue: downHV
+2022-11-07 15:37:07,268:ERROR:(Thread-2 ):I2C reading error
+2022-11-07 15:37:07,268:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 15:51:25,437:ERROR:(Thread-2 ):I2C reading error
+2022-11-07 15:51:25,438:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 16:09:14,179:ERROR:(Thread-2 ):I2C reading error
+2022-11-07 16:09:14,220:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 16:10:54,896:ERROR:(Thread-2 ):I2C reading error
+2022-11-07 16:10:54,897:ERROR:(Thread-2 ):I2C reading error
+2022-11-07 16:10:54,898:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 16:16:13,053:ERROR:(Thread-2 ):I2C reading error
+2022-11-07 16:16:13,053:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 16:21:03,043:ERROR:(Thread-2 ):I2C reading error
+2022-11-07 16:21:03,064:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 16:24:18,669:ERROR:(Thread-2 ):I2C reading error
+2022-11-07 16:24:18,690:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 16:27:18,193:ERROR:(Thread-2 ):I2C reading error
+2022-11-07 16:27:18,193:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 16:28:17,256:ERROR:(Thread-2 ):I2C reading error
+2022-11-07 16:28:17,256:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 16:33:09,592:ERROR:(Thread-2 ):I2C reading error
+2022-11-07 16:33:09,633:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 16:35:58,286:ERROR:(Thread-2 ):I2C reading error
+2022-11-07 16:35:58,305:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 16:36:47,603:ERROR:(Thread-2 ):I2C reading error
+2022-11-07 16:36:47,623:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 16:37:29,506:ERROR:(Thread-2 ):I2C reading error
+2022-11-07 16:37:29,507:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 16:44:25,000:ERROR:(Thread-2 ):I2C reading error
+2022-11-07 16:44:25,002:ERROR:(Thread-2 ):I2C reading error
+2022-11-07 16:44:25,002:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 16:46:39,396:ERROR:(Thread-2 ):I2C reading error
+2022-11-07 16:46:39,437:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 16:53:53,733:ERROR:(Thread-2 ):I2C reading error
+2022-11-07 16:53:53,768:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 16:54:39,936:ERROR:(Thread-2 ):I2C reading error
+2022-11-07 16:54:39,957:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 16:56:56,548:ERROR:(Thread-2 ):I2C reading error
+2022-11-07 16:56:56,548:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 17:02:32,797:ERROR:(Thread-2 ):I2C reading error
+2022-11-07 17:02:32,818:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 17:03:05,029:ERROR:(Thread-2 ):I2C reading error
+2022-11-07 17:03:05,050:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 17:05:03,269:ERROR:(Thread-2 ):I2C reading error
+2022-11-07 17:05:03,310:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 17:13:47,834:ERROR:(Thread-2 ):I2C reading error
+2022-11-07 17:13:47,870:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 17:18:13,133:ERROR:(Thread-2 ):I2C reading error
+2022-11-07 17:18:13,174:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 17:18:35,690:ERROR:(Thread-2 ):I2C reading error
+2022-11-07 17:18:35,711:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 17:20:47,537:DEBUG:(commands ):Finshed queue: readvoltage
+2022-11-07 17:21:44,289:DEBUG:(commands ):Finshed queue: readvoltage
+2022-11-07 17:21:55,066:DEBUG:(commands ):Finshed queue: readvoltage
+2022-11-07 17:23:51,783:DEBUG:(commands ):Finshed queue: readvoltage
+2022-11-07 17:23:58,209:DEBUG:(commands ):Finshed queue: readvoltage
+2022-11-07 17:25:16,594:DEBUG:(commands ):Finshed queue: readvoltage
+2022-11-07 17:26:33,134:DEBUG:(commands ):Finshed queue: readvoltage
+2022-11-07 17:27:28,643:DEBUG:(commands ):Finshed queue: readvoltage
+2022-11-07 17:33:15,475:DEBUG:(commands ):Finshed queue: readvoltage
+2022-11-07 17:33:47,597:DEBUG:(commands ):Finshed queue: readvoltage
+2022-11-07 17:33:52,914:DEBUG:(commands ):Finshed queue: readvoltage
+2022-11-07 17:33:59,407:DEBUG:(commands ):Finshed queue: readcurrent
+2022-11-07 17:34:04,804:DEBUG:(commands ):Finshed queue: readtemp
+2022-11-07 17:40:12,547:ERROR:(Thread-2 ):I2C reading error
+2022-11-07 17:40:12,547:ERROR:(Thread-2 ):LV channels logging failed
+2022-11-07 17:40:39,531:DEBUG:(commands ):Finshed queue: downHV
+2022-11-07 17:40:49,805:DEBUG:(commands ):Finshed queue: downHV
+2022-11-07 17:41:24,606:DEBUG:(commands ):Finshed queue: rampHV
+2022-11-07 17:41:58,109:DEBUG:(commands ):Finshed queue: downHV
+2022-11-07 17:43:33,476:DEBUG:(commands ):Finshed queue: rampHV
+2022-11-07 17:43:37,325:DEBUG:(commands ):Finshed queue: rampHV
+2022-11-07 17:43:39,902:DEBUG:(commands ):Finshed queue: rampHV
+2022-11-07 17:44:35,820:DEBUG:(commands ):Finshed queue: downHV
+2022-11-07 17:44:46,185:DEBUG:(commands ):Finshed queue: resetHV
+2022-11-07 17:44:47,014:ERROR:(Thread-3 ):HV data from serial not the right length
+2022-11-07 17:44:47,015:ERROR:(Thread-3 ):Resetting trip
+
+2022-11-07 17:45:02,879:DEBUG:(commands ):Finshed queue: rampHV

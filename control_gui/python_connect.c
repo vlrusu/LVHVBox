@@ -99,7 +99,6 @@ void rampup_hv(int channel, float value)
 {
   int idac = (int) (channel/4);
 
-  printf("TEST %d %6.2f\n",channel,value);
   
 
   float increment = value*2.3/NSTEPS/1510.;
