@@ -49,6 +49,15 @@ class LVHVBox:
         self.hvlog0 = hvlog0
         self.hvlog1 = hvlog1
         self.lvlog = lvlog
+
+
+        GPIO.setmode(GPIO.BOARD)
+        GPIO.setup(GLOBAL_ENABLE_PIN,GPIO.OUT)
+        GPIO.output(GLOBAL_ENABLE_PIN,GPIO.LOW)
+        GPIO.setup(RESET_PIN,GPIO.OUT)
+        GPIO.output(RESET_PIN,GPIO.LOW)
+        GPIO.output(RESET_PIN,GPIO.HIGH)
+
         
         self.mcp = MCP23S17(bus=0x00, pin_cs=0x00, device_id=0x00)
 
@@ -59,12 +68,11 @@ class LVHVBox:
             self.mcp.setDirection(x, self.mcp.DIR_OUTPUT)
             self.mcp.digitalWrite(x, MCP23S17.LEVEL_LOW)
 
+
+            
+
         self.bus = SMBus(1)
-        GPIO.setmode(GPIO.BOARD)
-        GPIO.setup(GLOBAL_ENABLE_PIN,GPIO.OUT)
-        GPIO.output(GLOBAL_ENABLE_PIN,GPIO.LOW)
-        GPIO.setup(RESET_PIN,GPIO.OUT)
-        GPIO.output(RESET_PIN,GPIO.HIGH)
+        self.bus.pec=1
 
         # HV manipulating stuff
         rampup = os.getcwd()+"/control_gui/python_connect.so"
@@ -77,7 +85,8 @@ class LVHVBox:
         logging.basicConfig(filename='lvhvbox.log',format='%(asctime)s %(message)s',encoding='utf-8',level=logging.DEBUG)
         
         # InfluxDB stuff
-        token = "7orgMug1GuFq2hfpl4PpVLzKi31E-XCbrftF6AWV1t5cwDaRrrAEY7hARL8jN6zPUy2IabTdjOnq_c98IBG-Nw=="
+        token = "TN-Yxqb6EH0slUUdDUqODr5Of0RHkwGX7t9tYPyP5VjLB5Zy2lu3TUzazySH0gaUMyD7oR0UyTfJRTdWDM9aSg=="
+        #token = "7orgMug1GuFq2hfpl4PpVLzKi31E-XCbrftF6AWV1t5cwDaRrrAEY7hARL8jN6zPUy2IabTdjOnq_c98IBG-Nw==" Old token
         self.org = "Mu2e"
         self.bucket = "TrackerVST"
         self.client = InfluxDBClient(url="http://trackerpsu1.dhcp.fnal.gov:8086", token=token, org=self.org)
@@ -120,6 +129,11 @@ class LVHVBox:
             self.lvlog.write(" ")
             self.lvlog.write(" ".join(str(e) for e in temps))
             self.lvlog.write("\n")
+            
+            # self.lvlog.write(str(self.mcp._readRegister(MCP23S17.MCP23S17_GPIOA)))
+            # self.lvlog.write("\n")
+            # self.lvlog.write(str(self.mcp._readRegister(MCP23S17.MCP23S17_GPIOB)))
+            # self.lvlog.write("\n")
             self.lvlog.flush()
 
             point = Point("lvdata") \
@@ -190,26 +204,27 @@ class LVHVBox:
             self.hvlog1.write(datetime.now().strftime("%Y:%m:%d-%H:%M:%S "))            
             self.hvlog1.write(" ".join(str(e) for e in hvlist))
             self.hvlog1.write("\n")
+
             self.hvlog1.flush()
 
-            # point = Point("hvdata2") \
-            #     .tag("user", "vrusu") \
-            #     .field("ihv6", self.ihv[6]) \
-            #     .field("vhv6", self.vhv[6]) \
-            #     .field("ihv7", self.ihv[7]) \
-            #     .field("vhv7", self.vhv[7]) \
-            #     .field("ihv8", self.ihv[8]) \
-            #     .field("vhv8", self.vhv[8]) \
-            #     .field("ihv9", self.ihv[9]) \
-            #     .field("vhv9", self.vhv[9]) \
-            #     .field("ihv10", self.ihv[10]) \
-            #     .field("vhv10", self.vhv[10]) \
-            #     .field("ihv11", self.ihv[11]) \
-            #     .field("vhv11", self.vhv[11]) \
-            #     .field("hvpcbtemp", self.hvpcbtemp) \
-            #     .time(datetime.utcnow(), WritePrecision.NS)
+            point = Point("hvdata2") \
+                .tag("user", "vrusu") \
+                .field("ihv6", self.ihv1[0]) \
+                .field("vhv6", self.vhv1[0]) \
+                .field("ihv7", self.ihv1[1]) \
+                .field("vhv7", self.vhv1[1]) \
+                .field("ihv8", self.ihv1[2]) \
+                .field("vhv8", self.vhv1[2]) \
+                .field("ihv9", self.ihv1[3]) \
+                .field("vhv9", self.vhv1[3]) \
+                .field("ihv10", self.ihv1[4]) \
+                .field("vhv10", self.vhv1[4]) \
+                .field("ihv11", self.ihv1[5]) \
+                .field("vhv11", self.vhv1[5]) \
+                .field("hvpcbtemp", self.hvpcbtemp) \
+                .time(datetime.utcnow(), WritePrecision.NS)
 
-            # self.write_api.write(self.bucket, self.org, point)
+            self.write_api.write(self.bucket, self.org, point)
 
         except:
             logging.error("HV channels 6 to 11 logging failed")
@@ -257,24 +272,24 @@ class LVHVBox:
             self.hvlog0.write("\n")
             self.hvlog0.flush()
 
-            # point = Point("hvdata1") \
-            #     .tag("user", "vrusu") \
-            #     .field("ihv0", self.ihv[0]) \
-            #     .field("vhv0", self.vhv[0]) \
-            #     .field("ihv1", self.ihv[1]) \
-            #     .field("vhv1", self.vhv[1]) \
-            #     .field("ihv2", self.ihv[2]) \
-            #     .field("vhv2", self.vhv[2]) \
-            #     .field("ihv3", self.ihv[3]) \
-            #     .field("vhv3", self.vhv[3]) \
-            #     .field("ihv4", self.ihv[4]) \
-            #     .field("vhv4", self.vhv[4]) \
-            #     .field("ihv5", self.ihv[5]) \
-            #     .field("vhv5", self.vhv[5]) \
-            #     .field("i12V", self.i12V) \
-            # .time(datetime.utcnow(), WritePrecision.NS)
+            point = Point("hvdata1") \
+                .tag("user", "vrusu") \
+                .field("ihv0", self.ihv0[0]) \
+                .field("vhv0", self.vhv0[0]) \
+                .field("ihv1", self.ihv0[1]) \
+                .field("vhv1", self.vhv0[1]) \
+                .field("ihv2", self.ihv0[2]) \
+                .field("vhv2", self.vhv0[2]) \
+                .field("ihv3", self.ihv0[3]) \
+                .field("vhv3", self.vhv0[3]) \
+                .field("ihv4", self.ihv0[4]) \
+                .field("vhv4", self.vhv0[4]) \
+                .field("ihv5", self.ihv0[5]) \
+                .field("vhv5", self.vhv0[5]) \
+                .field("i12V", self.i12V) \
+                .time(datetime.utcnow(), WritePrecision.NS)
 
-            # self.write_api.write(self.bucket, self.org, point)
+            self.write_api.write(self.bucket, self.org, point)
 
         except:
             logging.error("HV channels 0 to 5 logging failed")
@@ -449,29 +464,61 @@ class LVHVBox:
     # ==================
     def powerOn(self,channel):
 
+        
         if channel[0] ==  None:
             GPIO.output(GLOBAL_ENABLE_PIN,GPIO.HIGH)
             for ich in range(0,6):
                 self.mcp.digitalWrite(ich+8, MCP23S17.LEVEL_HIGH)
         else:
             ch = abs(channel[0])
+            self.bus.write_byte_data(0x50,0x0,ch+1)
+            self.bus.write_byte_data(0x50,0x01,0x80)
+
             GPIO.output(GLOBAL_ENABLE_PIN,GPIO.HIGH)
             self.mcp.digitalWrite(ch+8, MCP23S17.LEVEL_HIGH)
         
         return 0
 
 
+    # Enable LV channel
+    # ==================
+    def enable(self,channel):
+
+
+        self.bus.write_byte_data(0x50,0x0,channel+1)
+        self.bus.write_byte_data(0x50,0x01,0x80)
+
+        return 0
+
+
+    # Disable LV channel
+    # ==================
+    def disable(self,channel):
+
+
+        self.bus.write_byte_data(0x50,0x0,channel+1)
+        self.bus.write_byte_data(0x50,0x01,0x0)
+
+        return 0
+
+    
+
     # Turn off LV channel
     # ===================
     def powerOff(self,channel):
 
+
+        
         if channel[0] ==  None:
             GPIO.output(GLOBAL_ENABLE_PIN,GPIO.LOW)
             for ich in range(0,6):
                 self.mcp.digitalWrite(ich+8, MCP23S17.LEVEL_LOW)
         else:
             ch = abs(channel[0])
-            GPIO.output(GLOBAL_ENABLE_PIN,GPIO.LOW)
+            self.bus.write_byte_data(0x50,0x0,ch+1)
+            self.bus.write_byte_data(0x50,0x01,0x0)
+            
+#            GPIO.output(GLOBAL_ENABLE_PIN,GPIO.LOW) if this is off, the I2C bus commands are disabled. At least that's what it seems... Need to look more into it
             self.mcp.digitalWrite(ch+8, MCP23S17.LEVEL_LOW)
 
         return 0

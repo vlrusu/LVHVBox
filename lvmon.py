@@ -18,39 +18,6 @@ import RPi.GPIO as GPIO
 from RPiMCP23S17.MCP23S17 import MCP23S17
 
 
-cmds = ['readMon','powerOn','powerOff','readvoltage', 'readcurrent','readtemp']
-
-
-mcp1 = MCP23S17(bus=0x00, pin_cs=0x00, device_id=0x00)
-
-mcp1.open()
-mcp1._spi.max_speed_hz = 10000000
-
-
-for x in range(8, 16):
-    mcp1.setDirection(x, mcp1.DIR_OUTPUT)
-    mcp1.digitalWrite(x, MCP23S17.LEVEL_LOW)
-
-
-
-I2C_sleep_time = 0.5 # seconds to sleep between each channel reading
-bus = SMBus(1)
-
-max_reading = 8388608.0
-vref = 3.3 #this is only for the second box
-V5DIVIDER = 10
-
-pins = ["P9_15","P9_15","P9_15","P9_27","P9_41","P9_12"]
-GLOBAL_ENABLE_PIN =  15
-RESET_PIN = 32
-
-#for pin in pins:
-#    GPIO.setup(pin, GPIO.OUT)
-#    GPIO.output(pin, GPIO.LOW)
-
-if "libedit" in readline.__doc__:
-    readline.parse_and_bind("bind ^I rl_complete")
-
 
 
 def get_key_value(keys, flag, default = "0"):
@@ -245,19 +212,44 @@ def process_command(line):
         channel = int(get_key_value(keys,"c",-1))
         bus.write_byte_data(0x50,0x0,channel+1)
         bus.write_byte_data(0x50,0x01,0x80)
-
+        bus.write_byte_data(0x50,0x0,0)        
+    elif keys[0] == "readenable":
+        channel = int(get_key_value(keys,"c",-1))
+        bus.write_byte_data(0x50,0x0,channel+1)
+        reading  = bus.read_byte_data(0x50,0x01)
+        bus.write_byte_data(0x50,0x0,0)                
+        print(hex(reading))
+        
     # disables a channel
     elif keys[0] == "disable":
         channel = int(get_key_value(keys,"c",-1))
         bus.write_byte_data(0x50,0x0,channel+1)
         bus.write_byte_data(0x50,0x01,0x0)
 
+    # enables a channel
+    elif keys[0] == "testvout":
+        channel = int(get_key_value(keys,"c",-1))
+
+        bus.write_byte_data(0x50,0x0,channel+1)
+        reading=bus.read_byte_data(0x50,0x20)
+        print(hex(reading))
+        bus.write_byte_data(0x50,0x21,0x00)
+        bus.write_byte_data(0x50,0x21,0x24)
+
+    # enables a channel
+    elif keys[0] == "pmbus":
+        bus.write_byte_data(0x50,0xD4,0x0)
+        reading=bus.read_byte_data(0x50,0xD4)
+        print(hex(reading))
+        
+        
     # prints out any fault conditions
     elif keys[0] == "status":
         channel = int(get_key_value(keys,"c",-1))
         bus.write_byte_data(0x50,0x0,channel+1)
         reading=bus.read_word_data(0x50,0x79)
         print(hex(reading))
+        
 
     # prints the intput voltage
     elif keys[0] == "readvin":
@@ -266,6 +258,12 @@ def process_command(line):
         reading=bus.read_word_data(0x50,0x88)
         print(hex(reading))
 
+
+    elif keys[0] == "readmcp":        
+
+      print(hex(mcp1._readRegister(MCP23S17.MCP23S17_GPIOA)))
+      print(hex(mcp1._readRegister(MCP23S17.MCP23S17_GPIOB)))
+        
 
 
     else:
@@ -276,17 +274,57 @@ def process_command(line):
 
 
 
+cmds = ['readMon','powerOn','powerOff','readvoltage', 'readcurrent','readtemp']
+
+pins = ["P9_15","P9_15","P9_15","P9_27","P9_41","P9_12"]
+GLOBAL_ENABLE_PIN =  15
+RESET_PIN = 32
+
+
+print ("Starting mon...")
+GPIO.setmode(GPIO.BOARD)    
+GPIO.setup(RESET_PIN,GPIO.OUT)    
+GPIO.output(RESET_PIN,GPIO.LOW)
+time.sleep(1)
+
+GPIO.setup(GLOBAL_ENABLE_PIN,GPIO.OUT)
+GPIO.output(GLOBAL_ENABLE_PIN,GPIO.LOW)
+GPIO.output(RESET_PIN,GPIO.HIGH)
+
+
+mcp1 = MCP23S17(bus=0x00, pin_cs=0x00, device_id=0x00)
+
+mcp1.open()
+mcp1._spi.max_speed_hz = 10000000
+
+
+for x in range(8, 16):
+    mcp1.setDirection(x, mcp1.DIR_OUTPUT)
+    mcp1.digitalWrite(x, MCP23S17.LEVEL_LOW)
+
+
+    
+
+I2C_sleep_time = 0.5 # seconds to sleep between each channel reading
+bus = SMBus(1)
+
+max_reading = 8388608.0
+vref = 3.3 #this is only for the second box
+V5DIVIDER = 10
+
+
+#for pin in pins:
+#    GPIO.setup(pin, GPIO.OUT)
+#    GPIO.output(pin, GPIO.LOW)
+
+if "libedit" in readline.__doc__:
+    readline.parse_and_bind("bind ^I rl_complete")
+
 
 
 
 # keyboard input loop
 try:
-    print ("Starting mon...")
-    GPIO.setmode(GPIO.BOARD)
-    GPIO.setup(GLOBAL_ENABLE_PIN,GPIO.OUT)
-    GPIO.output(GLOBAL_ENABLE_PIN,GPIO.LOW)
-    GPIO.setup(RESET_PIN,GPIO.OUT)
-    GPIO.output(RESET_PIN,GPIO.HIGH)
     while True:
         line = input()
         if line:
