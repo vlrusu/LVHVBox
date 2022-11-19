@@ -1097,7 +1097,7 @@ if __name__ == '__main__':
         T48=[30 for i in range(6)]
         hv_i=[0.1 for i in range(12)]
         hv_v=[1500 for i in range(12)]
-        hvpcptemp=35
+        hvpcbtemp=35
         i12V=1
 
         App = QApplication(sys.argv)
