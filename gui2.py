@@ -1057,7 +1057,7 @@ if __name__ == '__main__':
         i12V=1
 
         App = QApplication(sys.argv)
-        window = Window(True,v48,i48,T48,hv_i,hv_v,hvpcbtemp,i12V)
+        window = Window(True,v48,i48,T48,hv_v,hv_i,hvpcbtemp,i12V)
 
         gui_thread = threading.Thread(target=App.exec(), daemon = True)
         gui_thread.start()
