@@ -939,6 +939,22 @@ class Window(QMainWindow):
         self.plot_update_timer.timeout.connect(self.update_hv_plot)
         self.plot_update_timer.start(2000)
 
+    # acquires the channel being measured
+    def get_blade_channel(self):
+        # determine which blade data is to be plotted for
+        channels={"Channel 0": 0,"Channel 1": 1,"Channel 2": 2,"Channel 3": 3,"Channel 4": 4,"Channel 5": 5}
+        channel=channels[self.blade_channel_selector.currentText()]
+        return channel
+
+    # returns the proper hv channel number, based on the current user selection
+    def get_hv_channel(self):
+        # determine which hv channel data is to be plotted for
+        channels={"Channel 0": 0,"Channel 1": 1,"Channel 2": 2,"Channel 3": 3,"Channel 4": 4,
+        "Channel 5": 5,"Channel 6": 6,"Channel 7": 7,"Channel 8": 8,"Channel 9": 9,
+        "Channel 10": 10,"Channel 11": 11}
+        channel=channels[self.hv_channel_selector.currentText()]
+        return channel
+
 
 
 
