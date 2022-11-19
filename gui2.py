@@ -410,7 +410,7 @@ class Window(QMainWindow):
         i12Ventry.setAlignment(Qt.AlignCenter)
         i12Ventry.setStyleSheet(button_color)
         self.i12Ventry=i12Ventry
-        self.blade_control_table.setCellWidget(0,4,i12V)
+        self.blade_control_table.setCellWidget(0,4,i12Ventry)
 
         # fill board table with entries and set background color
         self.board_5v_voltage_entries=[]
@@ -418,34 +418,7 @@ class Window(QMainWindow):
         self.board_cond_voltage_entries=[]
         self.board_cond_current_entries=[]
 
-        for i in range(6):
-            # fill with board 5v voltage entries
-            current_entry=QLabel("N/A")
-            current_entry.setAlignment(Qt.AlignCenter)
-            current_entry.setStyleSheet(button_color)
-            self.board_5v_voltage_entries.append(current_entry)
-            self.board_control_table.setCellWidget(i,0,current_entry)
 
-            # fill with board 5v current entries
-            current_entry=QLabel("N/A")
-            current_entry.setAlignment(Qt.AlignCenter)
-            current_entry.setStyleSheet(button_color)
-            self.board_5v_current_entries.append(current_entry)
-            self.board_control_table.setCellWidget(i,1,current_entry)
-
-            # fill with board conditioned voltage entries
-            current_entry=QLabel("N/A")
-            current_entry.setAlignment(Qt.AlignCenter)
-            current_entry.setStyleSheet(button_color)
-            self.board_cond_voltage_entries.append(current_entry)
-            self.board_control_table.setCellWidget(i,2,current_entry)
-
-            # fill with board conditioned current entries
-            current_entry=QLabel("N/A")
-            current_entry.setAlignment(Qt.AlignCenter)
-            current_entry.setStyleSheet(button_color)
-            self.board_cond_current_entries.append(current_entry)
-            self.board_control_table.setCellWidget(i,3,current_entry)
 
         # fill board table with entries and set background color
         self.hv_voltage_entries=[]
