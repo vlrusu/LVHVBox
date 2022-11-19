@@ -51,7 +51,7 @@ from PyQt5.QtCore import *
 import signal
 signal.signal(signal.SIGINT, signal.SIG_DFL)
 
-os.environ["DISPLAY"] = ':0'
+#os.environ["DISPLAY"] = ':0'
 background_color='background-color: white;'
 button_color='background-color: white;'
 
