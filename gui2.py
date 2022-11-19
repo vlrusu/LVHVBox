@@ -209,7 +209,7 @@ class CmdLoop(cmd2.Cmd):
 
 
 class Window(QMainWindow):
-    def __init__(self,test,v48,i48,T48,hv_v,hv_i,hvpcbtemp):
+    def __init__(self,test,v48,i48,T48,hv_v,hv_i,hvpcbtemp,i12V):
         super(Window,self).__init__()
 
         self.test=test
@@ -219,6 +219,7 @@ class Window(QMainWindow):
         self.hv_v=hv_v
         self.hv_i=hv_i
         self.hvpcbtemp=hvpcbtemp
+        self.i12V=i12V
 
 
 
@@ -321,14 +322,15 @@ class Window(QMainWindow):
         # setup blade table
         self.blade_control_table=QTableWidget()
         self.blade_control_table.setRowCount(6)
-        self.blade_control_table.setColumnCount(3)
+        self.blade_control_table.setColumnCount(5)
         self.blade_control_table.setFixedWidth(550)
         self.blade_control_table.setDisabled(True)
 
-        self.blade_control_table.setHorizontalHeaderLabels(["Voltage (V)","current (A)","Temp (C)"])
+        self.blade_control_table.setHorizontalHeaderLabels(["Voltage (V)","current (A)","Temp (C)","HV PCB Temp","Board Current"])
         self.blade_control_table.setVerticalHeaderLabels(["Ch 0","Ch 1","Ch 2","Ch 3","Ch 4","Ch 5"])
         #self.blade_control_table.horizontalHeader().setResizeMode(QHeaderView.Stretch)
 
+        '''
         # setup board table
         self.board_control_table=QTableWidget()
         self.board_control_table.setRowCount(6)
@@ -339,6 +341,7 @@ class Window(QMainWindow):
         self.board_control_table.setHorizontalHeaderLabels(["5V Voltage (V)","5V Current (A)","Cond Voltage (V)","Cond Current (A)"])
         self.board_control_table.setVerticalHeaderLabels(["Ch 0","Ch 1","Ch 2","Ch 3","Ch 4","Ch 5"])
         #self.board_control_table.horizontalHeader().setResizeMode(QHeaderView.Stretch)
+        '''
 
         # setup hv table
         self.hv_control_table=QTableWidget()
@@ -367,8 +370,10 @@ class Window(QMainWindow):
         # add table widgets to tab container
         self.table_tab1.layout.addWidget(self.blade_control_table,0,0)
         self.table_tab1.setLayout(self.table_tab1.layout)
+        '''
         self.table_tab2.layout.addWidget(self.board_control_table,0,0)
         self.table_tab2.setLayout(self.table_tab2.layout)
+        '''
         self.table_tab3.layout.addWidget(self.hv_control_table,0,0)
         self.table_tab3.setLayout(self.table_tab3.layout)
 
@@ -393,6 +398,19 @@ class Window(QMainWindow):
             current_entry.setStyleSheet(button_color)
             self.blade_temperature_entries.append(current_entry)
             self.blade_control_table.setCellWidget(i,2,current_entry)
+        # add pcb temp
+        pcbtempentry=Qlabel("N/A")
+        pcbtempentry.setAlignment(Qt.AlignCenter)
+        pcbtempentry.setStyleSheet(button_color)
+        self.pcbtempentry=pcbtempentry
+        self.blade_control_table.setCellWidget(0,3,pcbtempentry)
+
+        # add 12V board current
+        i12Ventry=Qlabel("N/A")
+        i12Ventry.setAlignment(Qt.AlignCenter)
+        i12Ventry.setStyleSheet(button_color)
+        self.i12Ventry=i12Ventry
+        self.blade_control_table.setCellWidget(0,4,i12V)
 
         # fill board table with entries and set background color
         self.board_5v_voltage_entries=[]
@@ -905,6 +923,8 @@ class Window(QMainWindow):
             self.blade_voltage_entries[j].setText(str(self.v48[j]))
             self.blade_current_entries[j].setText(str(self.i48[j]))
             self.blade_temperature_entries[j].setText(str(self.T48[j]))
+        self.pcbtempentry.setText(str(self.hvpcbtemp))
+        self.i12Ventry.setText(str(self.i12V))
 
     # updates the board table with recent data (readmon data)
     def update_board_table(self):
@@ -986,90 +1006,105 @@ class Window(QMainWindow):
 ## =============
 
 if __name__ == '__main__':
+    if test:
+        history_file = os.path.expanduser('.lvhv_history')
+        if not os.path.exists(history_file):
+            with open(history_file, "w") as fobj:
+                fobj.write("")
+        readline.read_history_file(history_file)
+        atexit.register(readline.write_history_file, history_file)
 
-    history_file = os.path.expanduser('.lvhv_history')
-    if not os.path.exists(history_file):
-        with open(history_file, "w") as fobj:
-            fobj.write("")
-    readline.read_history_file(history_file)
-    atexit.register(readline.write_history_file, history_file)
-
-    topdir = os.path.dirname(os.path.realpath(__file__))
+        topdir = os.path.dirname(os.path.realpath(__file__))
 
 
-    lvqueue = queue.Queue()
-    hvqueue1 = queue.Queue()
-    hvqueue2 = queue.Queue() # this is such a hack!!!!
+        lvqueue = queue.Queue()
+        hvqueue1 = queue.Queue()
+        hvqueue2 = queue.Queue() # this is such a hack!!!!
 
-    logging.basicConfig(filename='lvhvbox.log', format='%(asctime)s:%(levelname)s:%(message)s', encoding='utf-8', level=logging.DEBUG)
+        logging.basicConfig(filename='lvhvbox.log', format='%(asctime)s:%(levelname)s:%(message)s', encoding='utf-8', level=logging.DEBUG)
 
-    sertmp1 = serial.Serial('/dev/ttyACM0', 115200, timeout=10,write_timeout = 1)
-    sertmp2 = serial.Serial('/dev/ttyACM1', 115200, timeout=10,write_timeout = 1)
+        sertmp1 = serial.Serial('/dev/ttyACM0', 115200, timeout=10,write_timeout = 1)
+        sertmp2 = serial.Serial('/dev/ttyACM1', 115200, timeout=10,write_timeout = 1)
 
-    #decide which on the 1 and which is 2
-    sertmp1.timeout = None
+        #decide which on the 1 and which is 2
+        sertmp1.timeout = None
 
-    line = ""
-    while(len(line)) <30:
-        line = sertmp1.readline().decode('ascii')
+        line = ""
+        while(len(line)) <30:
+            line = sertmp1.readline().decode('ascii')
 
-    whichone = line.split("|")[3][1]
-    print("ser1 is " + str(whichone))
+        whichone = line.split("|")[3][1]
+        print("ser1 is " + str(whichone))
 
-    if whichone == 1:
-        ser1=sertmp1
-        ser2=sertmp2
+        if whichone == 1:
+            ser1=sertmp1
+            ser2=sertmp2
+        else:
+            ser1 = sertmp2
+            ser2 = sertmp1
+
+        sertmp2.timeout = None
+        line = ""
+        while(len(line)) < 30:
+            line = sertmp2.readline().decode('ascii')
+        #    print(len(line))
+        whichone = line.split("|")[3][1]
+        print("ser2 is " + str(whichone))
+
+
+        lvlogname = "lvdata.log"
+        lvlog = open(os.path.join(topdir,lvlogname),"w")
+        hvlogname0 = "hvdata0.log"
+        hvlog0 = open(os.path.join(topdir,hvlogname0),"w")
+        hvlogname1 = "hvdata1.log"
+        hvlog1 = open(os.path.join(topdir,hvlogname1),"w")
+
+
+        app = CmdLoop()
+        lvhvbox = LVHVBox(app,ser1,ser2,hvlog0,hvlog1,lvlog)
+
+
+        lvThrd = threading.Thread(target=lvloop, daemon = True)
+        lvThrd.start()
+        hvThrd1 = threading.Thread(target=hvloop1, daemon = True)
+        hvThrd1.start()
+        hvThrd2 = threading.Thread(target=hvloop2, daemon = True)
+        hvThrd2.start()
+
+        time.sleep(4)
+
+        App = QApplication(sys.argv)
+
+
+
+        hv_i=lvhvbox.ihv0+lvhvbox.ihv1
+        hv_v=lvhvbox.vhv0+lvhvbox.vhv1
+
+        window = Window(True,lvhvbox.v48,lvhvbox.i48,lvhvbox.T48,hv_i,hv_v,lvhvbox.hvpcbtemp,lvhvbox.i12V)
+
+        gui_thread = threading.Thread(target=App.exec(), daemon = True)
+        gui_thread.start()
+
+        app.cmdloop()
+        lvlog.close()
+        hvlog.close()
+        sys.exit()
+        sys.exit()
     else:
-        ser1 = sertmp2
-        ser2 = sertmp1
+        v48=[48 for i in range(6)]
+        i48=[6 for i in range(6)]
+        T48=[30 for i in range(6)]
+        hv_i=[0.1 for i in range(12)]
+        hv_v=[1500 for i in range(12)]
+        hvpcptemp=35
+        i12V=1
 
-    sertmp2.timeout = None
-    line = ""
-    while(len(line)) < 30:
-        line = sertmp2.readline().decode('ascii')
-    #    print(len(line))
-    whichone = line.split("|")[3][1]
-    print("ser2 is " + str(whichone))
+        App = QApplication(sys.argv)
+        window = Window(True,v48,i48,T48,hv_i,hv_v,hvpcbtemp,i12V)
 
+        gui_thread = threading.Thread(target=App.exec(), daemon = True)
+        gui_thread.start()
 
-    lvlogname = "lvdata.log"
-    lvlog = open(os.path.join(topdir,lvlogname),"w")
-    hvlogname0 = "hvdata0.log"
-    hvlog0 = open(os.path.join(topdir,hvlogname0),"w")
-    hvlogname1 = "hvdata1.log"
-    hvlog1 = open(os.path.join(topdir,hvlogname1),"w")
-
-
-    app = CmdLoop()
-    lvhvbox = LVHVBox(app,ser1,ser2,hvlog0,hvlog1,lvlog)
-
-
-    lvThrd = threading.Thread(target=lvloop, daemon = True)
-    lvThrd.start()
-    hvThrd1 = threading.Thread(target=hvloop1, daemon = True)
-    hvThrd1.start()
-    hvThrd2 = threading.Thread(target=hvloop2, daemon = True)
-    hvThrd2.start()
-
-    time.sleep(4)
-
-    App = QApplication(sys.argv)
-
-
-
-    hv_i=lvhvbox.ihv0+lvhvbox.ihv1
-    hv_v=lvhvbox.vhv0+lvhvbox.vhv1
-
-    window = Window(True,lvhvbox.v48,lvhvbox.i48,lvhvbox.T48,hv_i,hv_v,lvhvbox.hvpcbtemp)
-
-    gui_thread = threading.Thread(target=App.exec(), daemon = True)
-    gui_thread.start()
-
-    app.cmdloop()
-    lvlog.close()
-    hvlog.close()
-    sys.exit()
-    sys.exit()
 
 
     '''
