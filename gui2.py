@@ -261,9 +261,6 @@ class Window(QMainWindow):
         # initialize blade plotting Window
         self.blade_plotting_setup()
 
-        # initialize board plotting Window
-        self.board_plotting_setup()
-
         # initialize hv plotting Window
         self.hv_plotting_setup()
 
@@ -759,74 +756,6 @@ class Window(QMainWindow):
         self.blade_plot_canvas.draw()
         self.blade_plot_canvas.flush_events()
 
-    # initializes board plotting (readmon)
-    def board_plotting_setup(self):
-        self.tab5=QWidget()
-        self.tab5.layout=QGridLayout()
-
-        # setup the board plot
-        self.board_plot=Figure()
-        self.board_plot_canvas=FigureCanvas(self.board_plot)
-        self.board_plot_axes=self.board_plot.add_subplot(111)
-
-        self.board_plot_axes.set_xlim([0,10])
-        self.board_plot_axes.set_ylim([0,60])
-        self.board_plot_axes.set_title('Channel 0 5V Voltage')
-        self.board_plot_axes.set_ylabel('Voltage (V)')
-        self.board_plot_axes.set_xlabel('Iterative Age of Datapoint: each iteration is ' + 'TBD' + ' minutes.')
-
-        # initialize data (placed outside of bounds, so that it doesn't show up initially)
-        self.board_plot_data_x=[*range(0,10,1)]
-        self.board_plot_data=self.board_plot_axes.plot(self.board_plot_data_x,self.board_5v_voltage_plot[0],marker='o',linestyle='None',markersize=2,color='k')[0]
-
-        # add dropdown menus to select what's plotted
-        self.board_channel_selector=QComboBox()
-        self.board_channel_selector.addItems(["Channel 0","Channel 1","Channel 2","Channel 3","Channel 4","Channel 5"])
-        self.board_channel_selector.setStyleSheet(button_color)
-        self.board_channel_selector.currentIndexChanged.connect(self.change_board_plot)
-
-        self.board_measurement_selector=QComboBox()
-        self.board_measurement_selector.addItems(["5V Voltage","5V Current","Conditioned Voltage","Conditioned Current"])
-        self.board_measurement_selector.setStyleSheet(button_color)
-        self.board_measurement_selector.currentIndexChanged.connect(self.change_board_plot)
-
-        # add widgets and set layout
-        self.tab5.layout.addWidget(self.board_channel_selector,0,0)
-        self.tab5.layout.addWidget(self.board_measurement_selector,1,0)
-        self.tab5.layout.addWidget(self.board_plot_canvas,0,1)
-        self.tab5.setLayout(self.tab5.layout)
-
-    # called to change the board plot (readmon data)
-    # this function is only used when the TYPE of data that is being plotted changes, as per user input
-    def change_board_plot(self):
-        channel=self.get_board_channel()
-        type=self.board_measurement_selector.currentText()
-
-        # update labels for the board plot
-        self.board_plot_axes.set_title(self.board_channel_selector.currentText() + ' Board ' + type)
-        if type=="5V Voltage":
-            self.board_plot_axes.set_ylabel('5V Voltage (V)')
-        elif type=="5V Current":
-            self.board_plot_axes.set_ylabel('5V Current (A)')
-        elif type=="Conditioned Voltage":
-            self.board_plot_axes.set_ylabel('Conditioned Voltage (V)')
-        else:
-            self.board_plot_axes.set_ylabel('Conditioned Current (A)')
-
-        # update the data, according to what is being plotted
-        if type=="5V Voltage":
-            self.board_plot_data.set_ydata(self.board_5v_voltage_plot[channel])
-        elif type=="5V Current":
-            self.board_plot_data.set_ydata(self.board_5v_current_plot[channel])
-        elif type=="Conditioned Voltage":
-            self.board_plot_data.set_ydata(self.board_cond_voltage_plot[channel])
-        else:
-            self.board_plot_data.set_ydata(self.board_cond_current_plot[channel])
-
-        # actually update the plot
-        self.board_plot_canvas.draw()
-        self.board_plot_canvas.flush_events()
-
     # initializes hv plotting
     def hv_plotting_setup(self):
         self.tab6=QWidget()
@@ -899,14 +828,6 @@ class Window(QMainWindow):
         self.pcbtempentry.setText(str(self.hvpcbtemp))
         self.i12Ventry.setText(str(self.i12V))
 
-    # updates the board table with recent data (readmon data)
-    def update_board_table(self):
-        for j in range(6):
-            self.board_5v_voltage_entries[j].setText(str(self.five_voltage[j]))
-            self.board_5v_current_entries[j].setText(str(self.five_current[j]))
-            self.board_cond_voltage_entries[j].setText(str(self.cond_voltage[j]))
-            self.board_cond_current_entries[j].setText(str(self.cond_current[j]))
-
     # updates the hv table with latest available data
     def update_hv_table(self):
         for j in range(12):
@@ -916,6 +837,46 @@ class Window(QMainWindow):
     def update_data(self):
         self.update_hv_table()
         self.update_blade_table()
+
+     # called by the timer to update the main plot with new data
+    def update_blade_plot(self):
+        channel=self.get_blade_channel()
+        type=self.blade_measurement_selector.currentText()
+
+        # rotate plot lists
+        for i in range(len(self.blade_voltage_plot)):
+            self.blade_voltage_plot[i]=[self.v48[i]]+self.blade_voltage_plot[i][:-1]
+            self.blade_current_plot[i]=[self.i48[i]]+self.blade_current_plot[i][:-1]
+            self.blade_temperature_plot[i]=[self.T48[i]]+self.blade_temperature_plot[i][:-1]
+
+        # determine what kind of data is being plotted, and respond accordingly
+        if type=="Voltage":
+            self.blade_plot_data.set_ydata(self.blade_voltage_plot[channel])
+        elif type=="Current":
+            self.blade_plot_data.set_ydata(self.blade_current_plot[channel])
+        else:
+            self.blade_plot_data.set_ydata(self.blade_temperature_plot[channel])
+
+        # update the plot
+        self.blade_plot_canvas.draw()
+        self.blade_plot_canvas.flush_events()
+
+     # this function updates the hv plot
+    def update_hv_plot(self):
+        channel=self.get_hv_channel()
+        type=self.hv_measurement_selector.currentText()
+
+        # rotate plot lists
+        for i in range(len(self.hv_voltage_plot)):
+            self.hv_voltage_plot[i]=[self.hv_v[i]]+self.hv_voltage_plot[i][:-1]
+            self.hv_current_plot[i]=[self.hv_i[i]]+self.hv_current_plot[i][:-1]
+
+        if type=="Voltage":
+            self.hv_plot_data.set_ydata(self.hv_voltage_plot[channel])
+        else:
+            self.hv_plot_data.set_ydata(self.hv_current_plot[channel])
+        self.hv_plot_canvas.draw()
+        self.hv_plot_canvas.flush_events()
 
     def initialize_data(self):
         # keeps lv screen update from occuring until data is acquired
@@ -971,6 +932,12 @@ class Window(QMainWindow):
         self.table_update_timer.setSingleShot(False)
         self.table_update_timer.timeout.connect(self.update_data)
         self.table_update_timer.start(1000)
+
+        self.plot_update_timer=QTimer(self)
+        self.plot_update_timer.setSingleShot(False)
+        self.plot_update_timer.timeout.connect(self.update_blade_plot)
+        self.plot_update_timer.timeout.connect(self.update_hv_plot)
+        self.plot_update_timer.start(2000)
 
 
 
