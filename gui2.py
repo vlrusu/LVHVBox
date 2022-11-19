@@ -399,14 +399,14 @@ class Window(QMainWindow):
             self.blade_temperature_entries.append(current_entry)
             self.blade_control_table.setCellWidget(i,2,current_entry)
         # add pcb temp
-        pcbtempentry=Qlabel("N/A")
+        pcbtempentry=QLabel("N/A")
         pcbtempentry.setAlignment(Qt.AlignCenter)
         pcbtempentry.setStyleSheet(button_color)
         self.pcbtempentry=pcbtempentry
         self.blade_control_table.setCellWidget(0,3,pcbtempentry)
 
         # add 12V board current
-        i12Ventry=Qlabel("N/A")
+        i12Ventry=QLabel("N/A")
         i12Ventry.setAlignment(Qt.AlignCenter)
         i12Ventry.setStyleSheet(button_color)
         self.i12Ventry=i12Ventry
