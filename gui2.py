@@ -1006,6 +1006,7 @@ class Window(QMainWindow):
 ## =============
 
 if __name__ == '__main__':
+    test = True
     if test:
         history_file = os.path.expanduser('.lvhv_history')
         if not os.path.exists(history_file):
