@@ -209,7 +209,7 @@ class CmdLoop(cmd2.Cmd):
 
 
 class Window(QMainWindow):
-    def __init__(self,test,v48,i48,T48,hv_v,hv_i,hvpcbtemp,i12V):
+    def __init__(self,test,v48,i48,T48,hv_v,hv_i,hvpcbtemp,i12V,lvhvbox):
         super(Window,self).__init__()
 
         self.test=test
@@ -510,16 +510,16 @@ class Window(QMainWindow):
         if self.blade_power[number]==True:
             indicators[number].setStyleSheet('background-color: red')
             self.blade_power[number]=False
-            #self.power_off(number)
+            self.lvhvbox.powerOff(number)
         else:
             indicators[number].setStyleSheet('background-color: green')
             self.blade_power[number]=True
-            #self.power_on(number)
+            self.lvhvbox.powerOn(number)
 
 
 
     # called when one of the hv power buttons is pressed
-    def actuate_hv_power(self,number):
+    def actuate_hv_power(self,lvhvbox,number):
         indicators=[self.hv_power_button_1,self.hv_power_button_2,self.hv_power_button_3,
         self.hv_power_button_4,self.hv_power_button_5,self.hv_power_button_6,
         self.hv_power_button_7,self.hv_power_button_8,self.hv_power_button_9,
@@ -529,20 +529,15 @@ class Window(QMainWindow):
             indicators[number].setStyleSheet('background-color: red')
             self.hv_power[number]=False
 
-            # if gui isn't in test mode, power down hv channel
-            if self.test is False:
-                # use threading to ensure that the gui doesn't freeze during rampup
-                #self.rampup_list.append([number,False])
-                pass
+            self.lvhvbox.ramphvup([number,0])
         else:
             indicators[number].setStyleSheet('background-color: green')
             self.hv_power[number]=True
 
-            # if gui isn't in test mode, power up hv channel
-            if self.test is False:
-                # use threading to ensure that the gui doesn't freeze during rampup
-                #self.rampup_list.append([number,True])
-                pass
+            self.lvhvbox.ramphvup([number],1500)
+
+
+
 
 
     # sets up the hv control tab for the GUI
@@ -677,18 +672,18 @@ class Window(QMainWindow):
         self.tab3.layout.addWidget(self.hv_bar_12,4,3)
 
         #connect hv power buttons to actuate_hv_power
-        self.hv_power_button_1.clicked.connect(lambda: self.actuate_hv_power(0))
-        self.hv_power_button_2.clicked.connect(lambda: self.actuate_hv_power(1))
-        self.hv_power_button_3.clicked.connect(lambda: self.actuate_hv_power(2))
-        self.hv_power_button_4.clicked.connect(lambda: self.actuate_hv_power(3))
-        self.hv_power_button_5.clicked.connect(lambda: self.actuate_hv_power(4))
-        self.hv_power_button_6.clicked.connect(lambda: self.actuate_hv_power(5))
-        self.hv_power_button_7.clicked.connect(lambda: self.actuate_hv_power(6))
-        self.hv_power_button_8.clicked.connect(lambda: self.actuate_hv_power(7))
-        self.hv_power_button_9.clicked.connect(lambda: self.actuate_hv_power(8))
-        self.hv_power_button_10.clicked.connect(lambda: self.actuate_hv_power(9))
-        self.hv_power_button_11.clicked.connect(lambda: self.actuate_hv_power(10))
-        self.hv_power_button_12.clicked.connect(lambda: self.actuate_hv_power(11))
+        self.hv_power_button_1.clicked.connect(lambda: self.actuate_hv_power(lvhvbox,0))
+        self.hv_power_button_2.clicked.connect(lambda: self.actuate_hv_power(lvhvbox,1))
+        self.hv_power_button_3.clicked.connect(lambda: self.actuate_hv_power(lvhvbox,2))
+        self.hv_power_button_4.clicked.connect(lambda: self.actuate_hv_power(lvhvbox,3))
+        self.hv_power_button_5.clicked.connect(lambda: self.actuate_hv_power(lvhvbox,4))
+        self.hv_power_button_6.clicked.connect(lambda: self.actuate_hv_power(lvhvbox,5))
+        self.hv_power_button_7.clicked.connect(lambda: self.actuate_hv_power(lvhvbox,6))
+        self.hv_power_button_8.clicked.connect(lambda: self.actuate_hv_power(lvhvbox,7))
+        self.hv_power_button_9.clicked.connect(lambda: self.actuate_hv_power(lvhvbox,8))
+        self.hv_power_button_10.clicked.connect(lambda: self.actuate_hv_power(lvhvbox,9))
+        self.hv_power_button_11.clicked.connect(lambda: self.actuate_hv_power(lvhvbox,10))
+        self.hv_power_button_12.clicked.connect(lambda: self.actuate_hv_power(lvhvbox,11))
 
         self.tab3.setLayout(self.tab3.layout)
 
@@ -962,35 +957,37 @@ class Window(QMainWindow):
 ## =============
 
 if __name__ == '__main__':
-    test = True
+    test = False
     if not test:
         history_file = os.path.expanduser('.lvhv_history')
         if not os.path.exists(history_file):
             with open(history_file, "w") as fobj:
                 fobj.write("")
+
         readline.read_history_file(history_file)
         atexit.register(readline.write_history_file, history_file)
 
         topdir = os.path.dirname(os.path.realpath(__file__))
 
 
+        # Queue hacks
         lvqueue = queue.Queue()
         hvqueue1 = queue.Queue()
         hvqueue2 = queue.Queue() # this is such a hack!!!!
 
         logging.basicConfig(filename='lvhvbox.log', format='%(asctime)s:%(levelname)s:%(message)s', encoding='utf-8', level=logging.DEBUG)
 
+
+        # Decide which serial is 1 and which is 2
         sertmp1 = serial.Serial('/dev/ttyACM0', 115200, timeout=10,write_timeout = 1)
         sertmp2 = serial.Serial('/dev/ttyACM1', 115200, timeout=10,write_timeout = 1)
 
-        #decide which on the 1 and which is 2
         sertmp1.timeout = None
-
         line = ""
-        while(len(line)) <30:
+        while(len(line)) < 90:
             line = sertmp1.readline().decode('ascii')
 
-        whichone = line.split("|")[3][1]
+        whichone = line.split("|")[2][0]
         print("ser1 is " + str(whichone))
 
         if whichone == 1:
@@ -1002,13 +999,13 @@ if __name__ == '__main__':
 
         sertmp2.timeout = None
         line = ""
-        while(len(line)) < 30:
+        while(len(line)) < 90:
             line = sertmp2.readline().decode('ascii')
-        #    print(len(line))
-        whichone = line.split("|")[3][1]
+        whichone = line.split("|")[2][0]
         print("ser2 is " + str(whichone))
 
 
+        # Log files
         lvlogname = "lvdata.log"
         lvlog = open(os.path.join(topdir,lvlogname),"w")
         hvlogname0 = "hvdata0.log"
@@ -1017,9 +1014,9 @@ if __name__ == '__main__':
         hvlog1 = open(os.path.join(topdir,hvlogname1),"w")
 
 
+        # Run CMD
         app = CmdLoop()
-        lvhvbox = LVHVBox(app,ser1,ser2,hvlog0,hvlog1,lvlog)
-
+        lvhvbox = LVHVBox(ser1,ser2,hvlog0, hvlog1,lvlog)
 
         lvThrd = threading.Thread(target=lvloop, daemon = True)
         lvThrd.start()
@@ -1027,22 +1024,36 @@ if __name__ == '__main__':
         hvThrd1.start()
         hvThrd2 = threading.Thread(target=hvloop2, daemon = True)
         hvThrd2.start()
+        time.sleep(2)
 
-        time.sleep(4)
-
-        App = QApplication(sys.argv)
-
+        valid_vars=False
+        while valid_vars is False:
+            try:
+                v48=lvhvbox.v48
+                i48=lvhvbox.i48
+                T48=lvhvbox.T48
+                ihv0=lvhvbox.ihv0
+                ihv1=lvhvbox.ihv1
+                vhv0=lvhvbox.vhv0
+                vhv1=lvhvbox.vhv1
+                hvpcbtemp=lvhvbox.hvpcbtemp
+                i12v=lvhvbox.i12v
+                valid_vars=True
+            except:
+                pass
 
 
         hv_i=lvhvbox.ihv0+lvhvbox.ihv1
         hv_v=lvhvbox.vhv0+lvhvbox.vhv1
 
+        print('hi1-----------------------------------')
         window = Window(True,lvhvbox.v48,lvhvbox.i48,lvhvbox.T48,hv_i,hv_v,lvhvbox.hvpcbtemp,lvhvbox.i12V)
+        print('hi2------------------------------------')
 
         gui_thread = threading.Thread(target=App.exec(), daemon = True)
         gui_thread.start()
 
-        app.cmdloop()
+
         lvlog.close()
         hvlog.close()
         sys.exit()
