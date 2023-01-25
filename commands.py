@@ -58,7 +58,7 @@ class LVHVBox:
         GPIO.output(RESET_PIN,GPIO.LOW)
         GPIO.output(RESET_PIN,GPIO.HIGH)
 
-        
+
         self.mcp = MCP23S17(bus=0x00, pin_cs=0x00, device_id=0x00)
 
         self.mcp.open()
@@ -69,7 +69,7 @@ class LVHVBox:
             self.mcp.digitalWrite(x, MCP23S17.LEVEL_LOW)
 
 
-            
+
 
         self.bus = SMBus(1)
         self.bus.pec=1
@@ -78,12 +78,12 @@ class LVHVBox:
         rampup = os.getcwd()+"/control_gui/python_connect.so"
         self.rampup=CDLL(rampup)
         self.rampup.initialization()
-        
+
         # CMD stuff
 
         # Logfile stuff
         logging.basicConfig(filename='lvhvbox.log',format='%(asctime)s %(message)s',encoding='utf-8',level=logging.DEBUG)
-        
+
         # InfluxDB stuff
         token = "TN-Yxqb6EH0slUUdDUqODr5Of0RHkwGX7t9tYPyP5VjLB5Zy2lu3TUzazySH0gaUMyD7oR0UyTfJRTdWDM9aSg=="
         #token = "7orgMug1GuFq2hfpl4PpVLzKi31E-XCbrftF6AWV1t5cwDaRrrAEY7hARL8jN6zPUy2IabTdjOnq_c98IBG-Nw==" Old token
@@ -100,7 +100,7 @@ class LVHVBox:
         self.lvlog.close()
 
 
-    
+
     ## ===========================================
     ## Log LV data
     ## ===========================================
@@ -129,7 +129,7 @@ class LVHVBox:
             self.lvlog.write(" ")
             self.lvlog.write(" ".join(str(e) for e in temps))
             self.lvlog.write("\n")
-            
+
             # self.lvlog.write(str(self.mcp._readRegister(MCP23S17.MCP23S17_GPIOA)))
             # self.lvlog.write("\n")
             # self.lvlog.write(str(self.mcp._readRegister(MCP23S17.MCP23S17_GPIOB)))
@@ -168,7 +168,7 @@ class LVHVBox:
     ## ===========================================
     ## Log HV data (channels 6 to 11)
     ## ===========================================
-        
+
     def loghvdata1(self):
 
         try:
@@ -201,7 +201,7 @@ class LVHVBox:
             self.hvpcbtemp = float(d2[14])
             hvlist.append(self.hvpcbtemp)
 
-            self.hvlog1.write(datetime.now().strftime("%Y:%m:%d-%H:%M:%S "))            
+            self.hvlog1.write(datetime.now().strftime("%Y:%m:%d-%H:%M:%S "))
             self.hvlog1.write(" ".join(str(e) for e in hvlist))
             self.hvlog1.write("\n")
 
@@ -234,7 +234,7 @@ class LVHVBox:
     ## ===========================================
     ## Log HV data (channels 0 to 5)
     ## ===========================================
-        
+
     def loghvdata0(self):
 
         try:
@@ -243,7 +243,6 @@ class LVHVBox:
             if line1.startswith("Trip"):
                 logging.error(line1)
                 return 0
-
             d1 = line1.split()
             if (len(d1) != HVSERIALDATALENGTH):
                 logging.error('HV data from serial not the right length')
@@ -266,7 +265,7 @@ class LVHVBox:
 
             self.i12V = float(d1[14])
             hvlist.append(self.i12V)
-            self.hvlog0.write(str(datetime.now().strftime("%Y:%m:%d-%H:%M:%S ")))            
+            self.hvlog0.write(str(datetime.now().strftime("%Y:%m:%d-%H:%M:%S ")))
 
             self.hvlog0.write(" ".join(str(e) for e in hvlist))
             self.hvlog0.write("\n")
@@ -338,7 +337,7 @@ class LVHVBox:
             hvlock.release()
             return "Select an HV channel from 0 to 11!"
 
-        
+
         self.rampup.rampup_hv.argtypes = [c_int , c_float]
         self.rampup.rampup_hv(channel,alpha*voltage)
 
@@ -347,8 +346,8 @@ class LVHVBox:
 
     # rampHV()
     def rampHV(self,arglist):
-        """ VADIM'S COMMENT: spi linux driver is thread safe but the exteder operations are not. However, I 
-        only need to worry about the HV, since other LV stuff is on different pins and the MCP writes should 
+        """ VADIM'S COMMENT: spi linux driver is thread safe but the exteder operations are not. However, I
+        only need to worry about the HV, since other LV stuff is on different pins and the MCP writes should
         not affect them"""
         rampThrd = threading.Thread(target=self.ramphvup,args=(arglist[0],arglist[1]))
         rampThrd.start()
@@ -398,12 +397,12 @@ class LVHVBox:
         #I changed the python connect as well. Must be some mem alignemnt issue
 
         hvlock.release()
-        return "HV channel " + str(channel) + " set " + " to " + str(voltage) + " V"        
-        
+        return "HV channel " + str(channel) + " set " + " to " + str(voltage) + " V"
+
     # downHV()
     def downHV(self,arglist):
-        """ VADIM'S COMMENT: spi linux driver is thread safe but the exteder operations are not. However, I 
-        only need to worry about the HV, since other LV stuff is on different pins and the MCP writes should 
+        """ VADIM'S COMMENT: spi linux driver is thread safe but the exteder operations are not. However, I
+        only need to worry about the HV, since other LV stuff is on different pins and the MCP writes should
         not affect them"""
         rampThrd = threading.Thread(target=self.sethv,args=(arglist[0],0))
         rampThrd.start()
@@ -412,8 +411,8 @@ class LVHVBox:
 
     # setHV()
     def setHV(self,arglist):
-        """ VADIM'S COMMENT: spi linux driver is thread safe but the exteder operations are not. However, I 
-        only need to worry about the HV, since other LV stuff is on different pins and the MCP writes should 
+        """ VADIM'S COMMENT: spi linux driver is thread safe but the exteder operations are not. However, I
+        only need to worry about the HV, since other LV stuff is on different pins and the MCP writes should
         not affect them"""
         rampThrd = threading.Thread(target=self.sethv,args=(arglist[0],arglist[1]))
         rampThrd.start()
@@ -445,7 +444,7 @@ class LVHVBox:
             self.ser1.write(str.encode(cmd))
         else:
             self.ser2.write(str.encode(cmd))
-        
+
         cmd = str(arglist[1]) + "\r\n"
         if arglist[0] == 0:
             self.ser1.write(str.encode(cmd))
@@ -453,6 +452,34 @@ class LVHVBox:
             self.ser2.write(str.encode(cmd))
 
         return 0
+
+
+    def getHVvoltages(self,arglist):
+        if arglist[0] == 0:
+            ret=[self.vhv0,0]
+        elif arglist[0] == 1:
+            ret=[self.vhv1,1]
+        else:
+            return "Please select proper pico"
+
+        return ret
+
+
+    def getHVcurrents(self,arglist):
+        if arglist[0] == 0:
+            try:
+                ret=[self.ihv0,0]
+            except:
+                ret=[0 for i in range(6)]
+        elif arglist[0] == 1:
+            try:
+                ret=[self.ihv1,0]
+            except:
+                ret=[0 for i in range(6)]
+        else:
+            return "Please select proper pico"
+
+        return ret
 
 
 
@@ -464,19 +491,19 @@ class LVHVBox:
     # ==================
     def powerOn(self,channel):
 
-        
+
         if channel[0] ==  None:
             GPIO.output(GLOBAL_ENABLE_PIN,GPIO.HIGH)
             for ich in range(0,6):
                 self.mcp.digitalWrite(ich+8, MCP23S17.LEVEL_HIGH)
         else:
             ch = abs(channel[0])
-            self.bus.write_byte_data(0x50,0x0,ch+1)
-            self.bus.write_byte_data(0x50,0x01,0x80)
+#            self.bus.write_byte_data(0x50,0x0,ch+1)
+#            self.bus.write_byte_data(0x50,0x01,0x80)
 
             GPIO.output(GLOBAL_ENABLE_PIN,GPIO.HIGH)
             self.mcp.digitalWrite(ch+8, MCP23S17.LEVEL_HIGH)
-        
+
         return 0
 
 
@@ -501,27 +528,28 @@ class LVHVBox:
 
         return 0
 
-    
+
 
     # Turn off LV channel
     # ===================
     def powerOff(self,channel):
 
 
-        
+
         if channel[0] ==  None:
             GPIO.output(GLOBAL_ENABLE_PIN,GPIO.LOW)
             for ich in range(0,6):
                 self.mcp.digitalWrite(ich+8, MCP23S17.LEVEL_LOW)
         else:
             ch = abs(channel[0])
-            self.bus.write_byte_data(0x50,0x0,ch+1)
-            self.bus.write_byte_data(0x50,0x01,0x0)
-            
-#            GPIO.output(GLOBAL_ENABLE_PIN,GPIO.LOW) if this is off, the I2C bus commands are disabled. At least that's what it seems... Need to look more into it
+ #           self.bus.write_byte_data(0x50,0x0,ch+1)
+ #           self.bus.write_byte_data(0x50,0x01,0x0)
+
+            GPIO.output(GLOBAL_ENABLE_PIN,GPIO.LOW) #if this is off, the I2C bus commands are disabled. At least that's what it seems... Need to look more into it
             self.mcp.digitalWrite(ch+8, MCP23S17.LEVEL_LOW)
 
         return 0
+
 
 
     # Read LV channel voltage
@@ -543,13 +571,13 @@ class LVHVBox:
                 reading=self.bus.read_i2c_block_data(0x50,0x8B,2)
                 value = float(reading[0]+256*reading[1])/256.
                 ret.append(value)
-            
+
         except:
             logging.error("I2C reading error")
-                
+
         return ret
-    
-    
+
+
     # Read LV channel current
     # =======================
     def readcurrent(self,channel):
@@ -581,8 +609,8 @@ class LVHVBox:
             logging.error("I2C reading error")
 
         return ret
-    
-    
+
+
     # Read LV channel temperature
     # ===========================
     def readtemp(self,channel):
@@ -631,4 +659,3 @@ class LVHVBox:
     #        else:
     #            ret.append(-channel[0])
     #    return ret
-

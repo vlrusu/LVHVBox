@@ -35,10 +35,10 @@ def lvloop():
         try:
             lvdata = lv_queue.get(block=False)
             retc = process_command(lvdata)
-        
+
         except queue.Empty:
-            lvhvbox.loglvdata()
-            time.sleep(1)
+#            lvhvbox.loglvdata()
+            time.sleep(0.5)
 
 
 
@@ -54,7 +54,7 @@ def hvloop0():
         try:
             hvdata = hv0_queue.get(block=False)
             retc = process_command(hvdata)
-        
+
         except queue.Empty:
             lvhvbox.loghvdata0()
             time.sleep(0.1)
@@ -68,11 +68,11 @@ def hvloop1():
         try:
             hvdata = hv1_queue.get(block=False)
             retc = process_command(hvdata)
-        
+
         except queue.Empty:
             lvhvbox.loghvdata1()
             time.sleep(0.1)
-            
+
 
 
 
@@ -88,8 +88,8 @@ class QueueTester(Thread):
             time.sleep(3)
             command.response = "response"
             outgoing_queue.put(command)
-            
-        
+
+
 class Command(object):
     def __init__(self, priority, data, conn):
         self.priority = priority
@@ -97,8 +97,14 @@ class Command(object):
         self.conn = conn
         self.response = ""
 
-    def __cmp__(self, other):
-        return cmp(self.priority, other.priority)
+    def __gt__(self,other):
+        return self.priority > other.priority
+
+    def __lt__(self,other):
+        return self.priority < other.priority
+
+    def __eq__(self,other):
+        return self.priority == other.priority
 
 
 class CommandsThread(Thread):
@@ -122,8 +128,11 @@ class CommandsThread(Thread):
                     }
                 serialized = json.dumps(data)
                 msg = f"{len(serialized):<{HEADER_LENGTH}}"
-                command.conn.send(bytes(msg,"utf-8"))
-                command.conn.sendall(bytes(serialized,"utf-8"))
+                try:
+                    command.conn.send(bytes(msg,"utf-8"))
+                    command.conn.sendall(bytes(serialized,"utf-8"))
+                except:
+                    logging.debug("Connection send failed")
 
 
 
@@ -145,7 +154,7 @@ class ClientThread(Thread):
             if not len(message_header):
                 print(f"Closed connection from {ip}:{port}")
                 return
-            
+
             # Convert header to int value
             message_length = int(message_header.decode('utf-8').strip())
             data = json.loads(conn.recv(message_length).decode('utf-8'))
@@ -153,7 +162,7 @@ class ClientThread(Thread):
             command  = Command(1, data, self.conn)
             print (f"Server received data: {data}")
             if not incoming_queue.full():
-                if data["type"]==0:
+                if data["type"] == 0:
                     lv_queue.put(command)
                 elif data["type"] == 1:
                     hv0_queue.put(command)
@@ -169,7 +178,7 @@ class ClientThread(Thread):
 ## ==========================================================================================
 
 if __name__ == '__main__':
-                    
+
     incoming_queue = queue.PriorityQueue(BUFFER_SIZE)
     lv_queue = queue.PriorityQueue(BUFFER_SIZE)
     hv0_queue = queue.PriorityQueue(BUFFER_SIZE)
@@ -236,13 +245,13 @@ if __name__ == '__main__':
     hvlog0 = open(os.path.join(topdir,hvlogname0),"w")
     hvlogname1 = "hvdata1.log"
     hvlog1 = open(os.path.join(topdir,hvlogname1),"w")
-    
+
 
     lvhvbox = LVHVBox(ser1,ser2,hvlog0, hvlog1,lvlog)
 
 
 
-    
+
     lvThrd = threading.Thread(target=lvloop, daemon = True, name="LVTHREAD")
     lvThrd.start()
     threads.append(lvThrd)
@@ -251,8 +260,8 @@ if __name__ == '__main__':
     threads.append(hvThrd0)
     hvThrd1 = threading.Thread(target=hvloop1, daemon = True, name="HV1THREAD")
     hvThrd1.start()
-    threads.append(hvThrd1)    
-    
+    threads.append(hvThrd1)
+
 
 
 

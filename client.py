@@ -15,7 +15,6 @@ def listenloop(s):
 
     while (1):
         message = receive_message(s)
-#        print(message)
         if message is False:
             print('Closed connection')
             break
@@ -25,7 +24,7 @@ def listenloop(s):
 #            print(data)
             app.async_alert(str(json.loads(message["data"])["response"]))
             app.terminal_lock.release()
-        
+
 
 def receive_message(socket):
 
@@ -42,7 +41,7 @@ def receive_message(socket):
         message_length = int(message_header.decode('utf-8').strip())
 
 #        app.async_alert(str(message_length))
-        
+
         # Return an object of message header and message data
         return {'header': message_header, 'data': socket.recv(message_length)}
 
@@ -63,7 +62,7 @@ def receive_message(socket):
 class CmdLoop(cmd2.Cmd):
     """Example cmd2 application where we create commands that just print the arguments they are called with."""
 
-    
+
     # Are this shortcuts necessary?
     def __init__(self,s):
         # Create command shortcuts which are typically 1 character abbreviations which can be used in place of a command. Leave as is
@@ -82,12 +81,12 @@ class CmdLoop(cmd2.Cmd):
         self.socket.sendall(bytes(serialized,"utf-8"))
 
 
-        
+
     # There has to be a command for every interaction we need. So, readvoltage, readcurrents, readtemps, etc.
     # Each one has to have its counterpart in commands.py
 
 
-    
+
 
     # LV commands
     # ===========
@@ -119,7 +118,7 @@ class CmdLoop(cmd2.Cmd):
             "args" : [args.channel]
         }
         self.send(data)
-        
+
 #        lvqueue.put([args.cmd2_statement.get().command, args.channel])
 
 
@@ -135,7 +134,7 @@ class CmdLoop(cmd2.Cmd):
             "args" : [args.channel]
         }
         self.send(data)
-        
+
 #        lvqueue.put([args.cmd2_statement.get().command, args.channel])
 
 
@@ -151,7 +150,7 @@ class CmdLoop(cmd2.Cmd):
             "args" : [args.channel]
         }
         self.send(data)
-        
+
 #        lvqueue.put([args.cmd2_statement.get().command, args.channel])
 
 
@@ -167,7 +166,7 @@ class CmdLoop(cmd2.Cmd):
             "args" : [args.channel]
         }
         self.send(data)
-        
+
 #        lvqueue.put([args.cmd2_statement.get().command, args.channel])
 
 
@@ -183,11 +182,11 @@ class CmdLoop(cmd2.Cmd):
 
     # HV commands
     # ===========
-            
+
     # rampHV()
     pprint_parser = cmd2.Cmd2ArgumentParser()
     pprint_parser.add_argument('-c', '--channel', type=int,   help='HV channel number')
-    pprint_parser.add_argument('-v', '--voltage', type=float, help='Voltage to ramp up to')    
+    pprint_parser.add_argument('-v', '--voltage', type=float, help='Voltage to ramp up to')
     @cmd2.with_argparser(pprint_parser)
     def do_rampHV(self, args):
         """Print the options and argument list this options command was called with."""
@@ -213,13 +212,13 @@ class CmdLoop(cmd2.Cmd):
             "args" : [args.channel]
         }
         self.send(data)
-        
+
 
 
     # setHV()
     pprint_parser = cmd2.Cmd2ArgumentParser()
     pprint_parser.add_argument('-c', '--channel', type=int,   help='HV channel number')
-    pprint_parser.add_argument('-v', '--voltage', type=float, help='Voltage to set')    
+    pprint_parser.add_argument('-v', '--voltage', type=float, help='Voltage to set')
     @cmd2.with_argparser(pprint_parser)
     def do_setHV(self, args):
         """Print the options and argument list this options command was called with."""
@@ -230,7 +229,7 @@ class CmdLoop(cmd2.Cmd):
             "args" : [args.channel,args.voltage]
         }
         self.send(data)
-        
+
 
 # these next two commands refer to channel as pico channel not HV channel (so 0 or 1).
 # As it is written now, the argument is though still the HV channel
@@ -263,7 +262,8 @@ class CmdLoop(cmd2.Cmd):
         }
         self.send(data)
 
-            
+
+
 
 
 
@@ -280,10 +280,10 @@ if __name__ == '__main__':
             fobj.write("")
     readline.read_history_file(history_file)
     atexit.register(readline.write_history_file, history_file)
-    
+
     topdir = os.path.dirname(os.path.realpath(__file__))
 
-    
+
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     host = "127.0.0.1"
     port = 12000
@@ -291,15 +291,12 @@ if __name__ == '__main__':
 
     lvThrd = threading.Thread(target=listenloop, daemon = True, args=[sock])
     lvThrd.start()
-    
-    
+
+
     app = CmdLoop(sock)
 
 #    lvThrd = threading.Thread(target=listenloop, daemon = True)
 #    lvThrd.start()
 
-    
+
     app.cmdloop()
-    
-
-

@@ -1,21 +1,5 @@
 # GUI/Monitoring Software for the LVHV Boxes
 # Coded by Isaiah Wardlaw
-'''
-import sys
-import glob
-import os
-import json
-import struct
-import time
-import threading
-import readline
-import asyncio
-import commands
-import numpy
-
-import matplotlib
-'''
-
 import os
 import readline
 import atexit
@@ -26,6 +10,9 @@ import matplotlib
 import sys
 from commands import *
 import cmd2
+import socket
+import json
+from client import *
 
 
 from PyQt5.QtWidgets import (
@@ -55,173 +42,17 @@ signal.signal(signal.SIGINT, signal.SIG_DFL)
 background_color='background-color: white;'
 button_color='background-color: white;'
 
-
-def process_command(command):
-
-    app.async_alert ("Processing command ")
-    app.async_alert(' '.join(str(e) for e in command))
-    func = getattr(lvhvbox,command[0])
-    ret = func(command[1:])
-
-#this would be better as a real module, avoid global
-#    ret = globals()[command[0]](command[1:])
-
-    app.async_alert(' '.join(str(e) for e in ret))
-    return 0
-
-
-def lvloop():
-
-    while (1):
-        try:
-            lvdata = lvqueue.get(block=False)
-            app.async_alert("I got a LV command")
-            retc = process_command(lvdata)
-
-        except queue.Empty:
-            lvhvbox.loglvdata()
-            time.sleep(0.1)
-
-def hvloop1():
-
-    while (1):
-        try:
-            hvdata = hvqueue1.get(block=False)
-            app.async_alert("I got a HV command")
-            retc = process_command(hvdata)
-
-        except queue.Empty:
-            lvhvbox.loghvdata1()
-            time.sleep(0.1)
-
-
-def hvloop2():
-
-    while (1):
-        try:
-            hvdata = hvqueue2.get(block=False)
-            app.async_alert("I got a HV command")
-            retc = process_command(hvdata)
-
-        except queue.Empty:
-            lvhvbox.loghvdata2()
-            time.sleep(0.1)
-
-
-class CmdLoop(cmd2.Cmd):
-    """Example cmd2 application where we create commands that just print the arguments they are called with."""
-
-    def __init__(self):
-        # Create command shortcuts which are typically 1 character abbreviations which can be used in place of a command. Leave as is
-        shortcuts = dict(cmd2.DEFAULT_SHORTCUTS)
-        shortcuts.update({'$': 'readvoltage', '%': 'readcurrent'})
-        super().__init__(shortcuts=shortcuts)
-
-
-    # There has to be a command for every interaction we need. So, readvoltage, readcurrents, readtemps, etc.
-    # Each one has to have its counterpart in commands.py
-
-    # readvoltage()
-    pprint_parser = cmd2.Cmd2ArgumentParser()
-    pprint_parser.add_argument('-c', '--channel', type=int, help='Channel number')
-    @cmd2.with_argparser(pprint_parser)
-    def do_readvoltage(self, args):
-        """Print the options and argument list this options command was called with."""
-        lvqueue.put([args.cmd2_statement.get().command, args.channel])
-
-    # readcurrent()
-    pprint_parser = cmd2.Cmd2ArgumentParser()
-    pprint_parser.add_argument('-c', '--channel', type=int, help='Channel number')
-    @cmd2.with_argparser(pprint_parser)
-    def do_readcurrent(self, args):
-        """Print the options and argument list this options command was called with."""
-        lvqueue.put([args.cmd2_statement.get().command, args.channel])
-
-    # readtemp()
-    pprint_parser = cmd2.Cmd2ArgumentParser()
-    pprint_parser.add_argument('-c', '--channel', type=int, help='Channel number')
-    @cmd2.with_argparser(pprint_parser)
-    def do_readtemp(self, args):
-        """Print the options and argument list this options command was called with."""
-        lvqueue.put([args.cmd2_statement.get().command, args.channel])
-
-    # test()
-    pprint_parser = cmd2.Cmd2ArgumentParser()
-    pprint_parser.add_argument('-v', '--voltage', type=float, help='Volatge to ramp to')
-    pprint_parser.add_argument('-c', '--channel', type=int, help='Channel number')
-
-    @cmd2.with_argparser(pprint_parser)
-    def do_test(self, args):
-        """Print the options and argument list this options command was called with."""
-        lvqueue.put([args.cmd2_statement.get().command, args.channel, args.voltage])
-
-
-    # powerOn()
-    pprint_parser = cmd2.Cmd2ArgumentParser()
-    pprint_parser.add_argument('-c', '--channel', type=int, help='Channel number')
-    @cmd2.with_argparser(pprint_parser)
-    def do_powerOn(self, args):
-        """Print the options and argument list this options command was called with."""
-        lvqueue.put([args.cmd2_statement.get().command, args.channel])
-
-    # powerOff()
-    pprint_parser = cmd2.Cmd2ArgumentParser()
-    pprint_parser.add_argument('-c', '--channel', type=int, help='Channel number')
-    @cmd2.with_argparser(pprint_parser)
-    def do_powerOff(self, args):
-        """Print the options and argument list this options command was called with."""
-        lvqueue.put([args.cmd2_statement.get().command, args.channel])
-
-    # ramp()
-    pprint_parser = cmd2.Cmd2ArgumentParser()
-    pprint_parser.add_argument('-c', '--channel', type=int, help='Channel number')
-    pprint_parser.add_argument('-v', '--voltage', type=int, help='Volatge to ramp to')
-
-    @cmd2.with_argparser(pprint_parser)
-    def do_ramp(self, args):
-        """Print the options and argument list this options command was called with."""
-        hvqueue1.put([args.cmd2_statement.get().command, args.channel, args.voltage])
-    # down()
-    pprint_parser = cmd2.Cmd2ArgumentParser()
-    pprint_parser.add_argument('-c', '--channel', type=int, help='Channel number')
-
-    @cmd2.with_argparser(pprint_parser)
-    def do_down(self, args):
-        """Print the options and argument list this options command was called with."""
-        hvqueue1.put([args.cmd2_statement.get().command, args.channel])
-
-    # resetHV()
-    pprint_parser = cmd2.Cmd2ArgumentParser()
-    pprint_parser.add_argument('-c', '--channel', type=int, help='Channel number')
-    @cmd2.with_argparser(pprint_parser)
-    def do_resetHV(self, args):
-        """Print the options and argument list this options command was called with."""
-        hvqueue1.put([args.cmd2_statement.get().command, args.channel])
-
-    # setHVtrip()
-    pprint_parser = cmd2.Cmd2ArgumentParser()
-    pprint_parser.add_argument('-c', '--channel', type=int, help='Channel number')
-    pprint_parser.add_argument('-T', '--trippoint', type=int, help='Trip point in nA')
-    @cmd2.with_argparser(pprint_parser)
-    def do_setHVtrip(self, args):
-        """Print the options and argument list this options command was called with."""
-        hvqueue1.put([args.cmd2_statement.get().command, args.channel, args.trippoint])
-
-
 class Window(QMainWindow):
-    def __init__(self,test,v48,i48,T48,hv_v,hv_i,hvpcbtemp,i12V,lvhvbox):
+    def __init__(self,test,socket):
         super(Window,self).__init__()
 
-        self.test=test
-        self.v48=v48
-        self.i48=i48
-        self.T48=T48
-        self.hv_v=hv_v
-        self.hv_i=hv_i
-        self.hvpcbtemp=hvpcbtemp
-        self.i12V=i12V
+        self.v48=[0 for i in range(6)]
+        self.i48=[0 for i in range(6)]
+        self.T48=[0 for i in range(6)]
+        self.hv_v=[0 for i in range(12)]
+        self.hv_i=[0 for i in range(12)]
 
-
+        self.socket=socket
 
         #window.setCursor(PyQt5.BlankCursor)
         self.setWindowTitle("LVHV GUI")
@@ -229,8 +60,6 @@ class Window(QMainWindow):
 
         self.initialize_data()
         self.tabs()
-
-
 
         self.showFullScreen()
 
@@ -253,29 +82,11 @@ class Window(QMainWindow):
         # initialize hv controls setup
         self.hv_controls_setup()
 
-        '''
-        # initialize misc tab
-        #self.misc_setup()
-        '''
-
         # initialize blade plotting Window
         self.blade_plotting_setup()
 
         # initialize hv plotting Window
         self.hv_plotting_setup()
-
-        '''
-
-        # initialize stability blade plotting Window
-        self.stability_blade_plotting_setup()
-
-        # initialize stabiility board plotting Window
-        self.stability_board_plotting_setup()
-
-        # initialize stability hv plotting Window
-        self.stability_hv_plotting_setup()
-        '''
-
 
         # adds tabs to the overall GUI
         self.tabs.addTab(self.tab1,"Tables")
@@ -293,11 +104,6 @@ class Window(QMainWindow):
         #self.plotting_tabs.addTab(self.tab5,"Board Plots")
         self.plotting_tabs.addTab(self.tab6,"HV Plots")
 
-        '''
-        self.plotting_tabs.addTab(self.tab7,"Blade Stability")
-        self.plotting_tabs.addTab(self.tab8,"Board Stability")
-        self.plotting_tabs.addTab(self.tab9,"HV Stability")
-        '''
         self.plotting.layout.addWidget(self.plotting_tabs)
         self.plotting.setLayout(self.plotting.layout)
 
@@ -319,26 +125,12 @@ class Window(QMainWindow):
         # setup blade table
         self.blade_control_table=QTableWidget()
         self.blade_control_table.setRowCount(6)
-        self.blade_control_table.setColumnCount(5)
+        self.blade_control_table.setColumnCount(3)
         self.blade_control_table.setFixedWidth(550)
         self.blade_control_table.setDisabled(True)
 
-        self.blade_control_table.setHorizontalHeaderLabels(["Voltage (V)","current (A)","Temp (C)","HV PCB Temp","Board Current"])
+        self.blade_control_table.setHorizontalHeaderLabels(["Voltage (V)","current (A)","Temp (C)"])
         self.blade_control_table.setVerticalHeaderLabels(["Ch 0","Ch 1","Ch 2","Ch 3","Ch 4","Ch 5"])
-        #self.blade_control_table.horizontalHeader().setResizeMode(QHeaderView.Stretch)
-
-        '''
-        # setup board table
-        self.board_control_table=QTableWidget()
-        self.board_control_table.setRowCount(6)
-        self.board_control_table.setColumnCount(4)
-        self.board_control_table.setFixedWidth(550)
-        self.board_control_table.setDisabled(True)
-
-        self.board_control_table.setHorizontalHeaderLabels(["5V Voltage (V)","5V Current (A)","Cond Voltage (V)","Cond Current (A)"])
-        self.board_control_table.setVerticalHeaderLabels(["Ch 0","Ch 1","Ch 2","Ch 3","Ch 4","Ch 5"])
-        #self.board_control_table.horizontalHeader().setResizeMode(QHeaderView.Stretch)
-        '''
 
         # setup hv table
         self.hv_control_table=QTableWidget()
@@ -350,27 +142,22 @@ class Window(QMainWindow):
             self.hv_control_table.setRowHeight(i,24)
 
         self.hv_control_table.setVerticalHeaderLabels(["Ch 0","Ch 1","Ch 2","Ch 3","Ch 4","Ch 5","Ch 6","Ch 7","Ch 8","Ch 9","Ch 10","Ch 11"])
-        self.hv_control_table.setHorizontalHeaderLabels(["Voltage (V)","Current (A)"])
+        self.hv_control_table.setHorizontalHeaderLabels(["Voltage (V)","Current (mu-A)"])
+
 
         # set up tabs to select whether to view blade data or board data
         self.table_tabs=QTabWidget()
         self.table_tab1=QWidget()
         self.table_tab1.layout=QGridLayout()
-        self.table_tab2=QWidget()
-        self.table_tab2.layout=QGridLayout()
         self.table_tab3=QWidget()
         self.table_tab3.layout=QGridLayout()
         self.table_tabs.addTab(self.table_tab1,"Blade Data")
-        self.table_tabs.addTab(self.table_tab2,"Board Data")
         self.table_tabs.addTab(self.table_tab3,"HV Data")
 
         # add table widgets to tab container
         self.table_tab1.layout.addWidget(self.blade_control_table,0,0)
         self.table_tab1.setLayout(self.table_tab1.layout)
-        '''
-        self.table_tab2.layout.addWidget(self.board_control_table,0,0)
-        self.table_tab2.setLayout(self.table_tab2.layout)
-        '''
+
         self.table_tab3.layout.addWidget(self.hv_control_table,0,0)
         self.table_tab3.setLayout(self.table_tab3.layout)
 
@@ -395,19 +182,6 @@ class Window(QMainWindow):
             current_entry.setStyleSheet(button_color)
             self.blade_temperature_entries.append(current_entry)
             self.blade_control_table.setCellWidget(i,2,current_entry)
-        # add pcb temp
-        pcbtempentry=QLabel("N/A")
-        pcbtempentry.setAlignment(Qt.AlignCenter)
-        pcbtempentry.setStyleSheet(button_color)
-        self.pcbtempentry=pcbtempentry
-        self.blade_control_table.setCellWidget(0,3,pcbtempentry)
-
-        # add 12V board current
-        i12Ventry=QLabel("N/A")
-        i12Ventry.setAlignment(Qt.AlignCenter)
-        i12Ventry.setStyleSheet(button_color)
-        self.i12Ventry=i12Ventry
-        self.blade_control_table.setCellWidget(0,4,i12Ventry)
 
         # fill board table with entries and set background color
         self.board_5v_voltage_entries=[]
@@ -508,37 +282,97 @@ class Window(QMainWindow):
         self.lv_power_button_5,self.lv_power_button_6]
 
         if self.blade_power[number]==True:
-            indicators[number].setStyleSheet('background-color: red')
-            self.blade_power[number]=False
-            self.lvhvbox.powerOff(number)
+            data= {
+                "type" : 0,
+                "cmdname": "powerOff",
+                "args" : [number]
+            }
+
+            serialized = json.dumps(data)
+            msg = f"{len(serialized):<{10}}"
+
+            self.socket.send(bytes(msg,"utf-8"))
+            self.socket.sendall(bytes(serialized,"utf-8"))
+
+            data= {
+                "type" : 0,
+                "cmdname": "powerOn",
+                "args" : [None]
+            }
+
+            serialized = json.dumps(data)
+            msg = f"{len(serialized):<{10}}"
+
+            self.socket.send(bytes(msg,"utf-8"))
+            self.socket.sendall(bytes(serialized,"utf-8"))
         else:
-            indicators[number].setStyleSheet('background-color: green')
-            self.blade_power[number]=True
-            self.lvhvbox.powerOn(number)
+            data= {
+                "type" : 0,
+                "cmdname": "powerOn",
+                "args" : [number]
+            }
 
+            serialized = json.dumps(data)
+            msg = f"{len(serialized):<{10}}"
 
+            self.socket.send(bytes(msg,"utf-8"))
+            self.socket.sendall(bytes(serialized,"utf-8"))
+
+            data= {
+                "type" : 0,
+                "cmdname": "powerOn",
+                "args" : [None]
+            }
+
+            serialized = json.dumps(data)
+            msg = f"{len(serialized):<{10}}"
+
+            self.socket.send(bytes(msg,"utf-8"))
+            self.socket.sendall(bytes(serialized,"utf-8"))
 
     # called when one of the hv power buttons is pressed
-    def actuate_hv_power(self,lvhvbox,number):
+    def actuate_hv_power(self,number):
         indicators=[self.hv_power_button_1,self.hv_power_button_2,self.hv_power_button_3,
         self.hv_power_button_4,self.hv_power_button_5,self.hv_power_button_6,
         self.hv_power_button_7,self.hv_power_button_8,self.hv_power_button_9,
         self.hv_power_button_10,self.hv_power_button_11,self.hv_power_button_12]
 
         if self.hv_power[number]==True:
-            indicators[number].setStyleSheet('background-color: red')
-            self.hv_power[number]=False
+            if number > 5:
+                hv_type=1
+            else:
+                hv_type=0
 
-            self.lvhvbox.ramphvup([number,0])
+
+            data= {
+                "type" : hv_type,
+                "cmdname": "downHV",
+                "args" : [number]
+            }
+
+            serialized = json.dumps(data)
+            msg = f"{len(serialized):<{10}}"
+
+            self.socket.send(bytes(msg,"utf-8"))
+            self.socket.sendall(bytes(serialized,"utf-8"))
+
         else:
-            indicators[number].setStyleSheet('background-color: green')
-            self.hv_power[number]=True
+            if number > 5:
+                hv_type=1
+            else:
+                hv_type=0
 
-            self.lvhvbox.ramphvup([number],1500)
+            data= {
+                "type" : hv_type,
+                "cmdname": "rampHV",
+                "args" : [number,1500]
+            }
 
+            serialized = json.dumps(data)
+            msg = f"{len(serialized):<{10}}"
 
-
-
+            self.socket.send(bytes(msg,"utf-8"))
+            self.socket.sendall(bytes(serialized,"utf-8"))
 
     # sets up the hv control tab for the GUI
     def hv_controls_setup(self):
@@ -672,18 +506,18 @@ class Window(QMainWindow):
         self.tab3.layout.addWidget(self.hv_bar_12,4,3)
 
         #connect hv power buttons to actuate_hv_power
-        self.hv_power_button_1.clicked.connect(lambda: self.actuate_hv_power(lvhvbox,0))
-        self.hv_power_button_2.clicked.connect(lambda: self.actuate_hv_power(lvhvbox,1))
-        self.hv_power_button_3.clicked.connect(lambda: self.actuate_hv_power(lvhvbox,2))
-        self.hv_power_button_4.clicked.connect(lambda: self.actuate_hv_power(lvhvbox,3))
-        self.hv_power_button_5.clicked.connect(lambda: self.actuate_hv_power(lvhvbox,4))
-        self.hv_power_button_6.clicked.connect(lambda: self.actuate_hv_power(lvhvbox,5))
-        self.hv_power_button_7.clicked.connect(lambda: self.actuate_hv_power(lvhvbox,6))
-        self.hv_power_button_8.clicked.connect(lambda: self.actuate_hv_power(lvhvbox,7))
-        self.hv_power_button_9.clicked.connect(lambda: self.actuate_hv_power(lvhvbox,8))
-        self.hv_power_button_10.clicked.connect(lambda: self.actuate_hv_power(lvhvbox,9))
-        self.hv_power_button_11.clicked.connect(lambda: self.actuate_hv_power(lvhvbox,10))
-        self.hv_power_button_12.clicked.connect(lambda: self.actuate_hv_power(lvhvbox,11))
+        self.hv_power_button_1.clicked.connect(lambda: self.actuate_hv_power(0))
+        self.hv_power_button_2.clicked.connect(lambda: self.actuate_hv_power(1))
+        self.hv_power_button_3.clicked.connect(lambda: self.actuate_hv_power(2))
+        self.hv_power_button_4.clicked.connect(lambda: self.actuate_hv_power(3))
+        self.hv_power_button_5.clicked.connect(lambda: self.actuate_hv_power(4))
+        self.hv_power_button_6.clicked.connect(lambda: self.actuate_hv_power(5))
+        self.hv_power_button_7.clicked.connect(lambda: self.actuate_hv_power(6))
+        self.hv_power_button_8.clicked.connect(lambda: self.actuate_hv_power(7))
+        self.hv_power_button_9.clicked.connect(lambda: self.actuate_hv_power(8))
+        self.hv_power_button_10.clicked.connect(lambda: self.actuate_hv_power(9))
+        self.hv_power_button_11.clicked.connect(lambda: self.actuate_hv_power(10))
+        self.hv_power_button_12.clicked.connect(lambda: self.actuate_hv_power(11))
 
         self.tab3.setLayout(self.tab3.layout)
 
@@ -701,7 +535,7 @@ class Window(QMainWindow):
         self.blade_plot_axes.set_ylim([0,60])
         self.blade_plot_axes.set_title('Channel 0 Blade Voltage')
         self.blade_plot_axes.set_ylabel('Voltage (V)')
-        self.blade_plot_axes.set_xlabel('Iterative Age of Datapoint: each iteration is ' + 'TBD' + ' minutes.')
+        self.blade_plot_axes.set_xlabel('Iterative Age of Datapoint: each iteration is ' + 'one' + ' minute.')
 
         # initialize data (placed outside of bounds, so that it doesn't show up initially)
         self.blade_plot_data_x=[*range(0,10,1)]
@@ -765,7 +599,7 @@ class Window(QMainWindow):
         self.hv_plot_axes.set_ylim([0,1600])
         self.hv_plot_axes.set_title('Channel 0 HV Voltage')
         self.hv_plot_axes.set_ylabel('Voltage (V)')
-        self.hv_plot_axes.set_xlabel('Iterative Age of Datapoint: each iteration is ' + 'TBD' + ' minutes.')
+        self.hv_plot_axes.set_xlabel('Iterative Age of Datapoint: each iteration is ' + 'one' + ' minute.')
 
         # initialize data (placed outside of bounds, so that it doesn't show up initially)
         self.hv_plot_data_x=[*range(0,10,1)]
@@ -801,7 +635,7 @@ class Window(QMainWindow):
             self.hv_plot_axes.set_ylabel('Voltage (V)')
             self.hv_plot_axes.set_ylim([0,1600])
         else:
-            self.hv_plot_axes.set_ylabel('Current (A)')
+            self.hv_plot_axes.set_ylabel('Current (mu-A)')
             self.hv_plot_axes.set_ylim([0,100])
 
         # ensure that the proper type of data is being plotted
@@ -815,22 +649,54 @@ class Window(QMainWindow):
         self.hv_plot_canvas.flush_events()
 
     # updates the blade table with recent data
+    # also ensures that lv buttons are proper color
     def update_blade_table(self):
+        indicators=[self.lv_power_button_1,self.lv_power_button_2,self.lv_power_button_3,self.lv_power_button_4,
+        self.lv_power_button_5,self.lv_power_button_6]
+
+        for i in range(6):
+            if self.v48[i] > 40:
+                indicators[i].setStyleSheet('background-color: green')
+                self.blade_power[i]=True
+            else:
+                indicators[i].setStyleSheet('background-color: red')
+                self.blade_power[i]=False
+
         for j in range(6):
             self.blade_voltage_entries[j].setText(str(self.v48[j]))
             self.blade_current_entries[j].setText(str(self.i48[j]))
             self.blade_temperature_entries[j].setText(str(self.T48[j]))
-        self.pcbtempentry.setText(str(self.hvpcbtemp))
-        self.i12Ventry.setText(str(self.i12V))
+
+    # updates the hv bars
+    def update_hv_bars(self):
+        bars=[self.hv_bar_1,self.hv_bar_2,self.hv_bar_3,self.hv_bar_4,self.hv_bar_5,self.hv_bar_6,self.hv_bar_7,
+        self.hv_bar_8,self.hv_bar_9,self.hv_bar_10,self.hv_bar_11,self.hv_bar_12]
+
+        for j in range(12):
+            percentage=int(self.hv_v[j]/15)
+            bars[j].setValue(percentage)
 
     # updates the hv table with latest available data
     def update_hv_table(self):
+        indicators=[self.hv_power_button_1,self.hv_power_button_2,self.hv_power_button_3,
+        self.hv_power_button_4,self.hv_power_button_5,self.hv_power_button_6,
+        self.hv_power_button_7,self.hv_power_button_8,self.hv_power_button_9,
+        self.hv_power_button_10,self.hv_power_button_11,self.hv_power_button_12]
+
         for j in range(12):
             self.hv_voltage_entries[j].setText(str(self.hv_v[j]))
             self.hv_current_entries[j].setText(str(self.hv_i[j]))
 
+            if self.hv_v[j] > 10:
+                indicators[j].setStyleSheet('background-color: green')
+                self.hv_power[j]=True
+            else:
+                indicators[j].setStyleSheet('background-color: red')
+                self.hv_power[j]=False
+
     def update_data(self):
         self.update_hv_table()
+        self.update_hv_bars()
         self.update_blade_table()
 
      # called by the timer to update the main plot with new data
@@ -926,13 +792,15 @@ class Window(QMainWindow):
         self.table_update_timer = QTimer(self)
         self.table_update_timer.setSingleShot(False)
         self.table_update_timer.timeout.connect(self.update_data)
+        self.table_update_timer.timeout.connect(self.update_all_data)
         self.table_update_timer.start(1000)
 
         self.plot_update_timer=QTimer(self)
         self.plot_update_timer.setSingleShot(False)
         self.plot_update_timer.timeout.connect(self.update_blade_plot)
         self.plot_update_timer.timeout.connect(self.update_hv_plot)
-        self.plot_update_timer.start(2000)
+        self.plot_update_timer.start(60000)
+
 
     # acquires the channel being measured
     def get_blade_channel(self):
@@ -951,132 +819,212 @@ class Window(QMainWindow):
         return channel
 
 
+    def update_all_data(self):
+        v48_request = {
+            "type" : 0,
+            "cmdname": "readvoltage",
+            "args" : [None]
+        }
+        i48_request = {
+            "type" : 0,
+            "cmdname": "readcurrent",
+            "args" : [None]
+        }
+        T48_request = {
+            "type" : 0,
+            "cmdname": "readtemp",
+            "args" : [None]
+        }
+        hv_v0_request= {
+            "type" : 1,
+            "cmdname": "getHVvoltages",
+            "args" : [0]
+        }
+        hv_v1_request= {
+            "type" : 1,
+            "cmdname": "getHVvoltages",
+            "args" : [1]
+        }
+        hv_i0_request= {
+            "type" : 1,
+            "cmdname": "getHVcurrents",
+            "args" : [0]
+        }
+        hv_i1_request= {
+            "type" : 1,
+            "cmdname": "getHVcurrents",
+            "args" : [1]
+        }
+
+        hv_v0=[]
+        hv_v1=[]
+        hv_i0=[]
+        hv_i1=[]
+        v48=[]
+        i48=[]
+        T48=[]
+
+        request_list=[v48_request,i48_request,T48_request,hv_v0_request,hv_v1_request,hv_i0_request,hv_i1_request]
+        output_list=[]
+
+        for data in request_list:
+            serialized = json.dumps(data)
+            msg = f"{len(serialized):<{10}}"
+
+            self.socket.send(bytes(msg,"utf-8"))
+            self.socket.sendall(bytes(serialized,"utf-8"))
+
+            message = receive_message(self.socket)
+
+            data = message["data"].decode('ascii')
+
+            data = data.replace("'", "\"")
+            output_dict = json.loads(data)
+
+            output_list.append(output_dict)
+
+        for output_dict in output_list:
+            if not isinstance(output_dict['response'],int):
+                if output_dict['cmdname'] == "readvoltage":
+                    v48=output_dict['response']
+                elif output_dict['cmdname'] == "readcurrent":
+                    i48=output_dict['response']
+                elif output_dict['cmdname'] == "readtemp":
+                    T48=output_dict['response']
+                elif output_dict['cmdname'] == "getHVvoltages":
+                    if output_dict['response'][1] == 0:
+                        hv_v0=output_dict['response'][0]
+                    else:
+                        hv_v1=output_dict['response'][0]
+                elif output_dict['cmdname'] == "getHVcurrents":
+                    if output_dict['response'][1] == 0:
+                        hv_i0=output_dict['response'][0]
+                    else:
+                        hv_i1=output_dict['response'][0]
+
+        hv_v=hv_v0+hv_v1
+        hv_i=hv_i0+hv_i1
+
+        if len(hv_v) == 12:
+            self.hv_v = hv_v
+        if len(hv_i) == 12:
+            self.hv_i = hv_i
+        if len(v48) == 6:
+            self.v48 = v48
+        if len(i48) == 6:
+            self.i48 = i48
+        if len(T48) == 6:
+            self.T48 = T48
+
+    # acquires hv data from pico via pyserial connection
+    def get_hv_data(self):
+        # acquire hv current and voltage
+        hv_voltage_1=[]
+        hv_current_1=[]
+
+        hv_voltage_2=[]
+        hv_current_2=[]
+
+
+        # make serial connection and close as soon as most recent line of data is acquired
+
+        ser = serial.Serial('/dev/ttyACM0', 115200, timeout=2)
+        line = ser.readline().decode('ascii')
+
+        ser1 = serial.Serial('/dev/ttyACM1', 115200, timeout=2)
+        line1 = ser1.readline().decode('ascii')
+
+        # break apart the acquired pyserial output line and parse
+        processed_line = line.split(" ")
+        processed_line1 = line1.split(" ")
+
+        # determine which pico is first
+        picocheck1=line.split("|")[3][1]
+        picocheck2=line1.split("|")[3][1]
+
+        # get the hv overall current and temperature
+        pico_add_1=line.split("|")[2][1:-2]
+        pico_add_2=line1.split("|")[2][1:-2]
+
+        on_voltage=False
+        end=False
+        for i in processed_line:
+            if i != '' and i != '|' and on_voltage is False:
+                hv_current_1.append(float(i))
+            elif i != '' and i != '|' and on_voltage is True and end is False:
+                hv_voltage_1.append(float(i))
+            elif end is False and i == '|':
+                if on_voltage is False:
+                    on_voltage = True
+                else:
+                    end = True
+
+        on_voltage=False
+        end=False
+        for i in processed_line1:
+            if i != '' and i != '|' and on_voltage is False:
+                hv_current_2.append(float(i))
+            elif i != '' and i != '|' and on_voltage is True and end is False:
+                hv_voltage_2.append(float(i))
+            elif end is False and i == '|':
+                if on_voltage is False:
+                    on_voltage = True
+                else:
+                    end = True
+        # based on picocheck results, form main hv lists
+        if picocheck1 == '2':
+            hv_voltage = hv_voltage_1 + hv_voltage_2
+            hv_current = hv_current_1 + hv_current_2
+            self.hv_board_temp=float(pico_add_1)
+            self.hv_board_current=float(pico_add_2)
+        else:
+            hv_voltage = hv_voltage_2 + hv_voltage_1
+            hv_current = hv_current_2 + hv_current_1
+            self.hv_board_temp=float(pico_add_2)
+            self.hv_board_current=float(pico_add_1)
+
+        # ensure that hv currents have proper signs
+        for i in range(len(hv_current)):
+            hv_current[i] = hv_current[i] * -1
+
+        # returned lists are flipped
+        hv_current.reverse()
+        hv_voltage.reverse()
+
+        # round hv voltage
+        temp=[]
+        for i in hv_voltage:
+            temp.append(round(int(i),1))
+        hv_voltage=temp
+
+        assert len(hv_current) == 12
+        assert len(hv_voltage) == 12
 
 
 ## Main function
 ## =============
 
 if __name__ == '__main__':
-    test = False
-    if not test:
-        history_file = os.path.expanduser('.lvhv_history')
-        if not os.path.exists(history_file):
-            with open(history_file, "w") as fobj:
-                fobj.write("")
+    history_file = os.path.expanduser('.lvhv_history')
+    if not os.path.exists(history_file):
+        with open(history_file, "w") as fobj:
+            fobj.write("")
+    readline.read_history_file(history_file)
+    atexit.register(readline.write_history_file, history_file)
 
-        readline.read_history_file(history_file)
-        atexit.register(readline.write_history_file, history_file)
-
-        topdir = os.path.dirname(os.path.realpath(__file__))
+    topdir = os.path.dirname(os.path.realpath(__file__))
 
 
-        # Queue hacks
-        lvqueue = queue.Queue()
-        hvqueue1 = queue.Queue()
-        hvqueue2 = queue.Queue() # this is such a hack!!!!
-
-        logging.basicConfig(filename='lvhvbox.log', format='%(asctime)s:%(levelname)s:%(message)s', encoding='utf-8', level=logging.DEBUG)
-
-
-        # Decide which serial is 1 and which is 2
-        sertmp1 = serial.Serial('/dev/ttyACM0', 115200, timeout=10,write_timeout = 1)
-        sertmp2 = serial.Serial('/dev/ttyACM1', 115200, timeout=10,write_timeout = 1)
-
-        sertmp1.timeout = None
-        line = ""
-        while(len(line)) < 90:
-            line = sertmp1.readline().decode('ascii')
-
-        whichone = line.split("|")[2][0]
-        print("ser1 is " + str(whichone))
-
-        if whichone == 1:
-            ser1=sertmp1
-            ser2=sertmp2
-        else:
-            ser1 = sertmp2
-            ser2 = sertmp1
-
-        sertmp2.timeout = None
-        line = ""
-        while(len(line)) < 90:
-            line = sertmp2.readline().decode('ascii')
-        whichone = line.split("|")[2][0]
-        print("ser2 is " + str(whichone))
-
-
-        # Log files
-        lvlogname = "lvdata.log"
-        lvlog = open(os.path.join(topdir,lvlogname),"w")
-        hvlogname0 = "hvdata0.log"
-        hvlog0 = open(os.path.join(topdir,hvlogname0),"w")
-        hvlogname1 = "hvdata1.log"
-        hvlog1 = open(os.path.join(topdir,hvlogname1),"w")
-
-
-        # Run CMD
-        app = CmdLoop()
-        lvhvbox = LVHVBox(ser1,ser2,hvlog0, hvlog1,lvlog)
-
-        lvThrd = threading.Thread(target=lvloop, daemon = True)
-        lvThrd.start()
-        hvThrd1 = threading.Thread(target=hvloop1, daemon = True)
-        hvThrd1.start()
-        hvThrd2 = threading.Thread(target=hvloop2, daemon = True)
-        hvThrd2.start()
-        time.sleep(2)
-
-        valid_vars=False
-        while valid_vars is False:
-            try:
-                v48=lvhvbox.v48
-                i48=lvhvbox.i48
-                T48=lvhvbox.T48
-                ihv0=lvhvbox.ihv0
-                ihv1=lvhvbox.ihv1
-                vhv0=lvhvbox.vhv0
-                vhv1=lvhvbox.vhv1
-                hvpcbtemp=lvhvbox.hvpcbtemp
-                i12v=lvhvbox.i12v
-                valid_vars=True
-            except:
-                pass
-
-
-        hv_i=lvhvbox.ihv0+lvhvbox.ihv1
-        hv_v=lvhvbox.vhv0+lvhvbox.vhv1
-
-        print('hi1-----------------------------------')
-        window = Window(True,lvhvbox.v48,lvhvbox.i48,lvhvbox.T48,hv_i,hv_v,lvhvbox.hvpcbtemp,lvhvbox.i12V)
-        print('hi2------------------------------------')
-
-        gui_thread = threading.Thread(target=App.exec(), daemon = True)
-        gui_thread.start()
-
-
-        lvlog.close()
-        hvlog.close()
-        sys.exit()
-        sys.exit()
-    else:
-        v48=[48 for i in range(6)]
-        i48=[6 for i in range(6)]
-        T48=[30 for i in range(6)]
-        hv_i=[0.1 for i in range(12)]
-        hv_v=[1500 for i in range(12)]
-        hvpcbtemp=35
-        i12V=1
-
-        App = QApplication(sys.argv)
-        window = Window(True,v48,i48,T48,hv_v,hv_i,hvpcbtemp,i12V)
-
-        gui_thread = threading.Thread(target=App.exec(), daemon = True)
-        gui_thread.start()
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    host = "127.0.0.1"
+    port = 12000
+    sock.connect((host,port))
 
 
 
-    '''
     App = QApplication(sys.argv)
-    window = Window(True)
-    sys.exit(App.exec())
-    '''
+
+    window = Window(True,sock)
+
+    gui_thread = threading.Thread(target=App.exec(), daemon = True)
+    gui_thread.start()

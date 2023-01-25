@@ -1043,3 +1043,7 @@ dkms.conf
 *.uf2
 # Raspberry Pi Pico disassembler file
 *.dis
+lvdata.log
+lvdata.log
+lvhvbox.log
+.gitignore
