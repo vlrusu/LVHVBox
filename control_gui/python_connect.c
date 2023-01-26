@@ -114,7 +114,6 @@ void rampup_hv(int channel, float value)
   }
 }
 
-
 // Main function
 // =============
 int main(int argc, char *argv[])
