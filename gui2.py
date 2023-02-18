@@ -824,39 +824,11 @@ class Window(QMainWindow):
         channel=channels[self.hv_channel_selector.currentText()]
         return channel
 
-    def update_all_data_log(self):
-        with open('lvdata.log', 'rb') as file0:
-            try:
-                file0.seek(-2, os.SEEK_END)
-                while file0.read(1) != b'\n':
-                    file0.seek(-2, os.SEEK_CUR)
-            except OSError:
-                file0.seek(0)
-            lv_pre = file0.readline().decode()
-
-        
-        with open('hvdata0.log', 'rb') as file1:
-            try:
-                file1.seek(-2, os.SEEK_END)
-                while file1.read(1) != b'\n':
-                    file1.seek(-2, os.SEEK_CUR)
-            except OSError:
-                file1.seek(0)
-            hv0_pre = file1.readline().decode()
-        
-        with open('hvdata1.log', 'rb') as file2:
-            try:
-                file2.seek(-2, os.SEEK_END)
-                while file2.read(1) != b'\n':
-                    file2.seek(-2, os.SEEK_CUR)
-            except OSError:
-                file2.seek(0)
-            hv1_pre = file2.readline().decode()
-
-        
+    def update_all_data_log(self): 
         v48 = [float(i) for i in lv_pre.split(' ')[1:7]]
         i48 = [float(i) for i in lv_pre.split(' ')[7:13]]
         T48 = [float(i) for i in lv_pre.split(' ')[13:18] + [lv_pre.split(' ')[18][:-1]]]
+        
 
         hv0_v=[]
         hv0_i=[]

@@ -167,7 +167,7 @@ class LVHVBox:
 
     ## ===========================================
     ## Log HV data (channels 6 to 11)
-    ## ===========================================
+    ## ===========================================    
 
     def loghvdata1(self):
 
@@ -292,6 +292,48 @@ class LVHVBox:
 
         except:
             logging.error("HV channels 0 to 5 logging failed")
+        
+    def get_v48(self):
+        try:
+            return self.v48
+        except:
+            return False
+    
+    def get_i48(self):
+        try:
+            return self.i48
+        except:
+            return False
+    
+    def get_T48(self):
+        try:
+            return self.T48
+        except:
+            return False
+    
+    def get_ihv0(self):
+        try:
+            return self.ihv0
+        except:
+            return False
+    
+    def get_vhv0(self):
+        try:
+            return self.vhv0
+        except:
+            return False
+    
+    def get_ihv1(self):
+        try:
+            return self.ihv1
+        except:
+            return False
+    
+    def get_vhv1(self):
+        try:
+            return self.vhv1
+        except:
+            return False
 
 
 
