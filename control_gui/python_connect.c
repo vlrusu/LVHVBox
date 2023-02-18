@@ -8,7 +8,6 @@
 #include <unistd.h>
 #include <termios.h>
 
-
 #include <wiringPi.h>
 #include <wiringPiSPI.h>
 #include <mcp23x0817.h>
@@ -16,7 +15,6 @@
 #include <softPwm.h>
 #include <linux/spi/spidev.h>
 #include <dac8164.h>
-
 
 #define MCPPINBASE 2000
 
@@ -70,59 +68,87 @@ void initialization(){
 }
 
 
-void rampup_hv(int channel, int value){
+void test(int channel, float value)
+{
+
+  printf("%d %6.3f\n",channel, value);
+
+
+}
+
+
+// set_hv()
+// ========
+void set_hv(int channel, float value)
+{
+
+
+
   int idac = (int) (channel/4);
 
-  float increment = value*2.3/NSTEPS/1664.;
+  uint32_t digvalue = ( (int) (16383.*(value*2.3/(1510*2.5)))) & 0x3FFF;
+  printf("%d\n",digvalue);
+
+  DAC8164_writeChannel(&dac[idac], channel, digvalue);
+}
+
+
+// rampup_hv()
+// ===========
+void rampup_hv(int channel, float value)
+{
+  int idac = (int) (channel/4);
+
+  
+
+  float increment = value*2.3/NSTEPS/1510.;
   float setvalue = 0;
+
   for (int itick =0; itick < NSTEPS; itick++){
     usleep(50000);
     setvalue += increment;
     uint32_t digvalue = ( (int) (16383.*(setvalue/2.5))) & 0x3FFF;
-
+    //printf("Test %d \n",digvalue);
+    
     DAC8164_writeChannel(&dac[idac], channel, digvalue);
-
   }
 }
 
-
-
+// Main function
+// =============
 int main(int argc, char *argv[])
 {
+  /*
+  while((opt = getopt(argc, argv, “:if:lrx”)) != -1)
+  {
+    switch(opt)
+    {
+      case ‘i’:
+      case ‘l’:
+      case ‘r’:
+        printf(“option: %c\n”, opt);
+        break;
+      case ‘f’:
+        printf(“filename: %s\n”, optarg);
+        break;
+      case ‘:’:
+        printf(“option needs a value\n”);
+        break;
+      case ‘?’:
+        printf(“unknown option: %c\n”, optopt);
+        break;
+    }
+  }
+  */
 
-	/*
-	while((opt = getopt(argc, argv, “:if:lrx”)) != -1)
-	  {
-	    switch(opt)
-	      {
-	      case ‘i’:
-	      case ‘l’:
-	      case ‘r’:
-                printf(“option: %c\n”, opt);
-                break;
-	      case ‘f’:
-                printf(“filename: %s\n”, optarg);
-                break;
-	      case ‘:’:
-                printf(“option needs a value\n”);
-                break;
-	      case ‘?’:
-                printf(“unknown option: %c\n”, optopt);
-	      break;
-	      }
-	  }
-	*/
-	initialization();
+  initialization();
 
-	int channel = atoi(argv[1]);
-	float value = atof(argv[2]);
+  int channel = atoi(argv[1]);
+  float value = atof(argv[2]);
 
-	value = value*2.3/1510.;
-	int idac = (int) (channel/4);
-	printf(" Chan %i HV idac %i  is set to %7.2f\n", channel, idac, value);
+  value = value*2.3/1510.;
+  int idac = (int) (channel/4);
+  printf(" Channel %i HV idac %i is set to %7.2f\n", channel, idac, value);
 
-
-
-
-	return 0 ;
+  return 0;
 }

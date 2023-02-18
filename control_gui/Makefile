@@ -37,22 +37,20 @@ LDLIBS    = -lwiringPi -lwiringPiDev -lpthread -lm -lcrypt -lrt
 # Should not alter anything below this line
 ###############################################################################
 
-SRC	=	main.c dac8164.c
+SRC	=	dac8164.c test.c rampup.c sethv.c python_connect.c
 
-OBJ	=	$(SRC:.c=.o)
+OBJ	=	$(SRC:.c=.o) $(SRC:.c=.so)
 
-BINS	=	$(SRC:.c=)
+BINS	=	rampup sethv python_connect.so
 
-all:
-	$Q cat README.TXT
+.DEFAULT_GOAL := all
+
+all:	$(BINS)
 	$Q echo "    $(BINS)" | fmt
 	$Q echo ""
 
 really-all:	$(BINS)
 
-main:	main.o dac8164.o
-	$Q echo [link]
-	$Q $(CC) -o $@ main.o dac8164.o  $(LDFLAGS) $(LDLIBS)
 test:	test.o dac8164.o
 	$Q echo [link]
 	$Q $(CC) -o $@ test.o dac8164.o  $(LDFLAGS) $(LDLIBS)
@@ -64,10 +62,9 @@ sethv:	sethv.o dac8164.o
 	$Q echo [link]
 	$Q $(CC) -o $@ sethv.o dac8164.o  $(LDFLAGS) $(LDLIBS)
 
-python_connect:	python_connect.o dac8164.o
+python_connect.so:	python_connect.o dac8164.o
 	$Q echo [link]
-	$Q $(CC) -o $@ python_connect.o dac8164.o  $(LDFLAGS) $(LDLIBS)
-
+	$Q $(CC) -shared -o $@ python_connect.o dac8164.o  $(LDFLAGS) $(LDLIBS)
 
 
 
