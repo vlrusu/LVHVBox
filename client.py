@@ -262,6 +262,32 @@ class CmdLoop(cmd2.Cmd):
         }
         self.send(data)
 
+    
+    # data acquisition commands
+
+    @cmd2.with_argparser(pprint_parser)
+    def do_get_v48(self, args):
+        """Print the options and argument list this options command was called with."""
+        data= {
+            "type" : LVTYPE,
+            "cmdname": args.cmd2_statement.get().command,
+            "args" : []
+        }
+        self.send(data)
+
+
+    @cmd2.with_argparser(pprint_parser)
+    def do_get_vhv1(self, args):
+        """Print the options and argument list this options command was called with."""
+        data= {
+            "type" : HVTYPE0,
+            "cmdname": args.cmd2_statement.get().command,
+            "args" : []
+        }
+        self.send(data)
+
+
+
 
 
 

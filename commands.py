@@ -14,6 +14,8 @@ from datetime import datetime
 from influxdb_client import InfluxDBClient, Point, WritePrecision
 from influxdb_client.client.write_api import SYNCHRONOUS
 
+import numpy as np
+
 
 NLVCHANNELS = 6
 NHVCHANNELS = 6
@@ -42,42 +44,48 @@ addresses = [0x14,0x16,0x26]
 ## ==========================================================================================
 
 class LVHVBox:
-    def __init__ (self,ser1,ser2,hvlog0, hvlog1 ,lvlog):
+    def __init__ (self,ser1,ser2,hvlog0, hvlog1 ,lvlog, is_test):
 
         self.ser1 = ser1
         self.ser2 = ser2
         self.hvlog0 = hvlog0
         self.hvlog1 = hvlog1
         self.lvlog = lvlog
+        self.is_test = is_test
+
+        self.ihv0 = [0 for i in range(6)]
+        self.ihv1 = [0 for i in range(6)]
+        self.vhv0 = [0 for i in range(6)]
+        self.vhv1 = [0 for i in range(6)]
 
 
-        GPIO.setmode(GPIO.BOARD)
-        GPIO.setup(GLOBAL_ENABLE_PIN,GPIO.OUT)
-        GPIO.output(GLOBAL_ENABLE_PIN,GPIO.LOW)
-        GPIO.setup(RESET_PIN,GPIO.OUT)
-        GPIO.output(RESET_PIN,GPIO.LOW)
-        GPIO.output(RESET_PIN,GPIO.HIGH)
+        if not self.is_test:
+            GPIO.setmode(GPIO.BOARD)
+            GPIO.setup(GLOBAL_ENABLE_PIN,GPIO.OUT)
+            GPIO.output(GLOBAL_ENABLE_PIN,GPIO.LOW)
+            GPIO.setup(RESET_PIN,GPIO.OUT)
+            GPIO.output(RESET_PIN,GPIO.LOW)
+            GPIO.output(RESET_PIN,GPIO.HIGH)
+
+            self.mcp = MCP23S17(bus=0x00, pin_cs=0x00, device_id=0x00)
+
+            self.mcp.open()
+            self.mcp._spi.max_speed_hz = 10000000
+
+            for x in range(8, 16):
+                self.mcp.setDirection(x, self.mcp.DIR_OUTPUT)
+                self.mcp.digitalWrite(x, MCP23S17.LEVEL_LOW)
 
 
-        self.mcp = MCP23S17(bus=0x00, pin_cs=0x00, device_id=0x00)
-
-        self.mcp.open()
-        self.mcp._spi.max_speed_hz = 10000000
-
-        for x in range(8, 16):
-            self.mcp.setDirection(x, self.mcp.DIR_OUTPUT)
-            self.mcp.digitalWrite(x, MCP23S17.LEVEL_LOW)
 
 
+            self.bus = SMBus(1)
+            self.bus.pec=1
 
-
-        self.bus = SMBus(1)
-        self.bus.pec=1
-
-        # HV manipulating stuff
-        rampup = os.getcwd()+"/control_gui/python_connect.so"
-        self.rampup=CDLL(rampup)
-        self.rampup.initialization()
+            # HV manipulating stuff
+            rampup = os.getcwd()+"/control_gui/python_connect.so"
+            self.rampup=CDLL(rampup)
+            self.rampup.initialization()
 
         # CMD stuff
 
@@ -106,21 +114,35 @@ class LVHVBox:
     ## ===========================================
 
     def loglvdata(self):
-
         try:
-            voltages = self.readvoltage([None])
-            self.v48 = [0]*NLVCHANNELS
+            if not self.is_test:
+                voltages = self.readvoltage([None])
+                self.v48 = [0]*NLVCHANNELS
 
-            currents = self.readcurrent([None])
-            self.i48 = [0]*NLVCHANNELS
+                currents = self.readcurrent([None])
+                self.i48 = [0]*NLVCHANNELS
 
-            temps = self.readtemp([None])
-            self.T48 = [0]*NLVCHANNELS
+                temps = self.readtemp([None])
+                self.T48 = [0]*NLVCHANNELS
+   
 
-            for ich in range(NLVCHANNELS):
-                self.v48[ich] = voltages[ich]
-                self.i48[ich] = currents[ich]
-                self.T48[ich] = temps[ich]
+                for ich in range(NLVCHANNELS):
+                    self.v48[ich] = voltages[ich]
+                    self.i48[ich] = currents[ich]
+                    self.T48[ich] = temps[ich]
+            else:
+                self.v48 = [0]*NLVCHANNELS
+                self.i48 = [0]*NLVCHANNELS
+                self.T48 = [0]*NLVCHANNELS
+
+                for ich in range(NLVCHANNELS):
+                    self.v48[ich] = round(np.random.normal(48,1),2)
+                    self.i48[ich] = round(np.random.normal(1,1),2)
+                    self.T48[ich] = round(np.random.normal(22,1),2)
+                
+                voltages = self.v48
+                currents = self.i48
+                temps = self.T48
 
             self.lvlog.write(str(datetime.now().strftime("%Y:%m:%d-%H:%M:%S ")))
             self.lvlog.write(" ".join(str(e) for e in voltages))
@@ -172,34 +194,48 @@ class LVHVBox:
     def loghvdata1(self):
 
         try:
-            line2 = self.ser2.readline().decode('ascii')
+            if not self.is_test:
+                line2 = self.ser2.readline().decode('ascii')
 
-            if line2.startswith("Trip"):
-                logging.error(line2)
-                return 0
+                if line2.startswith("Trip"):
+                    logging.error(line2)
+                    return 0
 
-            d2 = line2.split()
-            if (len(d2) != HVSERIALDATALENGTH):
-                logging.error('HV data from serial not the right length')
-                logging.error(line2)
-                return 0
+                d2 = line2.split()
+                if (len(d2) != HVSERIALDATALENGTH):
+                    logging.error('HV data from serial not the right length')
+                    logging.error(line2)
+                    return 0
 
-            if (d2[6] != "|" or d2[13] != "|" or d2[15]!= "|" or d2[17]!= "|"):
-                logging.error('HV data from serial is not the right format')
-                logging.error(line1)
-                return 0
+                if (d2[6] != "|" or d2[13] != "|" or d2[15]!= "|" or d2[17]!= "|"):
+                    logging.error('HV data from serial is not the right format')
+                    logging.error(line1)
+                    return 0
 
-            hvlist = []
-            self.ihv1 = [0]*NHVCHANNELS
-            self.vhv1 = [0]*NHVCHANNELS
-            for ich in range(6):
-                self.ihv1[ich] = float(d2[5-ich])
-                self.vhv1[ich] = float(d2[12-ich])
-                hvlist.append(self.ihv1[ich])
-                hvlist.append(self.vhv1[ich])
+                hvlist = []
+                self.ihv1 = [0]*NHVCHANNELS
+                self.vhv1 = [0]*NHVCHANNELS
+                for ich in range(6):
+                    self.ihv1[ich] = float(d2[5-ich])
+                    self.vhv1[ich] = float(d2[12-ich])
+                    hvlist.append(self.ihv1[ich])
+                    hvlist.append(self.vhv1[ich])
 
-            self.hvpcbtemp = float(d2[14])
-            hvlist.append(self.hvpcbtemp)
+                self.hvpcbtemp = float(d2[14])
+                hvlist.append(self.hvpcbtemp)
+            else:
+                hvlist = []
+                self.ihv1 = [0]*NHVCHANNELS
+                self.vhv1 = [0]*NHVCHANNELS
+                for ich in range(6):
+                    self.ihv1[ich] = round(np.random.normal(3,0.2),2)
+                    self.vhv1[ich] = round(np.random.normal(48,0.25),2)
+                    hvlist.append(self.ihv1[ich])
+                    hvlist.append(self.vhv1[ich])
+
+                self.hvpcbtemp = round(np.random.normal(22,0.1),2)
+                hvlist.append(self.hvpcbtemp)
+
 
             self.hvlog1.write(datetime.now().strftime("%Y:%m:%d-%H:%M:%S "))
             self.hvlog1.write(" ".join(str(e) for e in hvlist))
@@ -238,33 +274,52 @@ class LVHVBox:
     def loghvdata0(self):
 
         try:
-            line1 = self.ser1.readline().decode('ascii')
+            if not self.is_test:
+                line1 = self.ser1.readline().decode('ascii')
 
-            if line1.startswith("Trip"):
-                logging.error(line1)
-                return 0
-            d1 = line1.split()
-            if (len(d1) != HVSERIALDATALENGTH):
-                logging.error('HV data from serial not the right length')
-                logging.error(line1)
-                return 0
+                if line1.startswith("Trip"):
+                    logging.error(line1)
+                    return 0
+                d1 = line1.split()
+                if (len(d1) != HVSERIALDATALENGTH):
+                    logging.error('HV data from serial not the right length')
+                    logging.error(line1)
+                    return 0
 
-            if (d1[6] != "|" or d1[13] != "|" or d1[15]!= "|" or d1[17]!= "|"):
-                logging.error('HV data from serial not right format')
-                logging.error(line1)
-                return 0
+                if (d1[6] != "|" or d1[13] != "|" or d1[15]!= "|" or d1[17]!= "|"):
+                    logging.error('HV data from serial not right format')
+                    logging.error(line1)
+                    return 0
 
-            hvlist = []
-            self.ihv0 = [0]*NHVCHANNELS
-            self.vhv0 = [0]*NHVCHANNELS
-            for ich in range(6):
-                self.ihv0[ich] = float(d1[5-ich])
-                self.vhv0[ich] = float(d1[12-ich])
-                hvlist.append(self.ihv0[ich])
-                hvlist.append(self.vhv0[ich])
+                hvlist = []
+                self.ihv0 = [0]*NHVCHANNELS
+                self.vhv0 = [0]*NHVCHANNELS
+                for ich in range(6):
+                    self.ihv0[ich] = float(d1[5-ich])
+                    self.vhv0[ich] = float(d1[12-ich])
+                    hvlist.append(self.ihv0[ich])
+                    hvlist.append(self.vhv0[ich])
 
-            self.i12V = float(d1[14])
-            hvlist.append(self.i12V)
+                self.i12V = float(d1[14])
+                hvlist.append(self.i12V)
+            else:
+                hvlist = []
+                self.ihv0 = [0]*NHVCHANNELS
+                self.vhv0 = [0]*NHVCHANNELS
+                for ich in range(6):
+                    self.ihv0[ich] = round(np.random.normal(3,0.2),2)
+                    self.vhv0[ich] = round(np.random.normal(48,0.25),2)
+
+                    hvlist.append(self.ihv0[ich])
+                    hvlist.append(self.vhv0[ich])
+
+
+                hvlist.append(round(np.random.normal(50,0.5),2))
+
+
+
+
+
             self.hvlog0.write(str(datetime.now().strftime("%Y:%m:%d-%H:%M:%S ")))
 
             self.hvlog0.write(" ".join(str(e) for e in hvlist))
@@ -293,45 +348,67 @@ class LVHVBox:
         except:
             logging.error("HV channels 0 to 5 logging failed")
         
-    def get_v48(self):
+    def get_v48(self,channel):
         try:
-            return self.v48
+            if channel[0] is not None:
+                return self.v48[channel[0]]
+            else:
+                return self.v48
         except:
             return False
     
-    def get_i48(self):
+    def get_i48(self,channel):
         try:
-            return self.i48
+            if channel[0] is not None:
+                return self.i48[channel[0]]
+            else:
+                return self.i48
         except:
             return False
     
-    def get_T48(self):
+    def get_T48(self,channel):
         try:
-            return self.T48
+            if channel[0] is not None:
+                return self.T48[channel[0]]
+            else:
+                return self.T48
         except:
             return False
     
-    def get_ihv0(self):
+    def get_ihv0(self,channel):
         try:
-            return self.ihv0
+            if channel[0] is not None:
+                return self.ihv0[channel[0]]
+            else:
+                return self.ivh0
         except:
             return False
     
-    def get_vhv0(self):
+    def get_ihv1(self,channel):
         try:
-            return self.vhv0
+            if channel[0] is not None:
+                return self.ihv0[channel[0]-5]
+            else:
+                return self.ihv0
         except:
             return False
     
-    def get_ihv1(self):
+    def get_vhv0(self,channel):
         try:
-            return self.ihv1
+            if channel[0] is not None:
+                return self.vhv0[channel[0]-5]
+            else:
+                return self.vhv0
         except:
             return False
+
     
-    def get_vhv1(self):
+    def get_vhv1(self,channel):
         try:
-            return self.vhv1
+            if channel[0] is not None:
+                return self.vhv1[channel[0]-5]
+            else:
+                return self.vhv1
         except:
             return False
 

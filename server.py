@@ -8,7 +8,6 @@ import serial
 import os
 
 from commands import *
-import lvhvboxtest
 
 
 BUFFER_SIZE = 20
@@ -38,11 +37,8 @@ def lvloop(test):
             retc = process_command(lvdata)
 
         except queue.Empty:
-            if not test:
-                lvhvbox.loglvdata()
-            else:
-                lvhvbox.loglvdata()
-            time.sleep(60)
+            lvhvbox.loglvdata()
+            time.sleep(1)
 
 
 
@@ -60,11 +56,8 @@ def hvloop0(test):
             retc = process_command(hvdata)
 
         except queue.Empty:
-            if not test:
-                lvhvbox.loghvdata0()
-            else:
-                lvhvbox.loghvdata0()
-            time.sleep(60)
+            lvhvbox.loghvdata0()
+            time.sleep(1)
 
 
 # HV channels 6 to 11
@@ -77,11 +70,8 @@ def hvloop1(test):
             retc = process_command(hvdata)
 
         except queue.Empty:
-            if not test:
-                lvhvbox.loghvdata1()
-            else:
-                lvhvbox.loghvdata1()
-            time.sleep(60)
+            lvhvbox.loghvdata1()
+            time.sleep(1)
 
 
 
@@ -258,10 +248,12 @@ if __name__ == '__main__':
     hvlogname1 = "hvdata1.log"
     hvlog1 = open(os.path.join(topdir,hvlogname1),"w")
 
-    if not is_test:
-        lvhvbox = LVHVBox(ser1,ser2,hvlog0, hvlog1,lvlog)
-    else:
-        lvhvbox = lvhvboxtest.LVHVBoxTest(hvlog0, hvlog1,lvlog)
+
+    if is_test:
+        ser1=False
+        ser2=False
+    lvhvbox = LVHVBox(ser1,ser2,hvlog0, hvlog1,lvlog,is_test)
+
 
     lvThrd = threading.Thread(target=lvloop, args=[is_test], daemon = True, name="LVTHREAD")
     lvThrd.start()

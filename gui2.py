@@ -47,6 +47,8 @@ class Window(QMainWindow):
     def __init__(self,test,socket):
         super(Window,self).__init__()
 
+        #self.setCursor(Qt.BlankCursor)
+
         self.v48=[0 for i in range(6)]
         self.i48=[0 for i in range(6)]
         self.T48=[0 for i in range(6)]
@@ -798,7 +800,7 @@ class Window(QMainWindow):
         self.table_update_timer.setSingleShot(False)
         self.table_update_timer.timeout.connect(self.update_data)
         self.table_update_timer.timeout.connect(self.update_all_data_log)
-        self.table_update_timer.start(1000)
+        self.table_update_timer.start(10000)
 
 
         self.plot_update_timer=QTimer(self)
@@ -824,7 +826,109 @@ class Window(QMainWindow):
         channel=channels[self.hv_channel_selector.currentText()]
         return channel
 
-    def update_all_data_log(self): 
+    def update_all_data_log(self):
+
+        data= {
+            "type" : 2,
+            "cmdname": "get_vhv1",
+            "args" : [None]
+        }
+        serialized = json.dumps(data)
+        msg = f"{len(serialized):<{10}}"
+        self.socket.send(bytes(msg,"utf-8"))
+        self.socket.sendall(bytes(serialized,"utf-8"))
+        message = receive_message(self.socket)
+        hv_v1 = message["data"].decode('ascii')
+
+        data= {
+            "type" : 1,
+            "cmdname": "get_vhv0",
+            "args" : [None]
+        }
+        serialized = json.dumps(data)
+        msg = f"{len(serialized):<{10}}"
+        self.socket.send(bytes(msg,"utf-8"))
+        self.socket.sendall(bytes(serialized,"utf-8"))
+        message = receive_message(self.socket)
+        hv_v0 = message["data"].decode('ascii')
+
+        data= {
+            "type" : 2,
+            "cmdname": "get_ihv1",
+            "args" : [None]
+        }
+        serialized = json.dumps(data)
+        msg = f"{len(serialized):<{10}}"
+        self.socket.send(bytes(msg,"utf-8"))
+        self.socket.sendall(bytes(serialized,"utf-8"))
+        message = receive_message(self.socket)
+        hv_i1 = message["data"].decode('ascii')
+
+        data= {
+            "type" : 1,
+            "cmdname": "get_ihv0",
+            "args" : [None]
+        }
+        serialized = json.dumps(data)
+        msg = f"{len(serialized):<{10}}"
+        self.socket.send(bytes(msg,"utf-8"))
+        self.socket.sendall(bytes(serialized,"utf-8"))
+        message = receive_message(self.socket)
+        hv_i0 = message["data"].decode('ascii')
+
+        hv_v = hv_v0 + hv_v1
+        hv_i = hv_i0 + hv_i1
+
+
+        data= {
+            "type" : 0,
+            "cmdname": "get_v48",
+            "args" : [None]
+        }
+        serialized = json.dumps(data)
+        msg = f"{len(serialized):<{10}}"
+        self.socket.send(bytes(msg,"utf-8"))
+        self.socket.sendall(bytes(serialized,"utf-8"))
+        message = receive_message(self.socket)
+        v48 = message["data"].decode('ascii')
+
+        data= {
+            "type" : 0,
+            "cmdname": "get_i48",
+            "args" : [None]
+        }
+        serialized = json.dumps(data)
+        msg = f"{len(serialized):<{10}}"
+        self.socket.send(bytes(msg,"utf-8"))
+        self.socket.sendall(bytes(serialized,"utf-8"))
+        message = receive_message(self.socket)
+        i48 = message["data"].decode('ascii')
+
+        data= {
+            "type" : 0,
+            "cmdname": "get_T48",
+            "args" : [None]
+        }
+        serialized = json.dumps(data)
+        msg = f"{len(serialized):<{10}}"
+        self.socket.send(bytes(msg,"utf-8"))
+        self.socket.sendall(bytes(serialized,"utf-8"))
+        message = receive_message(self.socket)
+        T48 = message["data"].decode('ascii')
+
+        if len(hv_v) == 12:
+            self.hv_v = hv_v
+        if len(hv_i) == 12:
+            self.hv_i = hv_i
+        if len(v48) == 6:
+            self.v48 = v48
+        if len(i48) == 6:
+            self.i48 = i48
+        if len(T48) == 6:
+            self.T48 = T48
+
+
+        '''
         v48 = [float(i) for i in lv_pre.split(' ')[1:7]]
         i48 = [float(i) for i in lv_pre.split(' ')[7:13]]
         T48 = [float(i) for i in lv_pre.split(' ')[13:18] + [lv_pre.split(' ')[18][:-1]]]
@@ -860,6 +964,8 @@ class Window(QMainWindow):
             self.i48 = i48
         if len(T48) == 6:
             self.T48 = T48
+        '''
+ 
 
 
 ## Main function
@@ -880,7 +986,7 @@ if __name__ == '__main__':
 
         App = QApplication(sys.argv)
 
-        window = Window(True,sock)
+        window = Window(False,sock)
 
         gui_thread = threading.Thread(target=App.exec(), daemon = True, args=[False])
         gui_thread.start()
