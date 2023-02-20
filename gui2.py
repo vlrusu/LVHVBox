@@ -55,16 +55,24 @@ class Window(QMainWindow):
         self.hv_v=[0 for i in range(12)]
         self.hv_i=[0 for i in range(12)]
 
+
         self.test = test
 
         if not test:
           self.socket=socket
+
+        '''
+        data_updates = threading.Thread(target=self.call_data_updates, daemon = True)
+        print('problemo2')
+        data_updates.start()
+        '''
 
         #window.setCursor(PyQt5.BlankCursor)
         self.setWindowTitle("LVHV GUI")
         self.setStyleSheet(background_color)
 
         self.initialize_data()
+        self.call_data_updates()
         self.tabs()
 
         self.showFullScreen()
@@ -794,21 +802,20 @@ class Window(QMainWindow):
 
         self.hv_board_temp=0
         self.hv_board_current=0
-
-
+    
+    def call_data_updates(self):
         self.table_update_timer = QTimer(self)
         self.table_update_timer.setSingleShot(False)
         self.table_update_timer.timeout.connect(self.update_data)
         self.table_update_timer.timeout.connect(self.update_all_data_log)
-        self.table_update_timer.start(10000)
+        self.table_update_timer.start(1000)
 
 
         self.plot_update_timer=QTimer(self)
         self.plot_update_timer.setSingleShot(False)
         self.plot_update_timer.timeout.connect(self.update_blade_plot)
         self.plot_update_timer.timeout.connect(self.update_hv_plot)
-        self.plot_update_timer.start(60000)
-
+        self.plot_update_timer.start(1000)
 
     # acquires the channel being measured
     def get_blade_channel(self):
@@ -827,94 +834,126 @@ class Window(QMainWindow):
         return channel
 
     def update_all_data_log(self):
+        try:
+            data= {
+                "type" : 2,
+                "cmdname": "get_vhv1",
+                "args" : [None]
+            }
+            serialized = json.dumps(data)
+            msg = f"{len(serialized):<{10}}"
+            self.socket.send(bytes(msg,"utf-8"))
+            self.socket.sendall(bytes(serialized,"utf-8"))
+            message = receive_message(self.socket)
+            hv_v1 = message["data"].decode('ascii')
+            hv_v1 = json.loads(hv_v1)['response']
+        except:
+            print("vhv1 data failure")
 
-        data= {
-            "type" : 2,
-            "cmdname": "get_vhv1",
-            "args" : [None]
-        }
-        serialized = json.dumps(data)
-        msg = f"{len(serialized):<{10}}"
-        self.socket.send(bytes(msg,"utf-8"))
-        self.socket.sendall(bytes(serialized,"utf-8"))
-        message = receive_message(self.socket)
-        hv_v1 = message["data"].decode('ascii')
+        try:
+            data= {
+                "type" : 1,
+                "cmdname": "get_vhv0",
+                "args" : [None]
+            }
+            serialized = json.dumps(data)
+            msg = f"{len(serialized):<{10}}"
+            self.socket.send(bytes(msg,"utf-8"))
+            self.socket.sendall(bytes(serialized,"utf-8"))
+            message = receive_message(self.socket)
+            hv_v0 = message["data"].decode('ascii')
+            hv_v0 = json.loads(hv_v0)['response']
+        except:
+            print("vhv0 data failure")
 
-        data= {
-            "type" : 1,
-            "cmdname": "get_vhv0",
-            "args" : [None]
-        }
-        serialized = json.dumps(data)
-        msg = f"{len(serialized):<{10}}"
-        self.socket.send(bytes(msg,"utf-8"))
-        self.socket.sendall(bytes(serialized,"utf-8"))
-        message = receive_message(self.socket)
-        hv_v0 = message["data"].decode('ascii')
+        try:
+            data= {
+                "type" : 2,
+                "cmdname": "get_ihv1",
+                "args" : [None]
+            }
+            serialized = json.dumps(data)
+            msg = f"{len(serialized):<{10}}"
+            self.socket.send(bytes(msg,"utf-8"))
+            self.socket.sendall(bytes(serialized,"utf-8"))
+            message = receive_message(self.socket)
+            hv_i1 = message["data"].decode('ascii')
+            hv_i1 = json.loads(hv_i1)['response']
+        except:
+            print("ihv1 data failure")
 
-        data= {
-            "type" : 2,
-            "cmdname": "get_ihv1",
-            "args" : [None]
-        }
-        serialized = json.dumps(data)
-        msg = f"{len(serialized):<{10}}"
-        self.socket.send(bytes(msg,"utf-8"))
-        self.socket.sendall(bytes(serialized,"utf-8"))
-        message = receive_message(self.socket)
-        hv_i1 = message["data"].decode('ascii')
+        try:
+            data= {
+                "type" : 1,
+                "cmdname": "get_ihv0",
+                "args" : [None]
+            }
+            serialized = json.dumps(data)
+            msg = f"{len(serialized):<{10}}"
+            self.socket.send(bytes(msg,"utf-8"))
+            self.socket.sendall(bytes(serialized,"utf-8"))
+            message = receive_message(self.socket)
+            hv_i0 = message["data"].decode('ascii')
+            hv_i0 = json.loads(hv_i0)['response']
+        except:
+            print("ihv0 data failure")
 
-        data= {
-            "type" : 1,
-            "cmdname": "get_ihv0",
-            "args" : [None]
-        }
-        serialized = json.dumps(data)
-        msg = f"{len(serialized):<{10}}"
-        self.socket.send(bytes(msg,"utf-8"))
-        self.socket.sendall(bytes(serialized,"utf-8"))
-        message = receive_message(self.socket)
-        hv_i0 = message["data"].decode('ascii')
-
-        hv_v = hv_v0 + hv_v1
-        hv_i = hv_i0 + hv_i1
+    
+        try:
+            hv_v = hv_v0 + hv_v1
+            hv_i = hv_i0 + hv_i1
+        except:
+            print("hv combination failure")
 
 
-        data= {
-            "type" : 0,
-            "cmdname": "get_v48",
-            "args" : [None]
-        }
-        serialized = json.dumps(data)
-        msg = f"{len(serialized):<{10}}"
-        self.socket.send(bytes(msg,"utf-8"))
-        self.socket.sendall(bytes(serialized,"utf-8"))
-        message = receive_message(self.socket)
-        v48 = message["data"].decode('ascii')
+        try:
+            data= {
+                "type" : 0,
+                "cmdname": "get_v48",
+                "args" : [None]
+            }
+            serialized = json.dumps(data)
+            msg = f"{len(serialized):<{10}}"
+            self.socket.send(bytes(msg,"utf-8"))
+            self.socket.sendall(bytes(serialized,"utf-8"))
+            message = receive_message(self.socket)
+            v48 = message["data"].decode('ascii')
+            v48 = json.loads(v48)['response']
+            print(v48)
+        except:
+            print("v48 data failure")
 
-        data= {
-            "type" : 0,
-            "cmdname": "get_i48",
-            "args" : [None]
-        }
-        serialized = json.dumps(data)
-        msg = f"{len(serialized):<{10}}"
-        self.socket.send(bytes(msg,"utf-8"))
-        self.socket.sendall(bytes(serialized,"utf-8"))
-        message = receive_message(self.socket)
-        i48 = message["data"].decode('ascii')
+        try:
+            data= {
+                "type" : 0,
+                "cmdname": "get_i48",
+                "args" : [None]
+            }
+            serialized = json.dumps(data)
+            msg = f"{len(serialized):<{10}}"
+            self.socket.send(bytes(msg,"utf-8"))
+            self.socket.sendall(bytes(serialized,"utf-8"))
+            message = receive_message(self.socket)
+            i48 = message["data"].decode('ascii')
+            i48 = json.loads(i48)['response']
+        except:
+            print("i48 data failure")
 
-        data= {
-            "type" : 0,
-            "cmdname": "get_T48",
-            "args" : [None]
-        }
-        serialized = json.dumps(data)
-        msg = f"{len(serialized):<{10}}"
-        self.socket.send(bytes(msg,"utf-8"))
-        self.socket.sendall(bytes(serialized,"utf-8"))
-        message = receive_message(self.socket)
-        T48 = message["data"].decode('ascii')
+        try:
+            data= {
+                "type" : 0,
+                "cmdname": "get_T48",
+                "args" : [None]
+            }
+            serialized = json.dumps(data)
+            msg = f"{len(serialized):<{10}}"
+            self.socket.send(bytes(msg,"utf-8"))
+            self.socket.sendall(bytes(serialized,"utf-8"))
+            message = receive_message(self.socket)
+            T48 = message["data"].decode('ascii')
+            T48 = json.loads(T48)['response']
+        except:
+            print("T48 data failure")
 
         if len(hv_v) == 12:
             self.hv_v = hv_v
@@ -926,6 +965,11 @@ class Window(QMainWindow):
             self.i48 = i48
         if len(T48) == 6:
             self.T48 = T48
+        
+        print("new")
+        print(hv_v)
+        print(len(hv_v))
+        print(self.hv_v)
 
 
         '''
@@ -990,6 +1034,7 @@ if __name__ == '__main__':
 
         gui_thread = threading.Thread(target=App.exec(), daemon = True, args=[False])
         gui_thread.start()
+        data_updates.start()
 
     else:
         sock = False
