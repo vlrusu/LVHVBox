@@ -617,3 +617,14 @@ readvoltage -c 2
 readvoltage -c 3
 readvoltage -c 4
 readvoltage -c 5
+powerOn -c 0
+readMonV48 -c 0
+powerOff -c 0
+rOn -c 0
+powerOn -c 0
+powerOff -c 0
+readMonV48 -c 0
+powerOn -c 0
+readMonV48 -c 0
+readMonI48 -c 0
+powerOff
