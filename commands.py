@@ -380,7 +380,7 @@ class LVHVBox:
             if channel[0] is not None:
                 return self.ihv0[channel[0]]
             else:
-                return self.ivh0
+                return self.ihv0
         except:
             return False
     
@@ -411,6 +411,23 @@ class LVHVBox:
                 return self.vhv1
         except:
             return False
+    
+    def get_all_data(self,channel):
+        ret = {}
+        try:
+            ret['v48']=self.get_v48(channel)
+            ret['i48']=self.get_i48(channel)
+            ret['T48']=self.get_T48(channel)
+            ret['ihv0']=self.get_ihv0(channel)
+            ret['ihv1']=self.get_ihv1(channel)
+            ret['vhv0']=self.get_vhv0(channel)
+            ret['vhv1']=self.get_vhv1(channel)
+        except:
+            ret='data access error'
+
+        return ret
+
+
 
 
 
