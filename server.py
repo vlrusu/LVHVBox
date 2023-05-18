@@ -37,7 +37,7 @@ def lvloop():
             retc = process_command(lvdata)
 
         except queue.Empty:
-#            lvhvbox.loglvdata()
+            lvhvbox.loglvdata()
             time.sleep(0.5)
 
 
@@ -236,7 +236,7 @@ if __name__ == '__main__':
         line = sertmp2.readline().decode('ascii')
     whichone = line.split("|")[3][1]
     print("ser2 is " + str(whichone))
-
+    
 
     # Log files
     lvlogname = "lvdata.log"
@@ -255,12 +255,12 @@ if __name__ == '__main__':
     lvThrd = threading.Thread(target=lvloop, daemon = True, name="LVTHREAD")
     lvThrd.start()
     threads.append(lvThrd)
-    hvThrd0 = threading.Thread(target=hvloop0, daemon = True,  name="HV0THREAD")
-    hvThrd0.start()
-    threads.append(hvThrd0)
-    hvThrd1 = threading.Thread(target=hvloop1, daemon = True, name="HV1THREAD")
-    hvThrd1.start()
-    threads.append(hvThrd1)
+    #hvThrd0 = threading.Thread(target=hvloop0, daemon = True,  name="HV0THREAD")
+    #hvThrd0.start()
+    #threads.append(hvThrd0)
+    #hvThrd1 = threading.Thread(target=hvloop1, daemon = True, name="HV1THREAD")
+    #hvThrd1.start()
+    #threads.append(hvThrd1)
 
 
 

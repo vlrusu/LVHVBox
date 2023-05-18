@@ -11,8 +11,8 @@ import logging
 
 from datetime import datetime
 
-from influxdb_client import InfluxDBClient, Point, WritePrecision
-from influxdb_client.client.write_api import SYNCHRONOUS
+#from influxdb_client import InfluxDBClient, Point, WritePrecision
+#from influxdb_client.client.write_api import SYNCHRONOUS
 
 
 NLVCHANNELS = 6
@@ -44,6 +44,7 @@ addresses = [0x14,0x16,0x26]
 class LVHVBox:
     def __init__ (self,ser1,ser2,hvlog0, hvlog1 ,lvlog):
 
+
         self.ser1 = ser1
         self.ser2 = ser2
         self.hvlog0 = hvlog0
@@ -68,11 +69,13 @@ class LVHVBox:
             self.mcp.setDirection(x, self.mcp.DIR_OUTPUT)
             self.mcp.digitalWrite(x, MCP23S17.LEVEL_LOW)
 
-
+        
 
 
         self.bus = SMBus(1)
         self.bus.pec=1
+
+        self.lvbus = SMBus(3)
 
         # HV manipulating stuff
         rampup = os.getcwd()+"/control_gui/python_connect.so"
@@ -89,8 +92,8 @@ class LVHVBox:
         #token = "7orgMug1GuFq2hfpl4PpVLzKi31E-XCbrftF6AWV1t5cwDaRrrAEY7hARL8jN6zPUy2IabTdjOnq_c98IBG-Nw==" Old token
         self.org = "Mu2e"
         self.bucket = "TrackerVST"
-        self.client = InfluxDBClient(url="http://trackerpsu1.dhcp.fnal.gov:8086", token=token, org=self.org)
-        self.write_api = self.client.write_api(write_options=SYNCHRONOUS)
+        #self.client = InfluxDBClient(url="http://trackerpsu1.dhcp.fnal.gov:8086", token=token, org=self.org)
+        #self.write_api = self.client.write_api(write_options=SYNCHRONOUS)
 
 
     def __del__(self):
@@ -108,6 +111,7 @@ class LVHVBox:
     def loglvdata(self):
 
         try:
+
             voltages = self.readvoltage([None])
             self.v48 = [0]*NLVCHANNELS
 
@@ -116,6 +120,9 @@ class LVHVBox:
 
             temps = self.readtemp([None])
             self.T48 = [0]*NLVCHANNELS
+
+            print(voltages)
+
 
             for ich in range(NLVCHANNELS):
                 self.v48[ich] = voltages[ich]
@@ -158,7 +165,7 @@ class LVHVBox:
                 .field("T48_5", self.T48[5]) \
                 .time(datetime.utcnow(), WritePrecision.NS)
 
-            self.write_api.write(self.bucket, self.org, point)
+            #self.write_api.write(self.bucket, self.org, point)
 
         except:
             logging.error("LV channels logging failed")
@@ -224,7 +231,7 @@ class LVHVBox:
                 .field("hvpcbtemp", self.hvpcbtemp) \
                 .time(datetime.utcnow(), WritePrecision.NS)
 
-            self.write_api.write(self.bucket, self.org, point)
+            #self.write_api.write(self.bucket, self.org, point)
 
         except:
             logging.error("HV channels 6 to 11 logging failed")
@@ -288,7 +295,7 @@ class LVHVBox:
                 .field("i12V", self.i12V) \
                 .time(datetime.utcnow(), WritePrecision.NS)
 
-            self.write_api.write(self.bucket, self.org, point)
+            #self.write_api.write(self.bucket, self.org, point)
 
         except:
             logging.error("HV channels 0 to 5 logging failed")
@@ -555,25 +562,55 @@ class LVHVBox:
     # Read LV channel voltage
     # =======================
     def readvoltage(self,channel):
+        addresses = [0x14,0x16,0x26]
+        LTCaddress = [0x26,0x26,0x16,0x16,0x14,0x14]
+        v48map = [6,0,6,0,6,0]
+        v6map = [4,3,4,3,4,3]
+        i48map = [7,1,7,1,7,1]
+        i6map = [5,2,5,2,5,2]
+        v6scale = 0.00857905
+        v48scale = 0.0012089
+        i6scale = 0.010
+        i48scale = 0.010
+        acplscale = 8.2
 
-        ret= []
+        vref_local=1.24
+
+    
+        ret = []
+
         try:
             if channel[0] == None:
-                for ich in range(NLVCHANNELS):
-                    self.bus.write_byte_data(0x50,0x0,ich+1)
-                    reading=self.bus.read_byte_data(0x50,0xD0)
-                    reading=self.bus.read_i2c_block_data(0x50,0x8B,2)
-                    value = float(reading[0]+256*reading[1])/256.
-                    ret.append(value)
-            else:
-                self.bus.write_byte_data(0x50,0x0,channel[0]+1)
-                reading=self.bus.read_byte_data(0x50,0xD0)
-                reading=self.bus.read_i2c_block_data(0x50,0x8B,2)
-                value = float(reading[0]+256*reading[1])/256.
-                ret.append(value)
+                for item in range(6):
+                    address = LTCaddress[item]
+                    index = v48map[item]
+                    channelLTC = (0b101<<5) + index
+                    self.lvbus.write_byte(address, channelLTC)
 
+                    time.sleep(I2C_sleep_time)
+                    reading = self.lvbus.read_i2c_block_data(address, channelLTC, 3)
+                    val = ((((reading[0]&0x3F))<<16))+((reading[1]<<8))+(((reading[2]&0xE0)))
+                    volts = val*vref_local/max_reading
+                    volts = volts/(v48scale*acplscale)  
+                    time.sleep(0.2)
+                    ret.append(volts)
+            else:
+                item = channel[0]
+
+                address = LTCaddress[item]
+                index = v48map[item]
+                channelLTC = (0b101<<5) + index
+                self.lvbus.write_byte(address, channelLTC)
+
+                time.sleep(I2C_sleep_time)
+                reading = self.lvbus.read_i2c_block_data(address, channelLTC, 3)
+                val = ((((reading[0]&0x3F))<<16))+((reading[1]<<8))+(((reading[2]&0xE0)))
+                volts = val*vref_local/max_reading
+                volts = volts/(v48scale*acplscale)  
+                time.sleep(0.2)
+                ret.append(volts)
         except:
-            logging.error("I2C reading error")
+            logging.error("V48 Reading Error")
 
         return ret
 
@@ -583,30 +620,55 @@ class LVHVBox:
     def readcurrent(self,channel):
         ret = []
 
+
+        addresses = [0x14,0x16,0x26]
+        LTCaddress = [0x26,0x26,0x16,0x16,0x14,0x14]
+        v48map = [6,0,6,0,6,0]
+        v6map = [4,3,4,3,4,3]
+        i48map = [7,1,7,1,7,1]
+        i6map = [5,2,5,2,5,2]
+        v6scale = 0.00857905
+        v48scale = 0.0012089
+        i6scale = 0.010
+        i48scale = 0.010
+        acplscale = 8.2
+
+        vref_local=1.24
+
+
+
         try:
             if channel[0] == None:
-                for ich in range(NLVCHANNELS):
-                    self.bus.write_byte_data(0x50,0x0,ich+1)
-                    reading=self.bus.read_byte_data(0x50,0xD0)
-                    reading=self.bus.read_i2c_block_data(0x50,0x8C,2)
-                    value = reading[0]+256*reading[1]
-                    exponent = ( value >> 11 ) & 0x1f
-                    exponent = exponent-32
-                    mantissa = value & 0x7ff
-                    current = mantissa*2**exponent
-                    ret.append(current)
+                for item in range(6):
+                    address = LTCaddress[item]
+                    index = i48map[item]
+                    channelLTC = (0b101<<5) + index
+                    self.lvbus.write_byte(address, channelLTC)
+
+                    time.sleep(I2C_sleep_time)
+                    reading = self.lvbus.read_i2c_block_data(address, channelLTC, 3)
+                    val = ((((reading[0]&0x3F))<<16))+((reading[1]<<8))+(((reading[2]&0xE0)))
+                    volts = val*vref_local/max_reading
+                    volts = volts/(i48scale*acplscale)  
+                    time.sleep(0.2)
+                    ret.append(volts)
             else:
-                self.bus.write_byte_data(0x50,0x0,channel[0]+1)
-                reading=self.bus.read_byte_data(0x50,0xD0)
-                reading=self.bus.read_i2c_block_data(0x50,0x8C,2)
-                value = reading[0]+256*reading[1]
-                exponent = ( value >> 11 ) & 0x1f
-                exponent = exponent-32
-                mantissa = value & 0x7ff
-                current = mantissa*2**exponent
-                ret.append(current)
+                item = channel[0]
+
+                address = LTCaddress[item]
+                index = i48map[item]
+                channelLTC = (0b101<<5) + index
+                self.lvbus.write_byte(address, channelLTC)
+
+                time.sleep(I2C_sleep_time)
+                reading = self.lvbus.read_i2c_block_data(address, channelLTC, 3)
+                val = ((((reading[0]&0x3F))<<16))+((reading[1]<<8))+(((reading[2]&0xE0)))
+                volts = val*vref_local/max_reading
+                volts = volts/(i48scale*acplscale)  
+                time.sleep(0.2)
+                ret.append(volts)
         except:
-            logging.error("I2C reading error")
+            logging.error("I48 Reading Error")
 
         return ret
 
