@@ -51,6 +51,8 @@ class Window(QMainWindow):
 
         self.v48=[0 for i in range(6)]
         self.i48=[0 for i in range(6)]
+        self.v6=[0 for i in range(6)]
+        self.i6=[0 for i in range(6)]
         self.T48=[0 for i in range(6)]
         self.hv_v=[0 for i in range(12)]
         self.hv_i=[0 for i in range(12)]
@@ -146,6 +148,16 @@ class Window(QMainWindow):
         self.blade_control_table.setHorizontalHeaderLabels(["Voltage (V)","current (A)","Temp (C)"])
         self.blade_control_table.setVerticalHeaderLabels(["Ch 0","Ch 1","Ch 2","Ch 3","Ch 4","Ch 5"])
 
+        # setup board table
+        self.board_control_table=QTableWidget()
+        self.board_control_table.setRowCount(6)
+        self.board_control_table.setColumnCount(2)
+        #self.board_control_table.setFixedWidth(900)
+        self.board_control_table.setDisabled(True)
+
+        self.board_control_table.setHorizontalHeaderLabels(["6V Voltage (V)","6V Current (A)"])
+        self.board_control_table.setVerticalHeaderLabels(["Ch 0","Ch 1","Ch 2","Ch 3","Ch 4","Ch 5"])
+
         # setup hv table
         self.hv_control_table=QTableWidget()
         self.hv_control_table.setRowCount(12)
@@ -163,14 +175,20 @@ class Window(QMainWindow):
         self.table_tabs=QTabWidget()
         self.table_tab1=QWidget()
         self.table_tab1.layout=QGridLayout()
+        self.table_tab2=QWidget()
+        self.table_tab2.layout=QGridLayout()
         self.table_tab3=QWidget()
         self.table_tab3.layout=QGridLayout()
-        self.table_tabs.addTab(self.table_tab1,"Blade Data")
+        self.table_tabs.addTab(self.table_tab1,"48V Data")
+        self.table_tabs.addTab(self.table_tab2, "6V Data")
         self.table_tabs.addTab(self.table_tab3,"HV Data")
 
         # add table widgets to tab container
         self.table_tab1.layout.addWidget(self.blade_control_table,0,0)
         self.table_tab1.setLayout(self.table_tab1.layout)
+
+        self.table_tab2.layout.addWidget(self.board_control_table,0,0)
+        self.table_tab2.setLayout(self.table_tab2.layout)
 
         self.table_tab3.layout.addWidget(self.hv_control_table,0,0)
         self.table_tab3.setLayout(self.table_tab3.layout)
@@ -197,12 +215,24 @@ class Window(QMainWindow):
             self.blade_temperature_entries.append(current_entry)
             self.blade_control_table.setCellWidget(i,2,current_entry)
 
+            # fill with 5V voltage entries
+            current_entry=QLabel("N/A")
+            current_entry.setAlignment(Qt.AlignCenter)
+            current_entry.setStyleSheet(button_color)
+            self.board_5v_voltage_entries.append(current_entry)
+            self.board_control_table.setCellWidget(i,0,current_entry)
+
+            # fill with 5V current entries
+            current_entry=QLabel("N/A")
+            current_entry.setAlignment(Qt.AlignCenter)
+            current_entry.setStyleSheet(button_color)
+            self.board_5v_current_entries.append(current_entry)
+            self.board_control_table.setCellWidget(i,1,current_entry)
+            
+
         # fill board table with entries and set background color
         self.board_5v_voltage_entries=[]
         self.board_5v_current_entries=[]
-        self.board_cond_voltage_entries=[]
-        self.board_cond_current_entries=[]
-
 
 
         # fill board table with entries and set background color
@@ -743,8 +773,6 @@ class Window(QMainWindow):
 
         self.board_5v_voltage_plot=[[500]*10]*6
         self.board_5v_current_plot=[[500]*10]*6
-        self.board_cond_voltage_plot=[[500]*10]*6
-        self.board_cond_current_plot=[[500]*10]*6
 
         self.hv_voltage_plot=[[10000]*10]*12
         self.hv_current_plot=[[10000]*10]*12
@@ -765,6 +793,10 @@ class Window(QMainWindow):
         self.blade_voltage_entries=[]
         self.blade_current_entries=[]
         self.blade_temperature_entries=[]
+
+        # keeps track of board entries
+        self.board_5v_voltage_entries=[]
+        self.board_5v_current_entries=[]
 
         # keeps track of blade power statuses
         self.blade_power=[False]*6
