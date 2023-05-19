@@ -797,7 +797,7 @@ class Window(QMainWindow):
         self.table_update_timer = QTimer(self)
         self.table_update_timer.setSingleShot(False)
         self.table_update_timer.timeout.connect(self.update_data)
-        self.table_update_timer.timeout.connect(self.update_all_data_log)
+        self.table_update_timer.timeout.connect(self.update_all_data)
         self.table_update_timer.start(1000)
 
 
@@ -823,6 +823,54 @@ class Window(QMainWindow):
         "Channel 10": 10,"Channel 11": 11}
         channel=channels[self.hv_channel_selector.currentText()]
         return channel
+    
+    def update_all_data(self):
+        data= {
+                "type" : 0,
+                "cmdname": "get_all_data",
+                "args" : [None]
+            }
+        serialized = json.dumps(data)
+        msg = f"{len(serialized):<{10}}"
+        self.socket.send(bytes(msg,"utf-8"))
+        self.socket.sendall(bytes(serialized,"utf-8"))
+        message = receive_message(self.socket)
+        all_data = message["data"].decode('ascii')
+        all_data = json.loads(all_data)['response']
+        print(all_data)
+
+        try:
+            hv_v=all_data['vhv0']+all_data['vhv1']
+            hv_i=all_data['ihv0']+all_data['ihv1']
+            v48=all_data['v48']
+            i48=all_data['i48']
+            T48=all_data['T48']
+
+
+            if len(hv_v) == 12:
+                self.hv_v = hv_v
+            else:
+                print("wrong length hv voltage data")
+            if len(hv_i) == 12:
+                self.hv_i = hv_i
+            else:
+                print("wrong length hv current data")
+            if len(v48) == 6:
+                self.v48 = v48
+            else:
+                print("wrong length 48v voltage data")
+            if len(i48) == 6:
+                self.i48 = i48
+            else:
+                print("wrong length 48v current data")
+            if len(T48) == 6:
+                self.T48 = T48
+            else:
+                print("wrong length blade temp data")
+        except:
+            print("error interpreting data acquired from server socket connection")
+
+
 
     def update_all_data_log(self):
         with open('lvdata.log', 'rb') as file0:
