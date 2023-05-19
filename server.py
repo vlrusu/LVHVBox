@@ -29,7 +29,7 @@ def process_command(command):
 ## Store LV data in loop
 ## ===========================================
 
-def lvloop():
+def lvloop(test):
 
     while (1):
         try:
@@ -38,7 +38,7 @@ def lvloop():
 
         except queue.Empty:
             lvhvbox.loglvdata()
-            time.sleep(0.5)
+            time.sleep(1)
 
 
 
@@ -48,7 +48,7 @@ def lvloop():
 
 # HV channels 0 to 5
 # ==================
-def hvloop0():
+def hvloop0(test):
 
     while (1):
         try:
@@ -57,12 +57,12 @@ def hvloop0():
 
         except queue.Empty:
             lvhvbox.loghvdata0()
-            time.sleep(0.1)
+            time.sleep(1)
 
 
 # HV channels 6 to 11
 # ===================
-def hvloop1():
+def hvloop1(test):
 
     while (1):
         try:
@@ -71,7 +71,7 @@ def hvloop1():
 
         except queue.Empty:
             lvhvbox.loghvdata1()
-            time.sleep(0.1)
+            time.sleep(1)
 
 
 
@@ -178,6 +178,7 @@ class ClientThread(Thread):
 ## ==========================================================================================
 
 if __name__ == '__main__':
+    is_test = False
 
     incoming_queue = queue.PriorityQueue(BUFFER_SIZE)
     lv_queue = queue.PriorityQueue(BUFFER_SIZE)
@@ -213,30 +214,43 @@ if __name__ == '__main__':
 
 
     # Decide which serial is 1 and which is 2
-    sertmp1 = serial.Serial('/dev/ttyACM0', 115200, timeout=10,write_timeout = 1)
-    sertmp2 = serial.Serial('/dev/ttyACM1', 115200, timeout=10,write_timeout = 1)
+    if not is_test:
+        sertmp1 = serial.Serial('/dev/ttyACM0', 115200, timeout=10,write_timeout = 1)
+        sertmp2 = serial.Serial('/dev/ttyACM1', 115200, timeout=10,write_timeout = 1)
 
-    sertmp1.timeout = None
-    line = ""
-    while(len(line)) < 30:
-        line = sertmp1.readline().decode('ascii')
-    whichone = line.split("|")[3][1]
-    print("ser1 is " + str(whichone))
+        sertmp1.timeout = None
+        line = ""
+        while(len(line)) < 30:
+            line = sertmp1.readline().decode('ascii')
+        line = line.split("|")
+        
 
-    if whichone == 1:
-        ser1=sertmp1
-        ser2=sertmp2
-    else:
-        ser1 = sertmp2
-        ser2 = sertmp1
+        for i in range(len(line)):
+            line[i] = line[i].split(" ")
+            temp = []
+            for y in range(len(line[i])):
+                if line[i][y] != '':
+                    temp.append(line[i][y])
+            line[i] = temp
 
-    sertmp2.timeout = None
-    line = ""
-    while(len(line)) < 30:
-        line = sertmp2.readline().decode('ascii')
-    whichone = line.split("|")[3][1]
-    print("ser2 is " + str(whichone))
-    
+        whichone = int(line[3][0])
+
+        print("ser1 is " + str(whichone))
+
+        if whichone == 1:
+            ser1=sertmp1
+            ser2=sertmp2
+        else:
+            ser1 = sertmp2
+            ser2 = sertmp1
+
+        sertmp2.timeout = None
+        line = ""
+        while(len(line)) < 30:
+            line = sertmp2.readline().decode('ascii')
+        whichone = line.split("|")[3][1]
+        print("ser2 is " + str(whichone))
+
 
     # Log files
     lvlogname = "lvdata.log"
@@ -247,23 +261,21 @@ if __name__ == '__main__':
     hvlog1 = open(os.path.join(topdir,hvlogname1),"w")
 
 
-    lvhvbox = LVHVBox(ser1,ser2,hvlog0, hvlog1,lvlog)
+    if is_test:
+        ser1=False
+        ser2=False
+    lvhvbox = LVHVBox(ser1,ser2,hvlog0, hvlog1,lvlog,is_test)
 
 
-
-
-    lvThrd = threading.Thread(target=lvloop, daemon = True, name="LVTHREAD")
+    lvThrd = threading.Thread(target=lvloop, args=[is_test], daemon = True, name="LVTHREAD")
     lvThrd.start()
     threads.append(lvThrd)
-    #hvThrd0 = threading.Thread(target=hvloop0, daemon = True,  name="HV0THREAD")
-    #hvThrd0.start()
-    #threads.append(hvThrd0)
-    #hvThrd1 = threading.Thread(target=hvloop1, daemon = True, name="HV1THREAD")
-    #hvThrd1.start()
-    #threads.append(hvThrd1)
-
-
-
+    hvThrd0 = threading.Thread(target=hvloop0, args=[is_test], daemon = True,  name="HV0THREAD")
+    hvThrd0.start()
+    threads.append(hvThrd0)
+    hvThrd1 = threading.Thread(target=hvloop1, args=[is_test], daemon = True, name="HV1THREAD")
+    hvThrd1.start()
+    threads.append(hvThrd1)
 
 while True:
     (conn, (ip, port)) = tcpServer.accept()

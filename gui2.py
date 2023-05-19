@@ -47,22 +47,32 @@ class Window(QMainWindow):
     def __init__(self,test,socket):
         super(Window,self).__init__()
 
+        self.setCursor(Qt.BlankCursor)
+
         self.v48=[0 for i in range(6)]
         self.i48=[0 for i in range(6)]
         self.T48=[0 for i in range(6)]
         self.hv_v=[0 for i in range(12)]
         self.hv_i=[0 for i in range(12)]
 
-        self.test = test
 
-        if not test:
-          self.socket=socket
+        self.test = test
+        self.socket=socket
+
+        
 
         #window.setCursor(PyQt5.BlankCursor)
         self.setWindowTitle("LVHV GUI")
         self.setStyleSheet(background_color)
 
         self.initialize_data()
+
+
+        self.time_data_updates()
+        #data_updates = threading.Thread(target=self.call_data_updates, daemon = True)
+        #data_updates.start()
+    
+        #self.call_data_updates()
         self.tabs()
 
         self.showFullScreen()
@@ -285,6 +295,8 @@ class Window(QMainWindow):
         indicators=[self.lv_power_button_1,self.lv_power_button_2,self.lv_power_button_3,self.lv_power_button_4,
         self.lv_power_button_5,self.lv_power_button_6]
 
+        print(self.blade_power)
+
         if self.blade_power[number]==True:
             indicators[number].setStyleSheet('background-color: red')
             self.blade_power[number]=False
@@ -302,17 +314,6 @@ class Window(QMainWindow):
                 self.socket.send(bytes(msg,"utf-8"))
                 self.socket.sendall(bytes(serialized,"utf-8"))
 
-                data= {
-                    "type" : 0,
-                    "cmdname": "powerOn",
-                    "args" : [None]
-                }
-
-                serialized = json.dumps(data)
-                msg = f"{len(serialized):<{10}}"
-
-                self.socket.send(bytes(msg,"utf-8"))
-                self.socket.sendall(bytes(serialized,"utf-8"))
         else:
             indicators[number].setStyleSheet('background-color: green')
             self.blade_power[number]=True
@@ -322,18 +323,6 @@ class Window(QMainWindow):
                     "type" : 0,
                     "cmdname": "powerOn",
                     "args" : [number]
-                }
-
-                serialized = json.dumps(data)
-                msg = f"{len(serialized):<{10}}"
-
-                self.socket.send(bytes(msg,"utf-8"))
-                self.socket.sendall(bytes(serialized,"utf-8"))
-
-                data= {
-                    "type" : 0,
-                    "cmdname": "powerOn",
-                    "args" : [None]
                 }
 
                 serialized = json.dumps(data)
@@ -793,20 +782,26 @@ class Window(QMainWindow):
         self.hv_board_temp=0
         self.hv_board_current=0
 
+    def time_data_updates(self):
+        self.call_update_timer = QTimer(self)
+        self.call_update_timer.setSingleShot(False)
+        self.call_update_timer.timeout.connect(self.call_data_updates)
+        self.call_update_timer.start(5000)
 
-        self.table_update_timer = QTimer(self)
-        self.table_update_timer.setSingleShot(False)
-        self.table_update_timer.timeout.connect(self.update_data)
-        self.table_update_timer.timeout.connect(self.update_all_data)
-        self.table_update_timer.start(1000)
+        
+    
+    def call_data_updates(self):
+        data_update = threading.Thread(target=self.update_data, daemon = True)
+        data_update.start()
 
+        data_log = threading.Thread(target=self.update_all_data_log, daemon = True)
+        data_log.start()
 
-        self.plot_update_timer=QTimer(self)
-        self.plot_update_timer.setSingleShot(False)
-        self.plot_update_timer.timeout.connect(self.update_blade_plot)
-        self.plot_update_timer.timeout.connect(self.update_hv_plot)
-        self.plot_update_timer.start(60000)
+        update_blade_plot = threading.Thread(target=self.update_blade_plot, daemon = True)
+        update_blade_plot.start()
 
+        update_hv_plot = threading.Thread(target=self.update_hv_plot, daemon = True)
+        update_hv_plot.start()
 
     # acquires the channel being measured
     def get_blade_channel(self):
@@ -823,8 +818,9 @@ class Window(QMainWindow):
         "Channel 10": 10,"Channel 11": 11}
         channel=channels[self.hv_channel_selector.currentText()]
         return channel
-    
-    def update_all_data(self):
+
+    def update_all_data_log(self):
+
         data= {
                 "type" : 0,
                 "cmdname": "get_all_data",
@@ -835,107 +831,50 @@ class Window(QMainWindow):
         self.socket.send(bytes(msg,"utf-8"))
         self.socket.sendall(bytes(serialized,"utf-8"))
         message = receive_message(self.socket)
+
+        print('all data: ' + str(message["data"]))
+
         all_data = message["data"].decode('ascii')
-        all_data = json.loads(all_data)['response']
-        print(all_data)
-
-        try:
-            hv_v=all_data['vhv0']+all_data['vhv1']
-            hv_i=all_data['ihv0']+all_data['ihv1']
-            v48=all_data['v48']
-            i48=all_data['i48']
-            T48=all_data['T48']
+        print('all data: ' + str(all_data))
+        print('\n')
 
 
-            if len(hv_v) == 12:
-                self.hv_v = hv_v
-            else:
-                print("wrong length hv voltage data")
-            if len(hv_i) == 12:
-                self.hv_i = hv_i
-            else:
-                print("wrong length hv current data")
-            if len(v48) == 6:
-                self.v48 = v48
-            else:
-                print("wrong length 48v voltage data")
-            if len(i48) == 6:
-                self.i48 = i48
-            else:
-                print("wrong length 48v current data")
-            if len(T48) == 6:
-                self.T48 = T48
-            else:
-                print("wrong length blade temp data")
-        except:
-            print("error interpreting data acquired from server socket connection")
-
-
-
-    def update_all_data_log(self):
-        with open('lvdata.log', 'rb') as file0:
+        if json.loads(all_data)['cmdname'] == 'get_all_data':
+            all_data = json.loads(all_data)['response']
             try:
-                file0.seek(-2, os.SEEK_END)
-                while file0.read(1) != b'\n':
-                    file0.seek(-2, os.SEEK_CUR)
-            except OSError:
-                file0.seek(0)
-            lv_pre = file0.readline().decode()
-
-        
-        with open('hvdata0.log', 'rb') as file1:
-            try:
-                file1.seek(-2, os.SEEK_END)
-                while file1.read(1) != b'\n':
-                    file1.seek(-2, os.SEEK_CUR)
-            except OSError:
-                file1.seek(0)
-            hv0_pre = file1.readline().decode()
-        
-        with open('hvdata1.log', 'rb') as file2:
-            try:
-                file2.seek(-2, os.SEEK_END)
-                while file2.read(1) != b'\n':
-                    file2.seek(-2, os.SEEK_CUR)
-            except OSError:
-                file2.seek(0)
-            hv1_pre = file2.readline().decode()
-
-        
-        v48 = [float(i) for i in lv_pre.split(' ')[1:7]]
-        i48 = [float(i) for i in lv_pre.split(' ')[7:13]]
-        T48 = [float(i) for i in lv_pre.split(' ')[13:18] + [lv_pre.split(' ')[18][:-1]]]
-
-        hv0_v=[]
-        hv0_i=[]
-        hv_current=float(hv0_pre.split(' ')[-1])
-        for i in range(6):
-            hv0_i.append(float(hv0_pre.split(' ')[i*2+1]))
-            hv0_v.append(float(hv0_pre.split(' ')[i*2+2]))
-        
-        hv1_v=[]
-        hv1_i=[]
-        hv_current=float(hv1_pre.split(' ')[-1])
-        for i in range(6):
-            hv1_i.append(float(hv1_pre.split(' ')[i*2+1]))
-            hv1_v.append(float(hv1_pre.split(' ')[i*2+2]))
-        
+                hv_v=all_data['vhv0']+all_data['vhv1']
+                hv_i=all_data['ihv0']+all_data['ihv1']
+                v48=all_data['v48']
+                i48=all_data['i48']
+                T48=all_data['T48']
 
 
-        hv_v = hv0_v + hv1_v
-        hv_i = hv0_i + hv1_i
+                if len(hv_v) == 12:
+                    self.hv_v = hv_v
+                else:
+                    print("wrong length hv voltage data")
+                if len(hv_i) == 12:
+                    self.hv_i = hv_i
+                else:
+                    print("wrong length hv current data")
+                if len(v48) == 6:
+                    self.v48 = v48
+                else:
+                    print("wrong length 48v voltage data")
+                if len(i48) == 6:
+                    self.i48 = i48
+                else:
+                    print("wrong length 48v current data")
+                if len(T48) == 6:
+                    self.T48 = T48
+                else:
+                    print("wrong length blade temp data")
+            except:
+                print("error interpreting data acquired from server socket connection")
+            
 
-
-        if len(hv_v) == 12:
-            self.hv_v = hv_v
-        if len(hv_i) == 12:
-            self.hv_i = hv_i
-        if len(v48) == 6:
-            self.v48 = v48
-        if len(i48) == 6:
-            self.i48 = i48
-        if len(T48) == 6:
-            self.T48 = T48
+    
+ 
 
 
 ## Main function
@@ -944,29 +883,21 @@ class Window(QMainWindow):
 if __name__ == '__main__':
     is_test = False
 
-    if not is_test:
-        topdir = os.path.dirname(os.path.realpath(__file__))
 
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        host = "127.0.0.1"
-        port = 12000
-        sock.connect((host,port))
+    topdir = os.path.dirname(os.path.realpath(__file__))
+
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    host = "127.0.0.1"
+    port = 12000
+    sock.connect((host,port))
 
 
 
-        App = QApplication(sys.argv)
+    App = QApplication(sys.argv)
 
-        window = Window(True,sock)
+    window = Window(is_test,sock)
 
-        gui_thread = threading.Thread(target=App.exec(), daemon = True, args=[False])
-        gui_thread.start()
+    #gui_thread = threading.Thread(target=App.exec(), daemon = True, args=[is_test])
+    #gui_thread.start()
 
-    else:
-        sock = False
-        
-        App = QApplication(sys.argv)
-
-        window = Window(True,sock)
-
-        gui_thread = threading.Thread(target=App.exec(), daemon = True, args=[True])
-        gui_thread.start()
+    App.exec()
