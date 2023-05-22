@@ -636,6 +636,24 @@ class LVHVBox:
         except:
             return False
     
+    def get_v6(self,channel):
+        try:
+            if channel[0] is not None:
+                return self.v6[channel[0]]
+            else:
+                return self.v6
+        except:
+            return False
+    
+    def get_i6(self,channel):
+        try:
+            if channel[0] is not None:
+                return self.i6[channel[0]]
+            else:
+                return self.i6
+        except:
+            return False
+    
     def get_ihv0(self,channel):
         try:
             if channel[0] is not None:
@@ -679,6 +697,8 @@ class LVHVBox:
             ret['v48']=self.get_v48(channel)
             ret['i48']=self.get_i48(channel)
             ret['T48']=self.get_T48(channel)
+            ret['v6']=self.get_v6(channel)
+            ret['i6']=self.get_v6(channel)
             ret['ihv0']=self.get_ihv0(channel)
             ret['ihv1']=self.get_ihv1(channel)
             ret['vhv0']=self.get_vhv0(channel)
@@ -737,6 +757,7 @@ class LVHVBox:
 
         self.rampup.rampup_hv.argtypes = [c_int , c_float]
         self.rampup.rampup_hv(channel,alpha*voltage)
+        #self.rampup.set_hv(channel,100)
 
         hvlock.release()
         return ("HV channel " + str(channel) + " done ramping " + " to " + str(voltage) + "V")
@@ -1083,7 +1104,7 @@ class LVHVBox:
             if channel[0] == None:
                 for item in range(6):
                     address = LTCaddress[item]
-                    index = i6map[item]
+                    index = v48map[item]
                     channelLTC = (0b101<<5) + index
                     self.lvbus.write_byte(address, channelLTC)
 
@@ -1091,14 +1112,14 @@ class LVHVBox:
                     reading = self.lvbus.read_i2c_block_data(address, channelLTC, 3)
                     val = ((((reading[0]&0x3F))<<16))+((reading[1]<<8))+(((reading[2]&0xE0)))
                     volts = val*vref_local/max_reading
-                    volts = volts/(i6scale*acplscale)  
+                    volts = volts/(v48scale*acplscale)  
                     time.sleep(0.2)
                     ret.append(volts)
             else:
                 item = channel[0]
 
                 address = LTCaddress[item]
-                index = i6map[item]
+                index = v48map[item]
                 channelLTC = (0b101<<5) + index
                 self.lvbus.write_byte(address, channelLTC)
 
@@ -1106,7 +1127,7 @@ class LVHVBox:
                 reading = self.lvbus.read_i2c_block_data(address, channelLTC, 3)
                 val = ((((reading[0]&0x3F))<<16))+((reading[1]<<8))+(((reading[2]&0xE0)))
                 volts = val*vref_local/max_reading
-                volts = volts/(i6scale*acplscale)  
+                volts = volts/(v48scale*acplscale)  
                 time.sleep(0.2)
                 ret.append(volts)
         except:

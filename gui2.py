@@ -109,7 +109,6 @@ class Window(QMainWindow):
 
         self.tabs.addTab(self.tab2,"LV Actuation")
 
-
         self.tabs.addTab(self.tab3,"HV Actuation")
 
         self.tabs.addTab(self.plotting,"Plots")
@@ -170,6 +169,15 @@ class Window(QMainWindow):
         self.hv_control_table.setVerticalHeaderLabels(["Ch 0","Ch 1","Ch 2","Ch 3","Ch 4","Ch 5","Ch 6","Ch 7","Ch 8","Ch 9","Ch 10","Ch 11"])
         self.hv_control_table.setHorizontalHeaderLabels(["Voltage (V)","Current (mu-A)"])
 
+        # setup misc table
+        self.misc_table=QTableWidget()
+        self.misc_table.setRowCount(1)
+        self.misc_table.setColumnCount(2)
+        self.misc_table.setDisabled(True)
+        self.misc_table.setHorizontalHeaderLabels(["Board Temperature (C)", "Board Current (A)"])
+        for i in range(2):
+            self.misc_table.setColumnWidth(i,200)
+
 
         # set up tabs to select whether to view blade data or board data
         self.table_tabs=QTabWidget()
@@ -179,9 +187,12 @@ class Window(QMainWindow):
         self.table_tab2.layout=QGridLayout()
         self.table_tab3=QWidget()
         self.table_tab3.layout=QGridLayout()
+        #self.table_tab4=QWidget()
+        #self.table_tab4.layout=QGridLayout()
         self.table_tabs.addTab(self.table_tab1,"48V Data")
         self.table_tabs.addTab(self.table_tab2, "6V Data")
         self.table_tabs.addTab(self.table_tab3,"HV Data")
+        #self.table_tabs.addTab(self.table_tab4,"Misc")
 
         # add table widgets to tab container
         self.table_tab1.layout.addWidget(self.blade_control_table,0,0)
@@ -192,6 +203,9 @@ class Window(QMainWindow):
 
         self.table_tab3.layout.addWidget(self.hv_control_table,0,0)
         self.table_tab3.setLayout(self.table_tab3.layout)
+
+        #self.table_tab4.layout.addWidget(self.misc_table,0,0)
+        #self.table_tab4.setLayout(self.table_tab4.layout)
 
         for i in range(6):
             # fill with blade voltage entries
@@ -230,9 +244,7 @@ class Window(QMainWindow):
             self.board_control_table.setCellWidget(i,1,current_entry)
             
 
-        # fill board table with entries and set background color
-        self.board_5v_voltage_entries=[]
-        self.board_5v_current_entries=[]
+       
 
 
         # fill board table with entries and set background color
@@ -367,7 +379,7 @@ class Window(QMainWindow):
         self.hv_power_button_4,self.hv_power_button_5,self.hv_power_button_6,
         self.hv_power_button_7,self.hv_power_button_8,self.hv_power_button_9,
         self.hv_power_button_10,self.hv_power_button_11,self.hv_power_button_12]
-
+        print(self.hv_power)
         if self.hv_power[number]==True:
             if number > 5:
                 hv_type=1
@@ -696,6 +708,12 @@ class Window(QMainWindow):
             self.blade_voltage_entries[j].setText(str(self.v48[j]))
             self.blade_current_entries[j].setText(str(self.i48[j]))
             self.blade_temperature_entries[j].setText(str(self.T48[j]))
+    
+    # updates the board table with recent data
+    def update_board_table(self):
+        for j in range(6):
+            self.board_5v_voltage_entries[j].setText(str(self.v6[j]))
+            self.board_5v_current_entries[j].setText(str(self.i6[j]))
 
     # updates the hv bars
     def update_hv_bars(self):
@@ -717,10 +735,11 @@ class Window(QMainWindow):
             self.hv_voltage_entries[j].setText(str(self.hv_v[j]))
             self.hv_current_entries[j].setText(str(self.hv_i[j]))
 
-    def update_data(self):
+    def update_data_display(self):
         self.update_hv_table()
         self.update_hv_bars()
         self.update_blade_table()
+        self.update_board_table()
 
      # called by the timer to update the main plot with new data
     def update_blade_plot(self):
@@ -817,17 +836,21 @@ class Window(QMainWindow):
     def time_data_updates(self):
         self.call_update_timer = QTimer(self)
         self.call_update_timer.setSingleShot(False)
-        self.call_update_timer.timeout.connect(self.call_data_updates)
-        self.call_update_timer.start(5000)
+        self.call_update_timer.timeout.connect(self.call_data_display_updates)
+        self.call_update_timer.start(1000)
 
-        
-    
+        self.call_data_update_timer = QTimer(self)
+        self.call_data_update_timer.setSingleShot(False)
+        self.call_data_update_timer.timeout.connect(self.call_data_updates)
+        self.call_data_update_timer.start(5000)
+
     def call_data_updates(self):
-        data_update = threading.Thread(target=self.update_data, daemon = True)
-        data_update.start()
-
         data_log = threading.Thread(target=self.update_all_data_log, daemon = True)
         data_log.start()
+
+    def call_data_display_updates(self):
+        data_update = threading.Thread(target=self.update_data_display, daemon = True)
+        data_update.start()
 
         update_blade_plot = threading.Thread(target=self.update_blade_plot, daemon = True)
         update_blade_plot.start()
@@ -862,48 +885,64 @@ class Window(QMainWindow):
         msg = f"{len(serialized):<{10}}"
         self.socket.send(bytes(msg,"utf-8"))
         self.socket.sendall(bytes(serialized,"utf-8"))
-        message = receive_message(self.socket)
-
-        print('all data: ' + str(message["data"]))
-
-        all_data = message["data"].decode('ascii')
-        print('all data: ' + str(all_data))
-        print('\n')
 
 
-        if json.loads(all_data)['cmdname'] == 'get_all_data':
-            all_data = json.loads(all_data)['response']
-            try:
-                hv_v=all_data['vhv0']+all_data['vhv1']
-                hv_i=all_data['ihv0']+all_data['ihv1']
-                v48=all_data['v48']
-                i48=all_data['i48']
-                T48=all_data['T48']
+        cmdname = ''
+
+        while cmdname != 'get_all_data':
+            message = receive_message(self.socket)
+            print("MESSAGE: \n")
+            print(message)
+
+            if type(message) != type(False):
+                all_data = message["data"].decode('ascii')
+
+                cmdname = json.loads(all_data)['cmdname']
 
 
-                if len(hv_v) == 12:
-                    self.hv_v = hv_v
-                else:
-                    print("wrong length hv voltage data")
-                if len(hv_i) == 12:
-                    self.hv_i = hv_i
-                else:
-                    print("wrong length hv current data")
-                if len(v48) == 6:
-                    self.v48 = v48
-                else:
-                    print("wrong length 48v voltage data")
-                if len(i48) == 6:
-                    self.i48 = i48
-                else:
-                    print("wrong length 48v current data")
-                if len(T48) == 6:
-                    self.T48 = T48
-                else:
-                    print("wrong length blade temp data")
-            except:
-                print("error interpreting data acquired from server socket connection")
-            
+                if cmdname == 'get_all_data':
+                    all_data = json.loads(all_data)['response']
+                    try:
+                        hv_v=all_data['vhv0']+all_data['vhv1']
+                        hv_i=all_data['ihv0']+all_data['ihv1']
+                        v48=all_data['v48']
+                        i48=all_data['i48']
+                        T48=all_data['T48']
+                        v6=all_data['v6']
+                        i6=all_data['i6']
+
+
+                        if len(hv_v) == 12:
+                            self.hv_v = hv_v
+                        else:
+                            print("wrong length hv voltage data")
+                        if len(hv_i) == 12:
+                            self.hv_i = hv_i
+                        else:
+                            print("wrong length hv current data")
+                        if len(v48) == 6:
+                            self.v48 = v48
+                        else:
+                            print("wrong length 48v voltage data")
+                        if len(i48) == 6:
+                            self.i48 = i48
+                        else:
+                            print("wrong length 48v current data")
+                        if len(T48) == 6:
+                            self.T48 = T48
+                        else:
+                            print("wrong length blade temp data")
+                        if len(v6) == 6:
+                            self.v6 = v6
+                        else:
+                            print("wrong 6V voltage data")
+                        if len(i6) == 6:
+                            self.i6 = i6
+                        else:
+                            print("wrong 6V current data")
+                    except:
+                        print("error interpreting data acquired from server socket connection")
+                
 
     
  

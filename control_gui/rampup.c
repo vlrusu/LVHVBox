@@ -51,20 +51,20 @@ void initialization(){
   digitalWrite(26, HIGH);
 
   //setup MCP
-  int retc = mcp23s17Setup (MCPPINBASE, SPICS, 0);
+  int retc = mcp23s08Setup (MCPPINBASE, SPICS, 2);
   printf("mcp setup done %d\n",retc);
 
   //sete RESET to DACs to high
-  digitalWrite (MCPPINBASE+7, 0);
-  pinMode(MCPPINBASE+7, OUTPUT);
+  digitalWrite (MCPPINBASE+4, 0);
+  pinMode(MCPPINBASE+4, OUTPUT);
 
   //set LDAC to DACs to low
-  digitalWrite (MCPPINBASE+3, 0);
-  pinMode(MCPPINBASE+3, OUTPUT);
+  digitalWrite (MCPPINBASE+2, 0);
+  pinMode(MCPPINBASE+2, OUTPUT);
 
-  DAC8164_setup (&dac[0], MCPPINBASE, 4, 2, 0, -1, -1);
-  DAC8164_setup (&dac[1], MCPPINBASE, 5, 2, 0, -1, -1);
-  DAC8164_setup (&dac[2], MCPPINBASE, 6, 2, 0, -1, -1);
+  DAC8164_setup (&dac[0], MCPPINBASE, 6, 7, 0, -1, -1);
+  DAC8164_setup (&dac[1], MCPPINBASE, 3, 7, 0, -1, -1);
+  DAC8164_setup (&dac[2], MCPPINBASE, 5, 7, 0, -1, -1);
 }
 
 

@@ -11,7 +11,7 @@
 #include <wiringPi.h>
 #include <wiringPiSPI.h>
 #include <mcp23x0817.h>
-#include <mcp23s17.h>
+#include <mcp23s08.h>
 #include <softPwm.h>
 #include <linux/spi/spidev.h>
 #include <dac8164.h>
@@ -51,20 +51,20 @@ void initialization(){
   digitalWrite(26, HIGH);
 
   //setup MCP
-  int retc = mcp23s17Setup (MCPPINBASE, SPICS, 0);
+  int retc = mcp23s08Setup (MCPPINBASE, SPICS, 2);
   printf("mcp setup done %d\n",retc);
 
   //sete RESET to DACs to high
-  digitalWrite (MCPPINBASE+7, 0);
-  pinMode(MCPPINBASE+7, OUTPUT);
+  digitalWrite (MCPPINBASE+4, 0);
+  pinMode(MCPPINBASE+4, OUTPUT);
 
   //set LDAC to DACs to low
-  digitalWrite (MCPPINBASE+3, 0);
-  pinMode(MCPPINBASE+3, OUTPUT);
+  digitalWrite (MCPPINBASE+2, 0);
+  pinMode(MCPPINBASE+2, OUTPUT);
 
-  DAC8164_setup (&dac[0], MCPPINBASE, 4, 2, 0, -1, -1);
-  DAC8164_setup (&dac[1], MCPPINBASE, 5, 2, 0, -1, -1);
-  DAC8164_setup (&dac[2], MCPPINBASE, 6, 2, 0, -1, -1);
+  DAC8164_setup (&dac[0], MCPPINBASE, 6, 7, 0, -1, -1);
+  DAC8164_setup (&dac[1], MCPPINBASE, 3, 7, 0, -1, -1);
+  DAC8164_setup (&dac[2], MCPPINBASE, 5, 7, 0, -1, -1);
 }
 
 
@@ -101,17 +101,26 @@ void rampup_hv(int channel, float value)
 
   
 
-  float increment = value*2.3/NSTEPS/1510.;
+  float increment = value/NSTEPS;
   float setvalue = 0;
 
+  /*
+  uint32_t digvalue = ( (int) (16383.*(value*2.3/(1510*2.5)))) & 0x3FFF;
+  printf("Test %d \n",digvalue);
+    
+  DAC8164_writeChannel(&dac[idac], channel, digvalue);
+  */
+
+  
   for (int itick =0; itick < NSTEPS; itick++){
     usleep(50000);
     setvalue += increment;
-    uint32_t digvalue = ( (int) (16383.*(setvalue/2.5))) & 0x3FFF;
+    uint32_t digvalue = ( (int) (16383.*(setvalue*2.3/(1510*2.5)))) & 0x3FFF;
     //printf("Test %d \n",digvalue);
     
     DAC8164_writeChannel(&dac[idac], channel, digvalue);
   }
+  
 }
 
 // Main function

@@ -617,3 +617,41 @@ readvoltage -c 2
 readvoltage -c 3
 readvoltage -c 4
 readvoltage -c 5
+readMon
+powerOn
+readVoltage -c 0
+readvoltage -c 0
+powerOn
+readvoltage -c 0
+readcurrent -c 0
+readMonI48 -c 0
+powerOff
+readMonI48 -c 0
+readMonV48 -c 0
+powerOn
+readMonV48 -c 0
+readMonI48 -c 1
+readMonI48 -c 3
+readMonI48 -c 2
+powerOn
+readMonV48
+readMonI48
+powerOn
+powerOn -c 3
+powerOn
+readMonV48 -c 0
+readMonV48 -c 3
+readMonV48 -c 2
+readMonV48 -c 
+readtemp
+powerOff
+readtemp
+powerOn -c 0
+readMonV48 -c 0
+readvoltage -c 0
+readMonV48 -c 0
+powerOn -c 0
+readvoltage -c 0
+readMonV48 -c 0
+powerOn -c 0
+readMonV48 -c 0

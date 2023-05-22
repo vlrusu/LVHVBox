@@ -245,6 +245,17 @@ class CmdLoop(cmd2.Cmd):
         else:
             hvqueue2.put([args.cmd2_statement.get().command, 1, args.trippoint])
 
+
+
+
+
+    # get vhv1
+    pprint_parser = cmd2.Cmd2ArgumentParser()
+    @cmd2.with_argparser(pprint_parser)
+    def do_get_vhv1(self, args):
+        """Print the options and argument list this options command was called with."""
+        lvqueue.put([args.cmd2_statement.get().command, args.channel])
+
         
       
 

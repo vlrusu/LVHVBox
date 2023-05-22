@@ -32,7 +32,7 @@ INCLUDE	= -I/usr/local/include -I ./
 CFLAGS	= $(DEBUG) -Wall $(INCLUDE) -Winline -pipe
 
 LDFLAGS	= -L/usr/local/lib
-LDLIBS    = -lwiringPi -lwiringPiDev -lpthread -lm -lcrypt -lrt
+LDLIBS    = dac8164.c -lwiringPi -lwiringPiDev -lpthread -lm -lcrypt -lrt
 
 # Should not alter anything below this line
 ###############################################################################
