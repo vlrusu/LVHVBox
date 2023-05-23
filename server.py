@@ -38,7 +38,7 @@ def lvloop(test):
 
         except queue.Empty:
             lvhvbox.loglvdata()
-            time.sleep(0.1)
+            time.sleep(1.5)
 
 
 
@@ -57,7 +57,7 @@ def hvloop0(test):
 
         except queue.Empty:
             lvhvbox.loghvdata0()
-            time.sleep(0.1)
+            time.sleep(1.5)
 
 
 # HV channels 6 to 11
@@ -71,7 +71,7 @@ def hvloop1(test):
 
         except queue.Empty:
             lvhvbox.loghvdata1()
-            time.sleep(0.1)
+            time.sleep(1.5)
 
 
 
@@ -85,7 +85,7 @@ class QueueTester(Thread):
         while True:
             command = lv_queue.get()
             logging.debug("Queueing data: " + command.data["cmdname"])
-            time.sleep(0.1)
+            time.sleep(3)
             command.response = "response"
             outgoing_queue.put(command)
 
@@ -126,7 +126,7 @@ class CommandsThread(Thread):
                     "cmdname": command.data["cmdname"],
                     "response": command.response
                     }
-                serialized = json.dumps(data)
+                serialized = json.dumps('#' + str(data) + '#')
                 msg = f"{len(serialized):<{HEADER_LENGTH}}"
                 try:
                     command.conn.send(bytes(msg,"utf-8"))

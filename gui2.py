@@ -49,6 +49,8 @@ class Window(QMainWindow):
 
         self.setCursor(Qt.BlankCursor)
 
+        self.socket_data = ''
+
         self.v48=[0 for i in range(6)]
         self.i48=[0 for i in range(6)]
         self.v6=[0 for i in range(6)]
@@ -876,6 +878,9 @@ class Window(QMainWindow):
 
     def update_all_data_log(self):
 
+        if len(self.socket_data) > 500:
+            self.socket_data = self.socket_data[-500::]
+
         data= {
                 "type" : 0,
                 "cmdname": "get_all_data",
@@ -891,61 +896,76 @@ class Window(QMainWindow):
 
         while cmdname != 'get_all_data':
             message = receive_message(self.socket)
-            print("MESSAGE: \n")
-            print(message)
 
             if type(message) != type(False):
-                all_data = message["data"].decode('ascii')
-
-                cmdname = json.loads(all_data)['cmdname']
-
-
-                if cmdname == 'get_all_data':
-                    all_data = json.loads(all_data)['response']
-                    try:
-                        hv_v=all_data['vhv0']+all_data['vhv1']
-                        hv_i=all_data['ihv0']+all_data['ihv1']
-                        v48=all_data['v48']
-                        i48=all_data['i48']
-                        T48=all_data['T48']
-                        v6=all_data['v6']
-                        i6=all_data['i6']
-
-
-                        if len(hv_v) == 12:
-                            self.hv_v = hv_v
-                        else:
-                            print("wrong length hv voltage data")
-                        if len(hv_i) == 12:
-                            self.hv_i = hv_i
-                        else:
-                            print("wrong length hv current data")
-                        if len(v48) == 6:
-                            self.v48 = v48
-                        else:
-                            print("wrong length 48v voltage data")
-                        if len(i48) == 6:
-                            self.i48 = i48
-                        else:
-                            print("wrong length 48v current data")
-                        if len(T48) == 6:
-                            self.T48 = T48
-                        else:
-                            print("wrong length blade temp data")
-                        if len(v6) == 6:
-                            self.v6 = v6
-                        else:
-                            print("wrong 6V voltage data")
-                        if len(i6) == 6:
-                            self.i6 = i6
-                        else:
-                            print("wrong 6V current data")
-                    except:
-                        print("error interpreting data acquired from server socket connection")
+                self.socket_data += message["data"].decode('utf-8-sig')
                 
+                data_list = self.socket_data.split('#')
 
+                acquired = False
+                for i in reversed(range(len(data_list)-1)):
+                    if acquired == False:
+
+                        try:
+
+                            #print(data_list)
+                            data_list[i] = data_list[i].replace("\'", "\"")
+
+                            all_data=json.loads(data_list[i])
+                        
+                            cmdname = all_data['cmdname']
+
+                            if cmdname == 'get_all_data':
+                                
+                                acquired = True
+                                all_data = json.loads(data_list[i])['response']
+                                try:
+                                    hv_v=all_data['vhv0']+all_data['vhv1']
+                                    hv_i=all_data['ihv0']+all_data['ihv1']
+                                    v48=all_data['v48']
+                                    i48=all_data['i48']
+                                    T48=all_data['T48']
+                                    v6=all_data['v6']
+                                    i6=all_data['i6']
+
+
+                                    if len(hv_v) == 12:
+                                        self.hv_v = hv_v
+                                    else:
+                                        print("wrong length hv voltage data")
+                                    if len(hv_i) == 12:
+                                        self.hv_i = hv_i
+                                    else:
+                                        print("wrong length hv current data")
+                                    if len(v48) == 6:
+                                        self.v48 = v48
+                                    else:
+                                        print("wrong length 48v voltage data")
+                                    if len(i48) == 6:
+                                        self.i48 = i48
+                                    else:
+                                        print("wrong length 48v current data")
+                                    if len(T48) == 6:
+                                        self.T48 = T48
+                                    else:
+                                        print("wrong length blade temp data")
+                                    if len(v6) == 6:
+                                        self.v6 = v6
+                                    else:
+                                        print("wrong 6V voltage data")
+                                    if len(i6) == 6:
+                                        self.i6 = i6
+                                    else:
+                                        print("wrong 6V current data")
+                                except:
+                                    print("error interpreting data acquired from server socket connection")
+
+                                print('made it here!!!!!!!!!')
+                        except:
+                            pass
+
+        
     
- 
 
 
 ## Main function
