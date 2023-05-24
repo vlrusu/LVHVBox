@@ -1,11 +1,9 @@
 from dac8164 import dac8164
 from MCP23S08 import MCP23S08
-import RPi.GPIO as GPIO
 
 
 def initialization():
     dac = []
-    GPIO.setmode(GPIO.BOARD)
 
     # initialize MCP
     mcp1 = MCP23S08(bus=0x00, pin_cs=0x00, device_id=0x02)

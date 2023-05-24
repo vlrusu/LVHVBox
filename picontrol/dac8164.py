@@ -1,10 +1,9 @@
-import RPi.GPIO as GPIO
 from MCP23S08 import MCP23S08
 import time
 import copy
 
 class dac8164:
-    def __init__(self,MCP,sync,sclk,sdi,enable_pin,ldac_pin):
+    def __init__(self,MCP,sync,sclk,sdi,enable_pin=-1,ldac_pin=-1):
         self.MCP = MCP
         self.sync_pin = sync
         self.sclk_pin = sclk
@@ -44,27 +43,26 @@ class dac8164:
 
         GPIO.setmode(GPIO.BOARD)
 
-
         if self.enable_pin != -1:
-            self.MCP.setDirection(self.enable_pin,self.MCP.DIR_OUTPUT)
+            self.MCP.setDirection(self.enable_pin,MCP23S08.DIR_OUTPUT)
             self.MCP.digitalWrite(self.enable_pin,MCP23S08.LEVEL_LOW)
         
 
         # LDAC to low
         if self.ldac_pin != -1:
-            self.MCP.setDirection(self.ldac_pin,self.MCP.DIR_OUTPUT)
+            self.MCP.setDirection(self.ldac_pin,MCP23S08.DIR_OUTPUT)
             self.MCP.digitalWrite(self.ldac_pin,MCP23S08.LEVEL_LOW)
         
         # set sync pin
-        self.MCP.setDirection(self.sync_pin,self.MCP.DIR_OUTPUT)
+        self.MCP.setDirection(self.sync_pin,MCP23S08.DIR_OUTPUT)
         self.MCP.digitalWrite(self.sync_pin,MCP23S08.LEVEL_LOW)
         
         # set sclk pin
-        self.MCP.setDirection(self.sclk_pin,self.MCP.DIR_OUTPUT)
+        self.MCP.setDirection(self.sclk_pin,MCP23S08.DIR_OUTPUT)
         self.MCP.digitalWrite(self.sclk_pin,MCP23S08.LEVEL_LOW)
 
         # set mcp pin
-        self.setDirection(self.sdi_pin,self.MCP.DIR_OUTPUT)
+        self.setDirection(self.sdi_pin,MCP23S08.DIR_OUTPUT)
         self.MCP.digitalWrite(self.sdi_pin,MCP23S08.LEVEL_LOW)
 
 
