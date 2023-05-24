@@ -960,7 +960,6 @@ class Window(QMainWindow):
                                 except:
                                     print("error interpreting data acquired from server socket connection")
 
-                                print('made it here!!!!!!!!!')
                         except:
                             pass
 

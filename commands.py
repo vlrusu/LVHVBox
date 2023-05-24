@@ -667,7 +667,7 @@ class LVHVBox:
     def get_ihv1(self,channel):
         try:
             if channel[0] is not None:
-                return self.ihv0[channel[0]-5]
+                return self.ihv1[channel[0]-5]
             else:
                 return self.ihv0
         except:
