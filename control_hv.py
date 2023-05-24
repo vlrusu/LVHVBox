@@ -27,6 +27,7 @@ def set_hv(channel, value, dac):
 
     alpha = alphas[channel]
 
+    value *= 2.3/1510
     digvalue = int(alpha*16383*value/2.5) & 0x3FFF
 
     dac[idac].DAC8164_writeChannel(channel, digvalue)
@@ -37,6 +38,7 @@ def ramp_hv(channel, value, nsteps, dac):
     alphas = [0.9055, 0.9073, 0.9051, 0.9012, 0.9012, 0.9034,
               0.9009, 0.9027, 0.8977, 0.9012, 0.9015, 1]
     
+    value *= 2.3/1510
     current_value = value/nsteps
 
     alpha = alphas[channel]
@@ -59,5 +61,5 @@ if __name__=="__main__":
 
     value = value*2.3/1510
 
-    ramp_hv(0,value,nsteps,dac)
+    set_hv(1,value,dac)
     

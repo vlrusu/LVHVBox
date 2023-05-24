@@ -91,7 +91,7 @@ class dac8164:
             self.MCP.digitalWrite(self.sclk_pin,0)
             time.sleep(dac8164.DAC8164DELAY/(10E6))
         
-        self.MCP.digitalWrite(self.sync_pin,0)
+        self.MCP.digitalWrite(self.sync_pin,1)
 
         if self.enable_pin != -1:
             self.MCP.digitalWrite(self.enable_pin,1)

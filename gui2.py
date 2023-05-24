@@ -921,6 +921,7 @@ class Window(QMainWindow):
                                 all_data = json.loads(data_list[i])['response']
                                 try:
                                     hv_v=all_data['vhv0']+all_data['vhv1']
+                                    print(hv_v)
                                     hv_i=all_data['ihv0']+all_data['ihv1']
                                     v48=all_data['v48']
                                     i48=all_data['i48']
