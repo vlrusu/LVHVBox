@@ -16,6 +16,8 @@ from influxdb_client.client.write_api import SYNCHRONOUS
 
 import numpy as np
 
+import control_hv
+
 
 NLVCHANNELS = 6
 NHVCHANNELS = 6
@@ -324,10 +326,9 @@ class LVHVBox:
 
             self.lvbus = SMBus(3)
 
-            # HV manipulating stuff
-            rampup = os.getcwd()+"/control_gui/python_connect.so"
-            self.rampup=CDLL(rampup)
-            self.rampup.initialization()
+            self.hv_dac = control_hv.initialization()
+
+
 
         # CMD stuff
 
@@ -725,39 +726,9 @@ class LVHVBox:
     def ramphvup(self,channel,voltage):
         hvlock.acquire()
 
-        if (channel == 0):
-            alpha = 0.9055
-        elif (channel == 1):
-            alpha = 0.9073
-        elif (channel == 2):
-            alpha = 0.9051
-        elif (channel == 3):
-            alpha = 0.9012
-        elif (channel == 4):
-            alpha = 0.9012
-        elif (channel == 5):
-            alpha = 0.9034
-        elif (channel == 6):
-            alpha = 0.9009
-        elif (channel == 7):
-            alpha = 0.9027
-        elif (channel == 8):
-            alpha = 0.8977
-        elif (channel == 9):
-            alpha = 0.9012
-        elif (channel == 10):
-            alpha = 0.9015
-        elif (channel == 11):
-            alpha = 1.0  # BURNED BOARD - FIX ME!!
-        else:
-
-            hvlock.release()
-            return "Select an HV channel from 0 to 11!"
-
-
-        self.rampup.rampup_hv.argtypes = [c_int , c_float]
-        self.rampup.rampup_hv(channel,alpha*voltage)
-        #self.rampup.set_hv(channel,100)
+        value = voltage*2.3/1510
+        nsteps = 200
+        control_hv.ramp_hv(channel,value,nsteps,self.hv_dac)
 
         hvlock.release()
         return ("HV channel " + str(channel) + " done ramping " + " to " + str(voltage) + "V")
@@ -781,38 +752,9 @@ class LVHVBox:
     def sethv(self,channel,voltage):
         hvlock.acquire()
 
-        if (channel == 0):
-            alpha = 0.9055
-        elif (channel == 1):
-            alpha = 0.9073
-        elif (channel == 2):
-            alpha = 0.9051
-        elif (channel == 3):
-            alpha = 0.9012
-        elif (channel == 4):
-            alpha = 0.9012
-        elif (channel == 5):
-            alpha = 0.9034
-        elif (channel == 6):
-            alpha = 0.9009
-        elif (channel == 7):
-            alpha = 0.9027
-        elif (channel == 8):
-            alpha = 0.8977
-        elif (channel == 9):
-            alpha = 0.9012
-        elif (channel == 10):
-            alpha = 0.9015
-        elif (channel == 11):
-            alpha = 1.0  # BURNED BOARD - FIX ME!!
-        else:
-
-            hvlock.release()
-            return  "Select an HV channel from 0 to 11!"
-
-        self.rampup.set_hv.argtypes = [c_int , c_float]
-        self.rampup.set_hv(channel,alpha*voltage) #FIXME why does it need int on lvhvbox.py???
-        #I changed the python connect as well. Must be some mem alignemnt issue
+        value = voltage*2.3/1510
+        nsteps = 200
+        control_hv.set_hv(channel,value,self.hv_dac)
 
         hvlock.release()
         return "HV channel " + str(channel) + " set " + " to " + str(voltage) + " V"
