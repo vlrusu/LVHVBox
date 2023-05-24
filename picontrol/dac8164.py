@@ -1,8 +1,38 @@
 from MCP23S08 import MCP23S08
 import time
 import copy
+import RPi.GPIO as GPIO
 
 class dac8164:
+    DAC8164DELAY = 2
+    DAC_REFERENCE_ALWAYS_POWERED_DOWN = 0x2000
+    DAC_REFERENCE_POWERED_TO_DEFAULT = 0x0000
+    DAC_REFERENCE_ALWAYS_POWERED_UP = 0x1000
+    DAC_DATA_INPUT_REGISTER = 0x011000
+    DAC_MASK_LD1 = 0x200000
+    DAC_MASK_LD0 = 0x100000
+    DAC_MASK_DACSEL1 = 0x040000
+    DAC_MASK_DACSEL0 = 0x020000
+    DAC_MASK_PD0 = 0x010000
+    DAC_MASK_PD1 = 0x008000
+    DAC_MASK_PD2 = 0x004000
+    DAC_MASK_DATA = 0x00FFF0
+    DAC_MASK_0 = 0x0
+    DAC_MASK_1 = 0x400000
+    DAC_MASK_2 = 0x800000
+
+    DAC_SINGLE_CHANNEL_STORE = 0
+    DAC_SINGLE_CHANNEL_UPDATE = DAC_MASK_LD1
+    DAC_SIMULTANEOUS_UPDATE = DAC_MASK_LD1
+    DAC_BROADCAST_UPDATE = DAC_MASK_LD1 | DAC_MASK_LD0
+
+    DAC_CHANNEL_A = 1
+    DAC_CHANNEL_B = 2
+    DAC_CHANNEL_C = 3
+    DAC_CHANNEL_D = 4
+    DAC_CHANNEL_ALL = 5
+    DAC_MAX_SCALE = 4096
+    
     def __init__(self,MCP,sync,sclk,sdi,enable_pin=-1,ldac_pin=-1):
         self.MCP = MCP
         self.sync_pin = sync
@@ -10,36 +40,6 @@ class dac8164:
         self.sdi_pin = sdi
         self.enable_pin = enable_pin
         self.ldac_pin = ldac_pin
-
-        DAC8164DELAY = 2
-
-        DAC_REFERENCE_ALWAYS_POWERED_DOWN = 0x2000
-        DAC_REFERENCE_POWERED_TO_DEFAULT = 0x0000
-        DAC_REFERENCE_ALWAYS_POWERED_UP = 0x1000
-        DAC_DATA_INPUT_REGISTER = 0x011000
-        DAC_MASK_LD1 = 0x200000
-        DAC_MASK_LD0 = 0x100000
-        DAC_MASK_DACSEL1 = 0x040000
-        DAC_MASK_DACSEL0 = 0x020000
-        DAC_MASK_PD0 = 0x010000
-        DAC_MASK_PD1 = 0x008000
-        DAC_MASK_PD2 = 0x004000
-        DAC_MASK_DATA = 0x00FFF0
-        DAC_MASK_0 = 0x0
-        DAC_MASK_1 = 0x400000
-        DAC_MASK_2 = 0x800000
-
-        DAC_SINGLE_CHANNEL_STORE = 0
-        DAC_SINGLE_CHANNEL_UPDATE = DAC_MASK_LD1
-        DAC_SIMULTANEOUS_UPDATE = DAC_MASK_LD1
-        DAC_BROADCAST_UPDATE = DAC_MASK_LD1 | DAC_MASK_LD0
-
-        DAC_CHANNEL_A = 1
-        DAC_CHANNEL_B = 2
-        DAC_CHANNEL_C = 3
-        DAC_CHANNEL_D = 4
-        DAC_CHANNEL_ALL = 5
-        DAC_MAX_SCALE = 4096
 
         GPIO.setmode(GPIO.BOARD)
 
@@ -62,7 +62,7 @@ class dac8164:
         self.MCP.digitalWrite(self.sclk_pin,MCP23S08.LEVEL_LOW)
 
         # set mcp pin
-        self.setDirection(self.sdi_pin,MCP23S08.DIR_OUTPUT)
+        self.MCP.setDirection(self.sdi_pin,MCP23S08.DIR_OUTPUT)
         self.MCP.digitalWrite(self.sdi_pin,MCP23S08.LEVEL_LOW)
 
 
@@ -74,7 +74,7 @@ class dac8164:
 
         self.MCP.digitalWrite(self.sclk_pin,GPIO.LOW)
         self.MCP.digitalWrite(self.sync_pin,GPIO.LOW)
-        time.usleep(dac8164.DAC8164DELAY)
+        time.sleep(dac8164.DAC8164DELAY/(10E6))
 
         
         i = 23
@@ -86,11 +86,11 @@ class dac8164:
             i-=1
 
             self.MCP.digitalWrite(self.sdi_pin,thisbit)
-            time.usleep(dac8164.DAC8164DELAY)
+            time.sleep(dac8164.DAC8164DELAY/(10E6))
             self.MCP.digitalWrite(self.sclk_pin,1)
-            time.usleep(dac8164.DAC8164DELAY)
+            time.sleep(dac8164.DAC8164DELAY/(10E6))
             self.MCP.digitalWrite(self.sclk_pin,0)
-            time.usleep(dac8164.DAC8164DELAY)
+            time.sleep(dac8164.DAC8164DELAY/(10E6))
         
         self.MCP.digitalWrite(self.sync_pin,0)
 
