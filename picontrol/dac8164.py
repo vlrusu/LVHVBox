@@ -41,21 +41,20 @@ class dac8164:
         self.enable_pin = enable_pin
         self.ldac_pin = ldac_pin
 
-        GPIO.setmode(GPIO.BOARD)
 
         if self.enable_pin != -1:
             self.MCP.setDirection(self.enable_pin,MCP23S08.DIR_OUTPUT)
-            self.MCP.digitalWrite(self.enable_pin,MCP23S08.LEVEL_LOW)
+            self.MCP.digitalWrite(self.enable_pin,MCP23S08.LEVEL_HIGH)
         
 
         # LDAC to low
         if self.ldac_pin != -1:
             self.MCP.setDirection(self.ldac_pin,MCP23S08.DIR_OUTPUT)
-            self.MCP.digitalWrite(self.ldac_pin,MCP23S08.LEVEL_LOW)
+            self.MCP.digitalWrite(self.ldac_pin,MCP23S08.LEVEL_HIGH)
         
         # set sync pin
         self.MCP.setDirection(self.sync_pin,MCP23S08.DIR_OUTPUT)
-        self.MCP.digitalWrite(self.sync_pin,MCP23S08.LEVEL_LOW)
+        self.MCP.digitalWrite(self.sync_pin,MCP23S08.LEVEL_HIGH)
         
         # set sclk pin
         self.MCP.setDirection(self.sclk_pin,MCP23S08.DIR_OUTPUT)
