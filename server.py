@@ -73,6 +73,19 @@ def hvloop1(test):
             lvhvbox.loghvdata1()
             time.sleep(1.5)
 
+# Battery Commands
+# ================
+def batteryloop(test):
+
+    while (1):
+        try:
+            batterydata = battery_queue.get(block=False)
+            retc = process_command(batterydata)
+
+        except queue.Empty:
+            lvhvbox.logbatterydata()
+            time.sleep(1.5)
+
 
 
 
@@ -169,6 +182,8 @@ class ClientThread(Thread):
                     hv0_queue.put(command)
                 elif data["type"] == 2:
                     hv1_queue.put(command)
+                elif data["type"] == 3:
+                    battery_queue.put(command)
 
 
 
@@ -185,6 +200,7 @@ if __name__ == '__main__':
     lv_queue = queue.PriorityQueue(BUFFER_SIZE)
     hv0_queue = queue.PriorityQueue(BUFFER_SIZE)
     hv1_queue = queue.PriorityQueue(BUFFER_SIZE)
+    battery_queue = queue.PriorityQueue(BUFFER_SIZE)
     outgoing_queue = queue.PriorityQueue(BUFFER_SIZE)
 
 
@@ -277,7 +293,10 @@ if __name__ == '__main__':
     hvThrd1 = threading.Thread(target=hvloop1, args=[is_test], daemon = True, name="HV1THREAD")
     hvThrd1.start()
     threads.append(hvThrd1)
-    
+    batterythread = threading.Thread(target=batteryloop, args=[is_test], daemon = True, name="BATTERYTHREAD")
+    batterythread.start()
+    threads.append(batterythread)
+
 while True:
     (conn, (ip, port)) = tcpServer.accept()
     print("accepted")

@@ -9,6 +9,7 @@ from smbus import SMBus
 import logging
 import spidev
 from MCP23S08 import MCP23S08
+import struct
 
 
 from datetime import datetime
@@ -63,6 +64,9 @@ class LVHVBox:
         self.hv_board_current = 0
         self.hv_board_temperature = 0
 
+        self.battery_capacity = 0
+        self.battery_voltage = 0
+
         self.powerChMap = [5,6,7,2,3,4]
 
         if not self.is_test:
@@ -84,6 +88,7 @@ class LVHVBox:
 
 
             self.lvbus = SMBus(3)
+            self.batterybus = SMBus(1)
 
             self.hv_dac = control_hv.initialization()
 
@@ -206,7 +211,22 @@ class LVHVBox:
 
         except:
             logging.error("LV channels logging failed")
+    
 
+    ## ===========================================
+    ## Log Battery data
+    ## ===========================================
+
+    def logbatterydata(self):
+        try:
+            if not self.is_test:
+                self.battery_capacity = self.readBatteryCapacity(None)
+                self.battery_voltage = self.readBatteryVoltage(None)
+            else:
+                self.battery_capacity = round(np.random.normal(80,5),2)
+                self.battery_voltage = round(np.random.normal(4,0.3),2)
+        except:
+            logging.error("Battery logging failed")
 
 
     ## ===========================================
@@ -1030,6 +1050,46 @@ class LVHVBox:
             logging.error("I2C reading error")
 
         return ret
+
+    # read battery capacity
+    # =====================
+    def readBatteryCapacity(self, args):
+        ret = []
+        
+        try:
+            read = self.batterybus.read_word_data(0x36, 4)
+            swapped = struct.unpack("<H", struct.pack(">H", read))[0]
+            voltage = swapped/256
+            ret.append(voltage)
+        except:
+            logging.error("Battery Capacity Reading Error")
+
+        return ret
+    
+    # read battery voltage
+    # =====================
+    def readBatteryVoltage(self, args):
+        ret = []
+        
+        try:
+            read = self.batterybus.read_word_data(0x36, 2)
+            swapped = struct.unpack("<H", struct.pack(">H", read))[0]
+            voltage = swapped * 1.25 /1000/16
+            ret.append(voltage)
+        except:
+            logging.error("Battery Voltage Reading Error")
+
+        return ret
+
+
+
+
+
+
+
+
+
+
 
 
     # Test function from early times?

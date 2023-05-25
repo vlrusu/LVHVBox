@@ -10,6 +10,7 @@ HEADER_LENGTH = 10
 LVTYPE = 0
 HVTYPE0 = 1
 HVTYPE1 = 2
+BATTERYTYPE = 3
 
 def listenloop(s):
 
@@ -392,6 +393,32 @@ class CmdLoop(cmd2.Cmd):
             "args" : [args.channel,args.trippoint]
         }
         self.send(data)
+    
+    # Battery Commands
+    # ===========
+
+    # readBatteryCapacity()
+    pprint_parser = cmd2.Cmd2ArgumentParser()
+    @cmd2.with_argparser(pprint_parser)
+    def do_readBatteryCapacity(self, args):
+        data = {
+            "type" : BATTERYTYPE,
+            "cmdname": args.cmd2_statement.get().command,
+            "args" : None
+        }
+        self.send(data)
+
+    # readBatteryVoltage()
+    pprint_parser = cmd2.Cmd2ArgumentParser()
+    @cmd2.with_argparser(pprint_parser)
+    def do_readBatteryVoltage(self, args):
+        data = {
+            "type" : BATTERYTYPE,
+            "cmdname": args.cmd2_statement.get().command,
+            "args" : None
+        }
+        self.send(data)
+
 
     
 
