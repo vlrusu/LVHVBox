@@ -21,7 +21,7 @@ def listenloop(s):
         else:
             app.terminal_lock.acquire()
             data = message["data"]
-#            print(data)
+            print(data)
             app.async_alert(str(json.loads(message["data"])["response"]))
             app.terminal_lock.release()
 
@@ -122,6 +122,68 @@ class CmdLoop(cmd2.Cmd):
 #        lvqueue.put([args.cmd2_statement.get().command, args.channel])
 
 
+    # readMonV48()
+    pprint_parser = cmd2.Cmd2ArgumentParser()
+    pprint_parser.add_argument('-c', '--channel', type=int, help='LV channel number')
+    @cmd2.with_argparser(pprint_parser)
+    def do_readMonV48(self, args):
+        """Print the options and argument list this options command was called with."""
+        data= {
+            "type" : LVTYPE,
+            "cmdname": args.cmd2_statement.get().command,
+            "args" : [args.channel]
+        }
+        self.send(data)
+
+#        lvqueue.put([args.cmd2_statement.get().command, args.channel])
+
+
+    # readMonI48()
+    pprint_parser = cmd2.Cmd2ArgumentParser()
+    pprint_parser.add_argument('-c', '--channel', type=int, help='LV channel number')
+    @cmd2.with_argparser(pprint_parser)
+    def do_readMonI48(self, args):
+        """Print the options and argument list this options command was called with."""
+        data= {
+            "type" : LVTYPE,
+            "cmdname": args.cmd2_statement.get().command,
+            "args" : [args.channel]
+        }
+        self.send(data)
+
+#        lvqueue.put([args.cmd2_statement.get().command, args.channel])
+
+    # readMonV6()
+    pprint_parser = cmd2.Cmd2ArgumentParser()
+    pprint_parser.add_argument('-c', '--channel', type=int, help='LV channel number')
+    @cmd2.with_argparser(pprint_parser)
+    def do_readMonV6(self, args):
+        """Print the options and argument list this options command was called with."""
+        data= {
+            "type" : LVTYPE,
+            "cmdname": args.cmd2_statement.get().command,
+            "args" : [args.channel]
+        }
+        self.send(data)
+
+#        lvqueue.put([args.cmd2_statement.get().command, args.channel])
+
+
+    # readMonI6()
+    pprint_parser = cmd2.Cmd2ArgumentParser()
+    pprint_parser.add_argument('-c', '--channel', type=int, help='LV channel number')
+    @cmd2.with_argparser(pprint_parser)
+    def do_readMonI6(self, args):
+        """Print the options and argument list this options command was called with."""
+        data= {
+            "type" : LVTYPE,
+            "cmdname": args.cmd2_statement.get().command,
+            "args" : [args.channel]
+        }
+        self.send(data)
+
+#        lvqueue.put([args.cmd2_statement.get().command, args.channel])
+
     # readvoltage()
     pprint_parser = cmd2.Cmd2ArgumentParser()
     pprint_parser.add_argument('-c', '--channel', type=int, help='LV channel number')
@@ -137,7 +199,6 @@ class CmdLoop(cmd2.Cmd):
 
 #        lvqueue.put([args.cmd2_statement.get().command, args.channel])
 
-
     # readcurrent()
     pprint_parser = cmd2.Cmd2ArgumentParser()
     pprint_parser.add_argument('-c', '--channel', type=int, help='LV channel number')
@@ -152,7 +213,6 @@ class CmdLoop(cmd2.Cmd):
         self.send(data)
 
 #        lvqueue.put([args.cmd2_statement.get().command, args.channel])
-
 
     # readtemp()
     pprint_parser = cmd2.Cmd2ArgumentParser()
@@ -230,6 +290,77 @@ class CmdLoop(cmd2.Cmd):
         }
         self.send(data)
 
+    # get_hv_board_temperature()
+    pprint_parser = cmd2.Cmd2ArgumentParser()
+    @cmd2.with_argparser(pprint_parser)
+    def do_get_hv_board_temperature(self, args):
+        data = {
+            "type" : HVTYPE1,
+            "cmdname" : args.cmd2_statement.get().command,
+            "args" : None
+        }
+        self.send(data)
+
+    # get_hv_board_current()
+    pprint_parser = cmd2.Cmd2ArgumentParser()
+    @cmd2.with_argparser(pprint_parser)
+    def do_get_hv_board_current(self, args):
+        data = {
+            "type" : HVTYPE0,
+            "cmdname" : args.cmd2_statement.get().command,
+            "args" : None
+        }
+        self.send(data)
+
+    # get_vhv0()
+    pprint_parser = cmd2.Cmd2ArgumentParser()
+    pprint_parser.add_argument('-c', '--channel', type=int, help='HV channel number')
+    @cmd2.with_argparser(pprint_parser)
+    def do_get_vhv0(self, args):
+        data = {
+            "type" : HVTYPE0,
+            "cmdname" : args.cmd2_statement.get().command,
+            "args" : [args.channel]
+        }
+        self.send(data)
+
+    # get_vhv1()
+    pprint_parser = cmd2.Cmd2ArgumentParser()
+    pprint_parser.add_argument('-c', '--channel', type=int, help='HV channel number')
+    @cmd2.with_argparser(pprint_parser)
+    def do_get_vhv1(self, args):
+        data = {
+            "type" : HVTYPE1,
+            "cmdname" : args.cmd2_statement.get().command,
+            "args" : [args.channel]
+        }
+        self.send(data)
+    
+    # get_ihv0()
+    pprint_parser = cmd2.Cmd2ArgumentParser()
+    pprint_parser.add_argument('-c', '--channel', type=int, help='HV channel number')
+    @cmd2.with_argparser(pprint_parser)
+    def do_get_ihv0(self, args):
+        data = {
+            "type" : HVTYPE0,
+            "cmdname" : args.cmd2_statement.get().command,
+            "args" : [args.channel]
+        }
+        self.send(data)
+    
+    # get_ihv1()
+    pprint_parser = cmd2.Cmd2ArgumentParser()
+    pprint_parser.add_argument('-c', '--channel', type=int, help='HV channel number')
+    @cmd2.with_argparser(pprint_parser)
+    def do_get_ihv1(self, args):
+        data = {
+            "type" : HVTYPE1,
+            "cmdname" : args.cmd2_statement.get().command,
+            "args" : [args.channel]
+        }
+        self.send(data)
+
+
 
 # these next two commands refer to channel as pico channel not HV channel (so 0 or 1).
 # As it is written now, the argument is though still the HV channel
@@ -263,28 +394,17 @@ class CmdLoop(cmd2.Cmd):
         self.send(data)
 
     
-    # data acquisition commands
-
-    @cmd2.with_argparser(pprint_parser)
-    def do_get_v48(self, args):
-        """Print the options and argument list this options command was called with."""
-        data= {
-            "type" : LVTYPE,
-            "cmdname": args.cmd2_statement.get().command,
-            "args" : []
-        }
-        self.send(data)
 
 
-    @cmd2.with_argparser(pprint_parser)
-    def do_get_vhv1(self, args):
-        """Print the options and argument list this options command was called with."""
-        data= {
-            "type" : HVTYPE0,
-            "cmdname": args.cmd2_statement.get().command,
-            "args" : []
-        }
-        self.send(data)
+
+
+
+
+
+
+
+
+
 
 
 

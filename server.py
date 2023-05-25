@@ -126,7 +126,8 @@ class CommandsThread(Thread):
                     "cmdname": command.data["cmdname"],
                     "response": command.response
                     }
-                serialized = json.dumps('#' + str(data) + '#')
+                #serialized = json.dumps('#' + str(data) + '#')
+                serialized = json.dumps(data)
                 msg = f"{len(serialized):<{HEADER_LENGTH}}"
                 try:
                     command.conn.send(bytes(msg,"utf-8"))
@@ -276,7 +277,7 @@ if __name__ == '__main__':
     hvThrd1 = threading.Thread(target=hvloop1, args=[is_test], daemon = True, name="HV1THREAD")
     hvThrd1.start()
     threads.append(hvThrd1)
-
+    
 while True:
     (conn, (ip, port)) = tcpServer.accept()
     print("accepted")

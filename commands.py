@@ -60,6 +60,9 @@ class LVHVBox:
         self.vhv0 = [0 for i in range(6)]
         self.vhv1 = [0 for i in range(6)]
 
+        self.hv_board_current = 0
+        self.hv_board_temperature = 0
+
         self.powerChMap = [5,6,7,2,3,4]
 
         if not self.is_test:
@@ -116,16 +119,16 @@ class LVHVBox:
         try:
             if not self.is_test:
 
-                six_voltages = self.read_six_voltage([None])
+                six_voltages = self.readMonV6([None])
                 self.v6 = [0]*NLVCHANNELS
 
-                six_currents = self.read_six_current([None])
+                six_currents = self.readMonI6([None])
                 self.i6 = [0]*NLVCHANNELS
                   
-                voltages = self.readvoltage([None])
+                voltages = self.readMonV48([None])
                 self.v48 = [0]*NLVCHANNELS
 
-                currents = self.readcurrent([None])
+                currents = self.readMonI48([None])
                 self.i48 = [0]*NLVCHANNELS
 
                 temps = self.readtemp([None])
@@ -241,6 +244,8 @@ class LVHVBox:
                     hvlist.append(self.ihv1[ich])
                     hvlist.append(self.vhv1[ich])
 
+                    self.hv_board_temperature = d2[14]
+
                 self.hvpcbtemp = float(d2[14])
                 hvlist.append(self.hvpcbtemp)
             else:
@@ -252,6 +257,8 @@ class LVHVBox:
                     self.vhv1[ich] = round(np.random.normal(48,0.25),2)
                     hvlist.append(self.ihv1[ich])
                     hvlist.append(self.vhv1[ich])
+
+                    self.hv_board_temperature = round(np.random.normal(1,0.2),2)
 
                 self.hvpcbtemp = round(np.random.normal(22,0.1),2)
                 hvlist.append(self.hvpcbtemp)
@@ -322,6 +329,8 @@ class LVHVBox:
                     hvlist.append(self.ihv0[ich])
                     hvlist.append(self.vhv0[ich])
 
+                    self.hv_board_current = d1[14]
+
                 self.i12V = float(d1[14])
                 hvlist.append(self.i12V)
             else:
@@ -331,6 +340,7 @@ class LVHVBox:
                 for ich in range(6):
                     self.ihv0[ich] = round(np.random.normal(3,0.2),2)
                     self.vhv0[ich] = round(np.random.normal(48,0.25),2)
+                    self.hv_board_current = round(np.random.normal(1,0.1,2))
 
                     hvlist.append(self.ihv0[ich])
                     hvlist.append(self.vhv0[ich])
@@ -441,7 +451,7 @@ class LVHVBox:
                 return self.vhv0
         except:
             return False
-
+    
     
     def get_vhv1(self,channel):
         try:
@@ -449,6 +459,18 @@ class LVHVBox:
                 return self.vhv1[channel[0]-5]
             else:
                 return self.vhv1
+        except:
+            return False
+    
+    def get_hv_board_temperature(self,args):
+        try:
+            return self.hv_board_temperature
+        except:
+            return False
+        
+    def get_hv_board_current(self,args):
+        try:
+            return self.hv_board_current
         except:
             return False
     
@@ -675,7 +697,7 @@ class LVHVBox:
     # Read 6V Voltage
     # ===============
 
-    def read_six_voltage(self,channel):
+    def readMonV6(self,channel):
         ret= []
 
         addresses = [0x14,0x16,0x26]
@@ -730,7 +752,7 @@ class LVHVBox:
     # Read 6V Current
     # ===============
     
-    def read_six_current(self,channel):
+    def readMonI6(self,channel):
         ret= []
 
         addresses = [0x14,0x16,0x26]
@@ -784,8 +806,8 @@ class LVHVBox:
 
     # Read LV channel voltage
     # =======================
-    def readvoltage(self,channel):
-        ret= []
+    def readMonV48(self,channel):
+        ret= []    
 
         addresses = [0x14,0x16,0x26]
         LTCaddress = [0x26,0x26,0x16,0x16,0x14,0x14]
@@ -839,7 +861,7 @@ class LVHVBox:
 
     # Read LV channel current
     # =======================
-    def readcurrent(self,channel):
+    def readMonI48(self,channel):
         ret = []
 
         addresses = [0x14,0x16,0x26]
@@ -893,6 +915,75 @@ class LVHVBox:
         except:
             logging.error("I48 Reading Error")
 
+        return ret
+    
+    # Read LV Voltage from the blades (dangerous method)
+    # ==================================================
+    def readvoltage(self,channel):
+        ret = []
+
+        try:
+            if channel[0] == None:
+                for item in range(6):
+                    self.lvbus.pec = 1
+                    self.lvbus.write_byte_data(0x50,0x0,item+1)
+                    reading=self.lvbus.read_i2c_block_data(0x50,0x8B,2)
+                    value=float(reading[0]+256*reading[1])/256.
+                    self.lvbus.pec = 0
+                    time.sleep(0.2)
+                    ret.append(value)
+            else:
+                item = channel[0]
+
+                self.lvbus.pec = 1
+                self.lvbus.write_byte_data(0x50,0x0,item+1)
+                reading=self.lvbus.read_i2c_block_data(0x50,0x8B,2)
+                value=float(reading[0]+256*reading[1])/256.
+                self.lvbus.pec = 0
+                time.sleep(0.2)
+                ret.append(value)
+        except:
+            logging.error("readvoltage reading error")
+        
+        return ret
+
+
+    # Read LV Current from the blades (dangerous method)
+    # ==================================================
+    def readcurrent(self,channel):
+        ret = []
+
+        try:
+            if channel[0] == None:
+                for item in range(6):
+                    self.lvbus.pec = 1
+                    self.lvbus.write_byte_data(0x50,0x0,item+1)
+                    reading=self.lvbus.read_i2c_block_data(0x50,0x8C,2)
+                    value=reading[0]+256*reading[1]
+                    exponent=(value >> 11) & 0x1f
+                    exponent=exponent-32
+                    mantissa=value & 0x7ff
+                    current=mantissa*2**exponent
+                    self.lvbus.pec = 0
+                    time.sleep(0.2)
+                    ret.append(current)
+            else:
+                item = channel[0]
+
+                self.lvbus.pec = 1
+                self.lvbus.write_byte_data(0x50,0x0,item+1)
+                reading=self.lvbus.read_i2c_block_data(0x50,0x8C,2)
+                value=reading[0]+256*reading[1]
+                exponent=(value >> 11) & 0x1f
+                exponent=exponent-32
+                mantissa=value & 0x7ff
+                current=mantissa*2**exponent
+                self.lvbus.pec = 0
+                time.sleep(0.2)
+                ret.append(current)
+        except:
+            logging.error("readvoltage reading error")
+        
         return ret
 
 
