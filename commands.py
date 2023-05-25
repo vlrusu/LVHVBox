@@ -482,15 +482,27 @@ class LVHVBox:
         except:
             return False
     
-    def get_hv_board_temperature(self,args):
+    def get_hv_board_temperature(self):
         try:
             return self.hv_board_temperature
         except:
             return False
         
-    def get_hv_board_current(self,args):
+    def get_hv_board_current(self):
         try:
             return self.hv_board_current
+        except:
+            return False
+    
+    def get_battery_voltage(self):
+        try:
+            return self.battery_voltage
+        except:
+            return False
+        
+    def get_battery_capacity(self):
+        try:
+            return self.battery_capacity
         except:
             return False
     
@@ -506,6 +518,11 @@ class LVHVBox:
             ret['ihv1']=self.get_ihv1(channel)
             ret['vhv0']=self.get_vhv0(channel)
             ret['vhv1']=self.get_vhv1(channel)
+            ret['boardtemperature']=self.get_hv_board_temperature()
+            ret['boardcurrent']=self.get_hv_board_current()
+            ret['batteryvoltage']=self.get_battery_voltage()
+            ret['batterycapacity']=self.get_battery_capacity()
+
 
             print(ret)
         except:

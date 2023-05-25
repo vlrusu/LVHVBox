@@ -420,25 +420,6 @@ class CmdLoop(cmd2.Cmd):
         self.send(data)
 
 
-    
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 ## Main function
 ## =============
