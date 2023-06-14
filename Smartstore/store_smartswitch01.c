@@ -11,11 +11,15 @@
 #include "hardware/adc.h"
 #include "hardware/pio.h"
 #include "hardware/clocks.h"
-#include "combined.pio.h"
-#include <inttypes.h>
-
 #include "clock.pio.h"
 #include "channel.pio.h"
+#include "combined.pio.h"
+#include <pico/platform.h>
+#include <inttypes.h>
+
+#include "bsp/board.h"
+#include "tusb.h"
+
 
 
 // Channel count
@@ -24,7 +28,6 @@
 #define mChn  6		// Number of channels for trip processing
 
 #define pico 1
-
 
 
 // Readout
@@ -42,6 +45,7 @@ struct Pins {
   uint8_t sclk;
   uint8_t csPin;
 } all_pins;
+
 
 
 
@@ -83,13 +87,7 @@ unsigned char * readLine() {
   return buffer;
 }
 
-// Pin definitions for pico 1
 
-
-
-//******************************************************************************
-// Initialization functions
-// Ports
 
 void port_init() {
 
@@ -173,57 +171,10 @@ void variable_init() {
   memset(count_over_current, 0, sizeof(count_over_current));
 }
 
-//******************************************************************************
-// Trip logic
-// Reset all trips
-void tripReset() {
-  for (int i = 0; i < sizeof(all_pins.crowbarPins); i++) {
-    gpio_put(all_pins.crowbarPins[i], 0);
-  }
-}
-//==============================================================================
-// Set trips for current above limit
-// Avoid tripping from short glitch by doing a ~running average of times over limit
 
-void trips(int32_t currents[], int32_t limit) {
-  uint8_t process = liveChn;
+void SM73201_ADC_Raw(PIO pio, uint sm[]) {
 
-
-  for (uint8_t chn = 0; chn < mChn; chn++, process >>= 1) {
-
-    if ( (process & 1) == 0)	// Option to skip channels (useful for debugging)
-      continue;
-    // Count up if above limit, down if below limit
-    if (abs(currents[chn]) > limit) {
-      count_over_current[chn]++;
-      // Trip if reach limit
-      if (count_over_current[chn] > tripCount) {
-	gpio_put(all_pins.crowbarPins[mChn -1 - chn], 1) ; //FIXME
-	printf("Trip on channel %d\n",mChn-1 - chn);
-      }
-    }
-    else if (count_over_current[chn] > 0) {
-      count_over_current[chn]--;
-    }
-    else
-      continue;
-
-    //Channels in data are upside down, FIXME!!!
-
-    printf("Trip count on channel %d changed to %d\n",mChn-1-chn,count_over_current[chn]);
-
-  }
-}
-
-//******************************************************************************
-// Hardware interface functions
-// Read from from all ADCs in parallel
-#pragma GCC push_options
-#pragma GCC optimize ("Ofast")
-
-
-int SM73201_ADC_Raw(PIO pio, uint sm[2]) {
-
+  
 
   float channel_1_currents[8000];
 
@@ -239,38 +190,12 @@ int SM73201_ADC_Raw(PIO pio, uint sm[2]) {
     channel_1_currents[i] = temp_current_channel_1 * adc_to_uA;
   }
 
-  adcTime = absolute_time_diff_us(start, get_absolute_time());
   
-
   
-  for (uint32_t i=0;i<8000;i++){
+  for (uint32_t i = 0; i<8000; i++) {
     printf("%f\n", channel_1_currents[i]);
   }
   
-  
-  
-  
-  /*
-  printf("#\n");
-  
-  printf("end\n");
-  printf("%" PRIu32 "\n",adcTime);
-  */
-  
-  
-  
-
-
-
-  
-
-  /*
-  uint16_t channel_1_voltage_raw;
-  channel_1_voltage_raw = pio_sm_get_blocking(pio, sm[0]);
-  float voltage_result;
-  voltage_result = channel_1_voltage_raw * adc_to_V;
-  printf("float %f \n \n",voltage_result);
-  */
   
   
 
@@ -299,14 +224,194 @@ int SM73201_ADC_Raw(PIO pio, uint sm[2]) {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+//--------------------------------------------------------------------+
+// Device callbacks
+//--------------------------------------------------------------------+
+
+// Invoked when device is mounted
+void tud_mount_cb(void)
+{
+  ;
+}
+
+// Invoked when device is unmounted
+void tud_umount_cb(void)
+{
+  ;
+}
+
+// Invoked when usb bus is suspended
+// remote_wakeup_en : if host allow us  to perform remote wakeup
+// Within 7ms, device must draw an average of current less than 2.5 mA from bus
+void tud_suspend_cb(bool remote_wakeup_en)
+{
+  (void) remote_wakeup_en;
+  ;
+}
+
+// Invoked when usb bus is resumed
+void tud_resume_cb(void)
+{
+  ;
+}
+
+
+
+
+
+
+
+
+
+
+//--------------------------------------------------------------------+
+// USB CDC
+//--------------------------------------------------------------------+
+/*
+void cdc_task(void)
+{
+  if ( tud_cdc_connected() )
+  {
+    // connected and there are data available
+    if ( tud_cdc_available() )
+    {
+      uint8_t buf[64];
+
+      // read and echo back
+      uint32_t count = tud_cdc_read(buf, sizeof(buf));
+
+      for(uint32_t i=0; i<count; i++)
+      {
+        tud_cdc_write_char(buf[i]);
+
+        if ( buf[i] == '\r' ) tud_cdc_write_char('\n');
+      }
+
+      tud_cdc_write_flush();
+    }
+  }
+}
+
+*/
+
+void cdc_task(PIO pio, uint sm[])
+{
+  uint16_t channel_1_current_list[30];
+  uint16_t channel_1_voltage_list[30];
+  uint32_t temp_voltage;
+  uint32_t temp_current;
+
+  
+  if ( tud_cdc_available() )
+    {
+      tud_cdc_read_flush();
+
+      
+      for(uint32_t i=0; i<30; i++)
+      {
+        //tud_cdc_write(&channel_1_currents[i],sizeof(channel_1_currents[i]));
+
+
+        channel_1_voltage_list[i] = (uint16_t) pio_sm_get_blocking(pio, sm[0]);
+        channel_1_current_list[i] = (uint16_t) pio_sm_get_blocking(pio, sm[1]);
+
+        
+        tud_cdc_write(&channel_1_current_list[i],sizeof(channel_1_current_list)[i]);
+        
+
+        
+        
+      }
+      
+      tud_cdc_write_flush();
+  
+
+    }
+    
+
+}
+
+
+// Invoked when cdc when line state changed e.g connected/disconnected
+void tud_cdc_line_state_cb(uint8_t itf, bool dtr, bool rts)
+{
+  (void) itf;
+
+  // connected
+  if ( dtr && rts )
+  {
+    // print initial message when connected
+    tud_cdc_write_str("\r\nTinyUSB CDC MSC device example\r\n");
+  }
+}
+
+// Invoked when CDC interface received data from host
+void tud_cdc_rx_cb(uint8_t itf)
+{
+  (void) itf;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 //******************************************************************************
 // Standard loop function, called repeatedly
 int main(){
-  float clkdiv = 7;
-  static const float sumSclI = adc_to_uA / (nSampleFast*nSampleSlow);
-  static const float sumSclV = adc_to_V / nSampleSlow;
 
   stdio_init_all();
+
+
+  //board_init();
+
+
+
+
+
+
+  float clkdiv = 7;
+  uint32_t start_mask = -1;
+  static const float sumSclI = adc_to_uA / (nSampleFast*nSampleSlow);
+  static const float sumSclV = adc_to_V / nSampleSlow;
 
   // initialize adc for adc 2 (gpio pin 28)
   adc_init();
@@ -323,58 +428,74 @@ int main(){
   static const uint cs_pin = 0;
   static const float pio_freq = 2000;
 
+  uint32_t current_reading;
+
+
+ 
+
+PIO pio_0 = pio0;
+PIO pio_1 = pio1;
+
+
+ // Start clock state machine
+  uint sm_clock = pio_claim_unused_sm(pio_0, true);
+ uint offset_clock = pio_add_program(pio_0, &clock_program);
+ clock_program_init(pio_0,sm_clock,offset_clock,cs_pin,clkdiv);
+
+
+// start channel 1 voltage state machine
+ uint sm_channel_1_voltage = pio_claim_unused_sm(pio_0, true);
+ uint offset_channel_1_voltage = pio_add_program(pio_0, &channel_1_program);
+ channel_1_program_init(pio_0,sm_channel_1_voltage,offset_channel_1_voltage,cs_pin,clkdiv);
+ 
+
+ // start channel 1 current state machine
+ uint sm_channel_1_current = pio_claim_unused_sm(pio_0, true);
+ uint offset_channel_1_current = pio_add_program(pio_0, &channel_1_program);
+ channel_1_program_init(pio_0,sm_channel_1_current,offset_channel_1_current,cs_pin+1,clkdiv);
 
 
 
 
 
-  uint32_t start_mask = -1;
+// create array of state machines
+uint sm_array[2];
+sm_array[0] = sm_channel_1_voltage;
+sm_array[1] = sm_channel_1_current;
 
-    PIO pio_0 = pio0;
-    PIO pio_1 = pio1;
+// start all state machines in pio block
+ pio_enable_sm_mask_in_sync(pio_0, start_mask);
 
+ //pio_sm_set_enabled(pio_0, sm_clock, true);
+ //pio_sm_set_enabled(pio_0, sm_clock, true);
 
-    // Start clock state machine
-      uint sm_clock = pio_claim_unused_sm(pio_0, true);
-    uint offset_clock = pio_add_program(pio_0, &clock_program);
-    clock_program_init(pio_0,sm_clock,offset_clock,cs_pin,clkdiv);
-
-
-    // start channel 1 voltage state machine
-    uint sm_channel_1_voltage = pio_claim_unused_sm(pio_0, true);
-    uint offset_channel_1_voltage = pio_add_program(pio_0, &channel_1_program);
-    channel_1_program_init(pio_0,sm_channel_1_voltage,offset_channel_1_voltage,cs_pin,clkdiv);
-    
-
-    // start channel 1 current state machine
-    uint sm_channel_1_current = pio_claim_unused_sm(pio_0, true);
-    uint offset_channel_1_current = pio_add_program(pio_0, &channel_1_program);
-    channel_1_program_init(pio_0,sm_channel_1_current,offset_channel_1_current,cs_pin+1,clkdiv);
-
-
-    // create array of state machines
-    uint sm_array[2];
-    sm_array[0] = sm_channel_1_voltage;
-    sm_array[1] = sm_channel_1_current;
-
-    // start all state machines in pio block
-    pio_enable_sm_mask_in_sync(pio_0, start_mask);
-
-
-
-
+ 
   gpio_put(all_pins.P1_0, 1);
-  sleep_ms(1);
 
 
+  
+  sleep_ms(100);
+  //tud_init(BOARD_TUD_RHPORT);
+
+//SM73201_ADC_Raw(pio_0, sm_array);
   while (true){
-    SM73201_ADC_Raw(pio_0, sm_array);
-    sleep_ms(5000);
 
-    
+
+    /*
+    cdc_task(pio_0, sm_array);
+
+    tud_task();
+    */
+
+   SM73201_ADC_Raw(pio_0, sm_array);
+
+   
 
     
   }
+  
+
   return 0;
+  
 
 }

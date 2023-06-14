@@ -11,11 +11,18 @@
 #include "hardware/adc.h"
 #include "hardware/pio.h"
 #include "hardware/clocks.h"
-#include "combined.pio.h"
-#include <inttypes.h>
-
 #include "clock.pio.h"
 #include "channel.pio.h"
+#include "combined.pio.h"
+#include <pico/platform.h>
+#include <inttypes.h>
+
+/*
+#include "bsp/board.h"
+#include "tusb.h"
+*/
+
+
 
 
 // Channel count
@@ -24,7 +31,6 @@
 #define mChn  6		// Number of channels for trip processing
 
 #define pico 1
-
 
 
 // Readout
@@ -83,13 +89,7 @@ unsigned char * readLine() {
   return buffer;
 }
 
-// Pin definitions for pico 1
 
-
-
-//******************************************************************************
-// Initialization functions
-// Ports
 
 void port_init() {
 
@@ -173,54 +173,6 @@ void variable_init() {
   memset(count_over_current, 0, sizeof(count_over_current));
 }
 
-//******************************************************************************
-// Trip logic
-// Reset all trips
-void tripReset() {
-  for (int i = 0; i < sizeof(all_pins.crowbarPins); i++) {
-    gpio_put(all_pins.crowbarPins[i], 0);
-  }
-}
-//==============================================================================
-// Set trips for current above limit
-// Avoid tripping from short glitch by doing a ~running average of times over limit
-
-void trips(int32_t currents[], int32_t limit) {
-  uint8_t process = liveChn;
-
-
-  for (uint8_t chn = 0; chn < mChn; chn++, process >>= 1) {
-
-    if ( (process & 1) == 0)	// Option to skip channels (useful for debugging)
-      continue;
-    // Count up if above limit, down if below limit
-    if (abs(currents[chn]) > limit) {
-      count_over_current[chn]++;
-      // Trip if reach limit
-      if (count_over_current[chn] > tripCount) {
-	gpio_put(all_pins.crowbarPins[mChn -1 - chn], 1) ; //FIXME
-	printf("Trip on channel %d\n",mChn-1 - chn);
-      }
-    }
-    else if (count_over_current[chn] > 0) {
-      count_over_current[chn]--;
-    }
-    else
-      continue;
-
-    //Channels in data are upside down, FIXME!!!
-
-    printf("Trip count on channel %d changed to %d\n",mChn-1-chn,count_over_current[chn]);
-
-  }
-}
-
-//******************************************************************************
-// Hardware interface functions
-// Read from from all ADCs in parallel
-#pragma GCC push_options
-#pragma GCC optimize ("Ofast")
-
 
 int SM73201_ADC_Raw(PIO pio, uint sm[2]) {
 
@@ -239,15 +191,12 @@ int SM73201_ADC_Raw(PIO pio, uint sm[2]) {
     channel_1_currents[i] = temp_current_channel_1 * adc_to_uA;
   }
 
-  adcTime = absolute_time_diff_us(start, get_absolute_time());
+  adcTime = absolute_time_diff_us(start, get_absolute_time())/8000;
   
 
-  
   for (uint32_t i=0;i<8000;i++){
     printf("%f\n", channel_1_currents[i]);
   }
-  
-  
   
   
   /*
@@ -256,8 +205,6 @@ int SM73201_ADC_Raw(PIO pio, uint sm[2]) {
   printf("end\n");
   printf("%" PRIu32 "\n",adcTime);
   */
-  
-  
   
 
 
@@ -299,14 +246,37 @@ int SM73201_ADC_Raw(PIO pio, uint sm[2]) {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 //******************************************************************************
 // Standard loop function, called repeatedly
 int main(){
+  
+    
+
+    //board_init();
+    //board_led_write(true);
+  
   float clkdiv = 7;
+  uint32_t start_mask = -1;
   static const float sumSclI = adc_to_uA / (nSampleFast*nSampleSlow);
   static const float sumSclV = adc_to_V / nSampleSlow;
 
   stdio_init_all();
+
 
   // initialize adc for adc 2 (gpio pin 28)
   adc_init();
@@ -323,58 +293,66 @@ int main(){
   static const uint cs_pin = 0;
   static const float pio_freq = 2000;
 
+  uint32_t current_reading;
 
 
+ 
+
+PIO pio_0 = pio0;
+PIO pio_1 = pio1;
 
 
-
-  uint32_t start_mask = -1;
-
-    PIO pio_0 = pio0;
-    PIO pio_1 = pio1;
-
-
-    // Start clock state machine
-      uint sm_clock = pio_claim_unused_sm(pio_0, true);
-    uint offset_clock = pio_add_program(pio_0, &clock_program);
-    clock_program_init(pio_0,sm_clock,offset_clock,cs_pin,clkdiv);
+ // Start clock state machine
+  uint sm_clock = pio_claim_unused_sm(pio_0, true);
+ uint offset_clock = pio_add_program(pio_0, &clock_program);
+ clock_program_init(pio_0,sm_clock,offset_clock,cs_pin,clkdiv);
 
 
-    // start channel 1 voltage state machine
-    uint sm_channel_1_voltage = pio_claim_unused_sm(pio_0, true);
-    uint offset_channel_1_voltage = pio_add_program(pio_0, &channel_1_program);
-    channel_1_program_init(pio_0,sm_channel_1_voltage,offset_channel_1_voltage,cs_pin,clkdiv);
-    
+// start channel 1 voltage state machine
+ uint sm_channel_1_voltage = pio_claim_unused_sm(pio_0, true);
+ uint offset_channel_1_voltage = pio_add_program(pio_0, &channel_1_program);
+ channel_1_program_init(pio_0,sm_channel_1_voltage,offset_channel_1_voltage,cs_pin,clkdiv);
+ 
 
-    // start channel 1 current state machine
-    uint sm_channel_1_current = pio_claim_unused_sm(pio_0, true);
-    uint offset_channel_1_current = pio_add_program(pio_0, &channel_1_program);
-    channel_1_program_init(pio_0,sm_channel_1_current,offset_channel_1_current,cs_pin+1,clkdiv);
-
-
-    // create array of state machines
-    uint sm_array[2];
-    sm_array[0] = sm_channel_1_voltage;
-    sm_array[1] = sm_channel_1_current;
-
-    // start all state machines in pio block
-    pio_enable_sm_mask_in_sync(pio_0, start_mask);
+ // start channel 1 current state machine
+ uint sm_channel_1_current = pio_claim_unused_sm(pio_0, true);
+ uint offset_channel_1_current = pio_add_program(pio_0, &channel_1_program);
+ channel_1_program_init(pio_0,sm_channel_1_current,offset_channel_1_current,cs_pin+1,clkdiv);
 
 
+// create array of state machines
+uint sm_array[2];
+sm_array[0] = sm_channel_1_voltage;
+sm_array[1] = sm_channel_1_current;
 
+// start all state machines in pio block
+ pio_enable_sm_mask_in_sync(pio_0, start_mask);
 
+ //pio_sm_set_enabled(pio_0, sm_channel_1, true);
+ //pio_sm_set_enabled(pio_0, sm_clock, true);
+
+ 
   gpio_put(all_pins.P1_0, 1);
-  sleep_ms(1);
+
+  while (true) {
+    printf("test");
+    SM73201_ADC_Raw(pio_0, sm_array);
+    sleep_ms(5000);
+  }
+  /*
 
 
   while (true){
-    SM73201_ADC_Raw(pio_0, sm_array);
+   SM73201_ADC_Raw(pio_0, sm_array);
+
     sleep_ms(5000);
-
-    
-
-    
   }
+  */
+  
+  
+
+
   return 0;
+  
 
 }

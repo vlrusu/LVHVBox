@@ -1,0 +1,111 @@
+.program combined
+.side_set 1;
+
+.wrap_target
+
+    initialize_high:
+      set x, 17      side 1  ;
+
+      set pins, 1 side 1 ;
+
+      set pins, 1 side 0  ;
+
+    bitloop_high:
+      set pins, 0  side 0      ;
+      set pins, 1  side 0    ;
+      in pins, 31 side 0 ;          ;
+      jmp x-- bitloop_high   side 0;
+
+    jmp initialize_high   side 1  ;
+
+
+.wrap
+
+% c-sdk {
+
+void combined_program_init_1(PIO pio, uint sm, uint offset, uint pin, float div) {
+
+    // Sets up state machine and wrap target. This function is automatically
+    // generated in blink.pio.h.
+    pio_sm_config c = combined_program_get_default_config(offset);
+
+    // initialize voltage pins
+    pio_gpio_init(pio, pin);
+
+    pio_gpio_init(pio, pin+15);
+    pio_gpio_init(pio, pin+27);
+
+    sm_config_set_sideset_pins(&c, pin+15);
+    sm_config_set_set_pins(&c, pin+27, 1);
+
+    // voltage in pins
+    sm_config_set_in_pins(&c, pin);
+
+
+    pio_sm_set_consecutive_pindirs(pio, sm, pin, 31, false);
+
+
+    pio_sm_set_consecutive_pindirs(pio, sm, pin+27, 1, true);
+    pio_sm_set_consecutive_pindirs(pio, sm, pin+15, 1, true);
+
+
+    // Shifting to left matches the customary MSB-first ordering of SPI.
+    sm_config_set_in_shift(
+        &c,
+        false, // Shift-to-right = false (i.e. shift to left)
+        true,  // Autopush enabled
+        31      // Autopush threshold = 1
+    );
+
+    // We only receive, so disable the TX FIFO to make the RX FIFO deeper.
+    //sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_RX);
+
+    sm_config_set_clkdiv(&c, div);
+
+    pio_sm_init(pio, sm, offset, &c);
+}
+
+
+void combined_program_init_2(PIO pio, uint sm, uint offset, uint pin, float div) {
+
+    // Sets up state machine and wrap target. This function is automatically
+    // generated in blink.pio.h.
+    pio_sm_config c = combined_program_get_default_config(offset);
+
+    // initialize voltage pins
+    pio_gpio_init(pio, pin);
+
+    pio_gpio_init(pio, pin+12);
+    pio_gpio_init(pio, pin+11);
+
+    sm_config_set_sideset_pins(&c, pin+12);
+    sm_config_set_set_pins(&c, pin+11, 1);
+
+    // voltage in pins
+    sm_config_set_in_pins(&c, pin);
+
+
+    pio_sm_set_consecutive_pindirs(pio, sm, pin, 31, false);
+
+
+    pio_sm_set_consecutive_pindirs(pio, sm, pin+11, 1, true);
+    pio_sm_set_consecutive_pindirs(pio, sm, pin+12, 1, true);
+
+
+    // Shifting to left matches the customary MSB-first ordering of SPI.
+    sm_config_set_in_shift(
+        &c,
+        false, // Shift-to-right = false (i.e. shift to left)
+        true,  // Autopush enabled
+        31      // Autopush threshold = 1
+    );
+
+    // We only receive, so disable the TX FIFO to make the RX FIFO deeper.
+    //sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_RX);
+
+    sm_config_set_clkdiv(&c, div);
+
+    pio_sm_init(pio, sm, offset, &c);
+}
+
+%}
