@@ -13,25 +13,23 @@
 // ------- //
 
 #define channel_wrap_target 0
-#define channel_wrap 7
+#define channel_wrap 5
 
 static const uint16_t channel_program_instructions[] = {
             //     .wrap_target
     0xe031, //  0: set    x, 17                      
-    0x8000, //  1: push   noblock                    
-    0xa042, //  2: nop                               
-    0xa042, //  3: nop                               
-    0xa042, //  4: nop                               
-    0x4001, //  5: in     pins, 1                    
-    0x0043, //  6: jmp    x--, 3                     
-    0x0000, //  7: jmp    0                          
+    0x8100, //  1: push   noblock                [1] 
+    0xa142, //  2: nop                           [1] 
+    0x4001, //  3: in     pins, 1                    
+    0x0042, //  4: jmp    x--, 2                     
+    0x0000, //  5: jmp    0                          
             //     .wrap
 };
 
 #if !PICO_NO_HARDWARE
 static const struct pio_program channel_program = {
     .instructions = channel_program_instructions,
-    .length = 8,
+    .length = 6,
     .origin = -1,
 };
 

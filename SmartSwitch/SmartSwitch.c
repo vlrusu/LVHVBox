@@ -16,6 +16,7 @@
 
 #include "clock.pio.h"
 #include "channel.pio.h"
+#include "channel_enable.pio.h"
 
 
 // Channel count
@@ -252,12 +253,9 @@ float get_averaged_current(PIO pio, uint sm) {
 
   float averaged_current = 0;
 
-  uint16_t temp_current = 0;
-
-  
   //absolute_time_t start = get_absolute_time();
   for (uint32_t i = 0; i < 200; i++) {
-    temp_current = pio_sm_get_blocking(pio, sm);
+    uint16_t temp_current = pio_sm_get_blocking(pio, sm);
     averaged_current += temp_current;
   }
   averaged_current *= adc_to_uA/200;
@@ -269,12 +267,31 @@ float get_averaged_current(PIO pio, uint sm) {
   
 }
 
+void get_all_averaged_currents(PIO pio, uint sm[], float current_array[6]) {
+  uint16_t temp_currents[6] = {0, 0, 0, 0, 0, 0};
+  for (uint32_t channel = 0; channel < 3; channel++) {
+    current_array[channel] = 0;
+  }
+
+  for (uint32_t i = 0; i < 200; i++) {
+    for (uint32_t channel = 0; channel < 3; channel++) {
+      temp_currents[channel] = pio_sm_get_blocking(pio, sm[channel]);
+      current_array[channel] += temp_currents[channel];
+    }
+  }
+
+  for (uint32_t channel = 0; channel < 3; channel++) {
+    current_array[channel] *= adc_to_uA/200;
+  }
+
+}
+
 
 
 //******************************************************************************
 // Standard loop function, called repeatedly
 int main(){
-  float clkdiv = 21;
+  float clkdiv = 7;
   static const float sumSclI = adc_to_uA / (nSampleFast*nSampleSlow);
   static const float sumSclV = adc_to_V / nSampleSlow;
 
@@ -286,7 +303,7 @@ int main(){
   adc_select_input(2);
 
 
-  //  set_sys_clock_khz(150000, true);
+  //set_sys_clock_khz(125000, true);
 
   variable_init();
   port_init();
@@ -322,26 +339,26 @@ int main(){
     // start channel 0 state machine
     uint sm_channel_0 = pio_claim_unused_sm(pio_0, true);
     uint offset_channel_0 = pio_add_program(pio_0, &channel_program);
-    channel_program_init(pio_0,sm_channel_0,offset_channel_0,1,clkdiv);
+    channel_program_init(pio_0,sm_channel_0,offset_channel_0,all_pins.headerPins[0],clkdiv);
 
-    /*
-
+    
     // start channel 1 state machine
     uint sm_channel_1 = pio_claim_unused_sm(pio_0, true);
     uint offset_channel_1 = pio_add_program(pio_0, &channel_program);
     channel_program_init(pio_0,sm_channel_1,offset_channel_1,all_pins.headerPins[1],clkdiv);
 
+    
     // start channel 2 state machine
-    uint sm_channel_2 = pio_claim_unused_sm(pio_0, true);
+    uint sm_channel_2 = pio_claim_unused_sm(pio_0, false);
     uint offset_channel_2 = pio_add_program(pio_0, &channel_program);
-    channel_program_init(pio_0,sm_channel_0,offset_channel_2,all_pins.headerPins[2],clkdiv);
-
-
-
+    channel_program_init(pio_0,sm_channel_2,offset_channel_2,all_pins.headerPins[2],clkdiv);
+    
+      
+    /*
     // start channel 3 state machine
     uint sm_channel_3 = pio_claim_unused_sm(pio_1, true);
-    uint offset_channel_3 = pio_add_program(pio_1, &channel_program);
-    channel_program_init(pio_1,sm_channel_3,offset_channel_3,all_pins.headerPins[3],clkdiv);
+    uint offset_channel_3 = pio_add_program(pio_1, &channel_2_program);
+    channel_2_program_init(pio_1,sm_channel_3,offset_channel_3,all_pins.headerPins[3],clkdiv);
 
     // start channel 4 state machine
     uint sm_channel_4 = pio_claim_unused_sm(pio_1, true);
@@ -361,6 +378,9 @@ int main(){
     */
     uint sm_array[6];
     sm_array[0] = sm_channel_0;
+    sm_array[1] = sm_channel_1;
+    sm_array[2] = sm_channel_2;
+
 
     // start all state machines in both pio blocks
     pio_enable_sm_mask_in_sync(pio_0, start_mask);
@@ -385,9 +405,9 @@ int main(){
 
     // set mux to current
     gpio_put(all_pins.enablePin, 1);
-    sleep_ms(100);
     for (uint32_t i=0; i<1000; i++) {
 
+      /*
       channel_current_averaged[0] = get_averaged_current(pio_0, sm_array[0]);
     
 
@@ -395,8 +415,17 @@ int main(){
         gpio_put(all_pins.crowbarPins[0],1);
         printf("Channel 1 tripped");
       }
+      */
+      
+      get_all_averaged_currents(pio_0, sm_array, channel_current_averaged);
+  
+        
+
+
     }
-    printf("Current measurement: %f\n", channel_current_averaged[0]);
+    printf("Ch1 Current measurement: %f\n", channel_current_averaged[0]);
+    printf("Ch2 Current measurement: %f\n", channel_current_averaged[1]);
+    printf("Ch3 Current measurement: %f\n", channel_current_averaged[2]);
 
 
   
@@ -404,17 +433,22 @@ int main(){
     // ----- Collect single voltage measurement ----- //
 
     // set mux to voltage
-    gpio_put(all_pins.enablePin, 0);
-    sleep_ms(100);
 
-    channel_voltage[0] = get_single_voltage(pio_0, sm_array[0]);
-    printf("Voltage measurement: %f\n", channel_voltage[0]);
+    gpio_put(all_pins.enablePin, 0);
+    for (uint32_t channel = 0; channel < 3; channel++) {
+      channel_voltage[channel] = get_single_voltage(pio_0, sm_array[channel]);
+    }
+    printf("Ch1 Voltage measurement: %f\n", channel_voltage[0]);
+    printf("Ch2 Voltage measurement: %f\n", channel_voltage[1]);
+    printf("Ch3 Voltage measurement: %f\n", channel_voltage[2]);
+    printf("\n\n");
 
 
     // calculate frequency of data acquisition
     float adcTime = absolute_time_diff_us(start, get_absolute_time());
     printf("%f\n", 1/adcTime*1000*10.E5*200);
-    
+
+
   }
   return 0;
 

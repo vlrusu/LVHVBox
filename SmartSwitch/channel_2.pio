@@ -4,11 +4,14 @@
 
     initialize_read:
         set x, 17    ;
-        push noblock   [1] ;
+        push noblock    ;
+        nop    ;
 
+        nop [7];
     
     bitloop:
-        nop [1];
+        nop;
+        nop;
         in pins, 1    ;
         jmp x-- bitloop    ;
     
