@@ -12,6 +12,10 @@
 #include "hardware/pio.h"
 #include "hardware/clocks.h"
 #include "combined.pio.h"
+#include <inttypes.h>
+
+#include "clock.pio.h"
+#include "channel.pio.h"
 
 
 // Channel count
@@ -34,12 +38,20 @@ struct Pins {
   uint8_t crowbarPins[mChn];
   uint8_t dataPinsV[nAdc];
   uint8_t dataPinsI[nAdc];
+  uint8_t headerPins[nAdc];
   uint8_t P1_0;
   uint8_t sclk;
   uint8_t csPin;
+  uint8_t enablePin;
 } all_pins;
 
 
+/*
+// Converstion from ADC to microamps
+const float adc_to_V  = 2.048 / pow(2, 15) * 1000;			// ADC full-scale voltage / ADC full scale reading * divider ratio
+//const float adc_to_uA = 2.048 / pow(2, 15) / (10716.52) * 1.E6;	// ADC full-scale voltage / ADC full scale reading / shunt resistance * uA per amp
+const float adc_to_uA = (2.048 / pow(2, 15)) / (22.56* 470.0) * 1.E6;
+*/
 
 // Converstion from ADC to microamps
 const float adc_to_V  = 2.048 / pow(2, 15) * 1000;			// ADC full-scale voltage / ADC full scale reading * divider ratio
@@ -99,6 +111,11 @@ void port_init() {
   gpio_init(all_pins.P1_0);
   gpio_set_dir(all_pins.P1_0, GPIO_OUT);
 
+  // MUX enable pin
+  gpio_init(all_pins.enablePin);
+  gpio_set_dir(all_pins.enablePin, GPIO_OUT);
+
+  /*
   // CS line
   gpio_init(all_pins.csPin);
   gpio_set_dir(all_pins.csPin, GPIO_OUT);
@@ -109,10 +126,12 @@ void port_init() {
   gpio_set_dir(all_pins.sclk, GPIO_OUT);
   gpio_set_drive_strength(all_pins.sclk, GPIO_DRIVE_STRENGTH_2MA);
   gpio_put(all_pins.sclk, 0);
+  */
 
 
   // Data lines direct port access. Using all bits so no mask needed
   // Current and Voltage
+  /*
   uint dataPins_mask = 0;
   for (int i =0 ;i < nAdc; i++)
     dataPins_mask |= (1<<all_pins.dataPinsI[i]);
@@ -124,6 +143,7 @@ void port_init() {
     dataPins_mask |= (1<<all_pins.dataPinsV[i]);
   gpio_init_mask(dataPins_mask);
   gpio_set_dir_in_masked	(	dataPins_mask);
+  */
 
 
 
@@ -137,28 +157,31 @@ void variable_init() {
     //all_pins.crowbarPins = (uint8_t []){ 2, 5, 8, 11, 14, 21 };			// crowbar pins
       //  { 21, 26, 22, 16, 4, 5 };     //Channels in data are upside down, FIXME!!!
     uint8_t crowbarPins[6] = { 2, 5, 8, 11, 14, 21};
-    uint8_t dataPinsV[6] = { 0, 3, 6, 9, 12, 26};
-    uint8_t dataPinsI[6] = { 1, 4, 7, 10, 13, 22};
+    //uint8_t dataPinsV[6] = { 0, 3, 6, 9, 12, 26};
+    //uint8_t dataPinsI[6] = { 1, 4, 7, 10, 13, 22};
+    uint8_t headerPins[6] = { 1, 3, 6, 10, 12, 9};
 
     for (int i = 0; i < 6; i++) {
       all_pins.crowbarPins[i] = crowbarPins[i];
-      all_pins.dataPinsV[i] = dataPinsV[i];
-      all_pins.dataPinsI[i] = dataPinsI[i];
+      //all_pins.dataPinsV[i] = dataPinsV[i];
+      //all_pins.dataPinsI[i] = dataPinsI[i];
+      all_pins.headerPins[i] = headerPins[i];
     }
 
     all_pins.P1_0 = 20;					// Offset
-    all_pins.sclk = 27;						// SPI clock
+    all_pins.sclk = 26;						// SPI clock
     all_pins.csPin = 15;					// SPI Chip select for I
+    all_pins.enablePin = 7;     // enable pin for MUX
   }
   else {
     uint8_t crowbarPins[6] = { 2, 5, 8, 26, 21, 14};
-    uint8_t dataPinsV[6] = { 0, 3, 6, 9, 27, 20};
-    uint8_t dataPinsI[6] = { 1, 4, 7, 10, 22, 13};
+    //uint8_t dataPinsV[6] = { 0, 3, 6, 9, 27, 20};
+    //uint8_t dataPinsI[6] = { 1, 4, 7, 10, 22, 13};
 
     for (int i = 0; i < 6; i++) {
       all_pins.crowbarPins[i] = crowbarPins[i];
-      all_pins.dataPinsV[i] = dataPinsV[i];
-      all_pins.dataPinsI[i] = dataPinsI[i];
+      //all_pins.dataPinsV[i] = dataPinsV[i];
+      //all_pins.dataPinsI[i] = dataPinsI[i];
     }
     all_pins.P1_0 = 15;					// Offset
     all_pins.sclk = 11;						// SPI clock
@@ -217,149 +240,41 @@ void trips(int32_t currents[], int32_t limit) {
 #pragma GCC push_options
 #pragma GCC optimize ("Ofast")
 
-
-void SM73201_ADC_Raw(PIO pio, uint sm) {
-  const int nBitPerByte = 8;
-  const int nBytesPerAdc = 2;
-
-  // Drop CS, ALL chips
-  gpio_put(all_pins.sclk, 1);
-  //	*sclkAddr |= sclkMask;		// clock hi
-  gpio_put(all_pins.csPin, 0);
-  // Read 18x8 bits (1st two will be ignored)
-  uint16_t* _pByBit = byBit - 1;
-  //	uint8_t sclkHi = *sclkAddr;
-  //	uint8_t sclkLo = sclkHi & ~sclkMask;
-  uint32_t flags = save_and_disable_interrupts();
-
-  absolute_time_t start = get_absolute_time();
-
-  for (uint8_t i = nClk; i--; ) {
-    gpio_put(all_pins.sclk, 0);
-    *(++_pByBit) = 0;	// Just need increment. Set value to ensure compiler does this step here
-    gpio_put(all_pins.sclk, 1);
-    //    *_pByBit = (gpio_get_all()  & 0xFF ) ;
-    uint32_t allPins = pio_sm_get_blocking(pio, sm);
-    *_pByBit = (  ((allPins >> all_pins.dataPinsV[0]) & 0x1) << 0 | ((allPins >> all_pins.dataPinsV[1]) & 0x1) << 1 |
-		  ((allPins >> all_pins.dataPinsV[2]) & 0x1) << 2 | ((allPins >> all_pins.dataPinsV[3]) & 0x1) << 3 |
-		  ((allPins >> all_pins.dataPinsV[4]) & 0x1) << 4 | ((allPins >> all_pins.dataPinsV[5]) & 0x1) << 5 |
-		  ((allPins >> all_pins.dataPinsI[0]) & 0x1) << 6 | ((allPins >> all_pins.dataPinsI[1]) & 0x1) << 7 |
-		  ((allPins >> all_pins.dataPinsI[2]) & 0x1) << 8 | ((allPins >> all_pins.dataPinsI[3]) & 0x1) << 9 |
-		  ((allPins >> all_pins.dataPinsI[4]) & 0x1) << 10 | ((allPins >> all_pins.dataPinsI[5]) & 0x1) << 11) ;
+float get_single_voltage(PIO pio, uint sm) {
+  uint16_t temp = pio_sm_get_blocking(pio, sm);
+  float voltage = temp * adc_to_V;
+  return voltage;
+}
 
 
+float get_averaged_current(PIO pio, uint sm) {
 
 
-		 /*  *_pByBit = ( gpio_get(dataPins[0]) | gpio_get(dataPins[1]) << 1 | */
-		 /* gpio_get(dataPins[2]) << 2 | gpio_get(dataPins[3]) << 3 */
-		 /* | gpio_get(dataPins[4]) << 4 | gpio_get(dataPins[5]) << 5 */
-		 /* | gpio_get(dataPins[6]) << 6 | gpio_get(dataPins[7]) << 7) ; */
+  float averaged_current = 0;
+
+  uint16_t temp_current = 0;
+
+  
+  //absolute_time_t start = get_absolute_time();
+  for (uint32_t i = 0; i < 200; i++) {
+    temp_current = pio_sm_get_blocking(pio, sm);
+    averaged_current += temp_current;
   }
-  adcTime += absolute_time_diff_us (start, get_absolute_time() );
-  restore_interrupts(flags);
+  averaged_current *= adc_to_uA/200;
 
-  // Raise CS
-  gpio_put(all_pins.csPin, 1);
+  //adcTime = absolute_time_diff_us(start, get_absolute_time());
+  //printf("%f\n", averaged_current);
 
+  return averaged_current;
+  
 }
 
-//==============================================================================
-// Remap bits from all ADCS
-void SM73201_ADC_Remap() {
-  const int nBitPerByte = 8;
-  memset(byChn, 0, sizeof(byChn));
-  //  for (uint8_t i = nClk; i--; )
-  //    printf("Bybit %08x\n",byBit[i]);
-  uint16_t* pByBit = byBit + 2;  // Skip 1st two bits
-  for (uint8_t i = 16; i--; ) {
-    uint16_t portH = pByBit[0];            // MSB
-    //    uint16_t portL = pByBit[nBitPerByte];  // LSB
-    //    printf("test:%08x %08x\n",portL,portH);
-    pByBit++;
-    uint16_t* pByChn = (uint16_t*)(byChn + mAdc);
-    for (uint8_t chn = mAdc; chn--; ) {
-      pByChn --;
-      // Relies on endian-ness of chip
-      // Least significant byte
-      pByChn[0] <<= 1;
-      pByChn[0] |= portH & 1;
-      portH >>= 1;
-      // Most significant byte
-      //      pByChn[1] <<= 1;
-      //      pByChn[1] |= portH & 1;
-      //      portH >>= 1;
-    }
-  };
-}
-#pragma GCC pop_options
-
-//******************************************************************************
-// Read out
-// All currents or voltages once
-void readCurent(int32_t* result, PIO pio, uint sm) {
-  // Read Shunt
-  //P1_0 = 0 reads the offset
-
-  SM73201_ADC_Raw(pio, sm);
-  // Switch to offset, let it stabilize
-  // Remap bits while shunt/offset stabilizes
-  gpio_put(all_pins.P1_0, 0);
-  sleep_us(100);
-  SM73201_ADC_Remap();
-  //  printf("--------\n");
-  //  for (uint8_t chn = mAdc; chn > 0; chn--) {
-  //    printf("test:%08x\n",byChn[chn]);
-  //  }
-
-  for (uint8_t chn = nAdc; chn--;) {
-    result[chn] = (int16_t)byChn[chn];
-  }
-  // Read offset
-  SM73201_ADC_Raw(pio, sm);
-  // Switch back to shunt
-  gpio_put(all_pins.P1_0, 1);
-  sleep_us(100);
-  // Remap offset bits and merge with shunt
-  SM73201_ADC_Remap();
-  for (uint8_t chn = nAdc;  chn--;) {
-        result[chn] -= (int16_t)byChn[chn];
-    }
-}
-
-//==============================================================================
-// All channels (voltage and current) multiple times
-void readMultiple(int32_t* sumI, int32_t *sumV, PIO pio, uint sm) {
-  for (uint16_t i = nSampleSlow; i--; ) {
-    int32_t fastSum[nAdc];
-    memset(fastSum, 0, sizeof(fastSum));
-    // Read specified number of fast samples plus two
-    for (uint16_t j = nSampleFast; j--; ) {
-      int32_t single[nAdc];
-      readCurent(single, pio, sm);
-      for (uint8_t chn = nAdc; chn--; ) {
-	fastSum[chn] += single[chn];
-      }
-    }
-    // Sum fast samples for slow sample
-    for (uint8_t chn = nAdc; chn--; ) {
-      sumI[chn] += fastSum[chn];
-    }
-    // Also do trips
-    trips(fastSum, tripLimit * nSampleFast);
-    // Read voltage, still have the last read
-    //    SM73201_ADC_Raw();
-    //    SM73201_ADC_Remap();
-
-    for (uint8_t chn = mAdc; chn>=nAdc; chn--) {
-      sumV[chn-nAdc] += (int16_t)byChn[chn];
-    }
-  }
-}
 
 
 //******************************************************************************
 // Standard loop function, called repeatedly
 int main(){
+  float clkdiv = 21;
   static const float sumSclI = adc_to_uA / (nSampleFast*nSampleSlow);
   static const float sumSclV = adc_to_V / nSampleSlow;
 
@@ -380,104 +295,126 @@ int main(){
   static const uint cs_pin = 0;
   static const float pio_freq = 2000;
 
+  // initialize channel currents
+  float channel_current_averaged[6];
+  float channel_voltage[6];
 
-  // Choose PIO instance (0 or 1)
-  PIO pio = pio0;
+  // set current trip limit
+  float trip_current = 1000000;
 
-  // Get first free state machine in PIO 0
-  uint sm = pio_claim_unused_sm(pio, true);
 
-  // Add PIO program to PIO instruction memory. SDK will find location and
-  // return with the memory offset of the program.
-  uint offset = pio_add_program(pio, &combined_program);
 
-  // Calculate the PIO clock divider
 
-  // Initialize the program using the helper function in our .pio file
-  if (pico == 1) {
-    combined_program_init_1(pio, sm, offset, cs_pin, 1);
+
+
+
+  uint32_t start_mask = -1;
+
+    PIO pio_0 = pio0;
+    PIO pio_1 = pio1;
+
+    // Start clock state machine
+      uint sm_clock = pio_claim_unused_sm(pio_0, true);
+    uint offset_clock = pio_add_program(pio_0, &clock_program);
+    clock_program_init(pio_0,sm_clock,offset_clock,cs_pin,clkdiv);
+
+
+    // start channel 0 state machine
+    uint sm_channel_0 = pio_claim_unused_sm(pio_0, true);
+    uint offset_channel_0 = pio_add_program(pio_0, &channel_program);
+    channel_program_init(pio_0,sm_channel_0,offset_channel_0,1,clkdiv);
+
+    /*
+
+    // start channel 1 state machine
+    uint sm_channel_1 = pio_claim_unused_sm(pio_0, true);
+    uint offset_channel_1 = pio_add_program(pio_0, &channel_program);
+    channel_program_init(pio_0,sm_channel_1,offset_channel_1,all_pins.headerPins[1],clkdiv);
+
+    // start channel 2 state machine
+    uint sm_channel_2 = pio_claim_unused_sm(pio_0, true);
+    uint offset_channel_2 = pio_add_program(pio_0, &channel_program);
+    channel_program_init(pio_0,sm_channel_0,offset_channel_2,all_pins.headerPins[2],clkdiv);
+
+
+
+    // start channel 3 state machine
+    uint sm_channel_3 = pio_claim_unused_sm(pio_1, true);
+    uint offset_channel_3 = pio_add_program(pio_1, &channel_program);
+    channel_program_init(pio_1,sm_channel_3,offset_channel_3,all_pins.headerPins[3],clkdiv);
+
+    // start channel 4 state machine
+    uint sm_channel_4 = pio_claim_unused_sm(pio_1, true);
+    uint offset_channel_4 = pio_add_program(pio_1, &channel_program);
+    channel_program_init(pio_1,sm_channel_4,offset_channel_4,all_pins.headerPins[4],clkdiv);
+
+    // start channel 5 state machine
+    uint sm_channel_5 = pio_claim_unused_sm(pio_1, true);
+    uint offset_channel_5 = pio_add_program(pio_1, &channel_program);
+    channel_program_init(pio_1,sm_channel_5,offset_channel_5,all_pins.headerPins[5],clkdiv);
+    
+
+   
+
+    // create array of state machines
+    uint sm_array[6] = {sm_channel_0, sm_channel_1, sm_channel_2, sm_channel_3, sm_channel_4, sm_channel_5};
+    */
+    uint sm_array[6];
+    sm_array[0] = sm_channel_0;
+
+    // start all state machines in both pio blocks
+    pio_enable_sm_mask_in_sync(pio_0, start_mask);
+    pio_enable_sm_mask_in_sync(pio_1, start_mask);
+
+
+
+  // disable trip for all channels initially
+  gpio_put(all_pins.P1_0, 1);
+  for (uint32_t i=0; i<6; i++){
+    gpio_put(all_pins.crowbarPins[i],0);
   }
-  else {
-    combined_program_init_2(pio, sm, offset, cs_pin, 1);
-  }
-
-  // Start running our PIO program in the state machine
-  pio_sm_set_enabled(pio, sm, true);
-
-
-
-
-
+  sleep_ms(1);
 
 
   while (true){
 
+    // ----- Collect 200 measurement current average, timing it ----- //
+
+    // obtain start time for data acquisition
     absolute_time_t start = get_absolute_time();
 
-    // Process keyboard entry, if any
+    // set mux to current
+    gpio_put(all_pins.enablePin, 1);
+    sleep_ms(100);
+    for (uint32_t i=0; i<1000; i++) {
 
-    int input = getchar_timeout_us(10);
-    if (input == 'R') {
-      printf("Resetting trip\n");
-      tripReset();
-    }
-    else if (input == 'T') {
-      uint32_t limit  = atoi(readLine());
-      printf("Trip limit changed from %d to ",tripLimit);
-      if (limit > 0)
-	tripLimit = MIN(0x7FFFFFFF, limit / (1000 * adc_to_uA));
-      printf("%d\n",tripLimit);
-      sleep_ms(10000);
-    }
-    else if (input == 'F'){
-      uint32_t channel  = atoi(readLine());
-      printf("Forcing trip on cha %d\n",channel);
-      gpio_put(all_pins.crowbarPins[channel], 1);
-    }
+      channel_current_averaged[0] = get_averaged_current(pio_0, sm_array[0]);
+    
 
-    int32_t sumI[mAdc], sumV[mAdc];
-    adcTime = 0;
-    memset(sumI, 0, sizeof(sumI));
-    memset(sumV, 0, sizeof(sumV));
-    readMultiple(sumI,sumV,pio,sm);
-    // Print currents
-    for (uint8_t i = 0; i < nAdc; i++) {
-      // Convert sum to uA
-      float current = sumSclI * sumI[i];
-      // then to fixed-length string
-      printf(" %6.3f",current);
+      if (channel_current_averaged[0] > trip_current) {
+        gpio_put(all_pins.crowbarPins[0],1);
+        printf("Channel 1 tripped");
+      }
     }
-    printf( " | ");
-    // Repeat for voltage
-    for (uint8_t i = 0; i < nAdc; i++) {
-      // Convert sum to uA
-      float voltage = sumSclV * sumV[i];
-      // then to fixed-length string
-      printf(" %6.3f",voltage);
-    }
-    printf( " | ");
-    uint32_t totalTime = absolute_time_diff_us (start, get_absolute_time() );
+    printf("Current measurement: %f\n", channel_current_averaged[0]);
 
-    if (pico == 1) {
-      float result = adc_read()*3.3/8192*1.5;
-      printf("%1.2f | ",result);
-    }
-    else {
-      float result = (1.8455-adc_read()*3.3/4096)/0.01123;
-      printf("%1.2f | ",result);
-    }
 
-    // identifier for the pico
-    if (pico == 1) {
-      printf("1 | ");
-    }
-    else {
-      printf("2 | ");
-    }
+  
 
-    printf( "ADCTime=%d TotalTime=%d\n",adcTime,totalTime);
+    // ----- Collect single voltage measurement ----- //
 
-    sleep_ms(1000);
+    // set mux to voltage
+    gpio_put(all_pins.enablePin, 0);
+    sleep_ms(100);
+
+    channel_voltage[0] = get_single_voltage(pio_0, sm_array[0]);
+    printf("Voltage measurement: %f\n", channel_voltage[0]);
+
+
+    // calculate frequency of data acquisition
+    float adcTime = absolute_time_diff_us(start, get_absolute_time());
+    printf("%f\n", 1/adcTime*1000*10.E5*200);
+    
   }
   return 0;
 

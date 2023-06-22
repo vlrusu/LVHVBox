@@ -53,7 +53,7 @@ def ramp_hv(channel, value, nsteps, dac):
     
 
 if __name__=="__main__":
-    value = 1450
+    value = 0
     nsteps = 200
     dac = initialization()
 

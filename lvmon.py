@@ -466,6 +466,9 @@ def process_command(line):
 #       	     GPIO.output(GLOBAL_ENABLE_PIN,GPIO.LOW)
              mcp1.digitalWrite(powerChMap[channel], MCP23S08.LEVEL_LOW)
 
+
+
+
     elif keys[0] == "readvoltage":
         channel = int(get_key_value(keys,"c",-1))
         print("channel=",channel)

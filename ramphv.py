@@ -1,6 +1,7 @@
 from dac8164 import dac8164
 from MCP23S08 import MCP23S08
 import time
+import sys
 
 
 def initialization():
@@ -19,17 +20,6 @@ def initialization():
 
 
 
-def set_hv(channel, value, dac):
-    idac = int(channel/4)
-
-    alphas = [0.9055, 0.9073, 0.9051, 0.9012, 0.9012, 0.9034,
-              0.9009, 0.9027, 0.8977, 0.9012, 0.9015, 1]
-
-    alpha = alphas[channel]
-
-    digvalue = int(alpha*16383*value/2.5) & 0x3FFF
-
-    dac[idac].DAC8164_writeChannel(channel, digvalue)
 
 def ramp_hv(channel, value, nsteps, dac):
     idac = int(channel/4)
@@ -51,13 +41,14 @@ def ramp_hv(channel, value, nsteps, dac):
         current_value += value/nsteps
     
     
+channel = int(sys.argv[1])
+voltage = int(sys.argv[2])
+nsteps = 200
+dac = initialization()
 
-if __name__=="__main__":
-    value = 1450
-    nsteps = 200
-    dac = initialization()
+value = voltage*2.3/1510
 
-    value = value*2.3/1510
+ramp_hv(channel,value,nsteps,dac)
 
-    ramp_hv(0,value,nsteps,dac)
+print("Channel " + str(channel) + " ramped to " + str(voltage) + " volts.")
     
