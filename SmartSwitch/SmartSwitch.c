@@ -158,7 +158,6 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6], int16
         if (*burst_position < 60000) {
           *burst_position += 15;
         }
-        
       }
       
   

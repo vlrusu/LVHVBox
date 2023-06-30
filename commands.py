@@ -47,10 +47,12 @@ addresses = [0x14,0x16,0x26]
 ## ==========================================================================================
 
 class LVHVBox:
-    def __init__ (self,ser1,ser2,hvlog0, hvlog1 ,lvlog, is_test):
+    def __init__ (self,outep0, inep0, outep1, inep1,hvlog0, hvlog1 ,lvlog, is_test):
 
-        self.ser1 = ser1
-        self.ser2 = ser2
+        self.outep0 = outep0
+        self.inep0 = inep0
+        self.outep1 = outep1
+        self.inep1 = inep1
         self.hvlog0 = hvlog0
         self.hvlog1 = hvlog1
         self.lvlog = lvlog
@@ -236,31 +238,43 @@ class LVHVBox:
     def loghvdata1(self):
         try:
             if not self.is_test:
-                self.ser2.read_all()
-                time.sleep(0.75)
-                line2 = self.ser2.readline().decode('ascii')
+                current_string = 'I'
+                voltage_string = 'V'
 
-                if line2.startswith("Trip"):
-                    logging.error(line2)
-                    return 0
+                currents = []
+                voltages = []
 
-                d2 = line2.split()
-                if (len(d2) != HVSERIALDATALENGTH):
-                    logging.error('HV data from serial not the right length')
-                    logging.error(line2)
-                    return 0
+                # get currents
+                self.outep1.write(current_string)
+                from_device = self.inep1.read(24)
+                for channel in range(6):
+                    v = format(from_device[4*channel + 3], '008b') + format(from_device[4*channel + 2], '008b') + format(from_device[4*channel + 1], '008b') + format(from_device[4*channel], '008b')
+                    sign = (-1) ** int(v[0],2)
+                    exponent = int(v[1:9],2)-127
+                    mantissa = int(v[9::],2)
+                    output_value = sign * (1+mantissa*(2**-23)) * 2**exponent
+                    currents.append(output_value)
+                
+                # get voltages
+                self.outep1.write(voltage_string)
+                from_device = self.inep1.read(24)
+                for channel in range(6):
+                    v = format(from_device[4*channel + 3], '008b') + format(from_device[4*channel + 2], '008b') + format(from_device[4*channel + 1], '008b') + format(from_device[4*channel], '008b')
+                    sign = (-1) ** int(v[0],2)
+                    exponent = int(v[1:9],2)-127
+                    mantissa = int(v[9::],2)
+                    output_value = sign * (1+mantissa*(2**-23)) * 2**exponent
+                    voltages.append(output_value)
 
-                if (d2[6] != "|" or d2[13] != "|" or d2[15]!= "|" or d2[17]!= "|"):
-                    logging.error('HV data from serial is not the right format')
-                    logging.error(line1)
-                    return 0
+
+
 
                 hvlist = []
                 self.ihv1 = [0]*NHVCHANNELS
                 self.vhv1 = [0]*NHVCHANNELS
                 for ich in range(6):
-                    self.ihv1[ich] = float(d2[5-ich])
-                    self.vhv1[ich] = float(d2[12-ich])
+                    self.ihv1[ich] = float(currents[ich])
+                    self.vhv1[ich] = float(voltages[ich])
                     hvlist.append(self.ihv1[ich])
                     hvlist.append(self.vhv1[ich])
 
@@ -322,30 +336,42 @@ class LVHVBox:
 
         try:
             if not self.is_test:
-                self.ser1.read_all()
-                time.sleep(0.75)
-                line1 = self.ser1.readline().decode('ascii')
+                current_string = 'I'
+                voltage_string = 'V'
 
-                if line1.startswith("Trip"):
-                    logging.error(line1)
-                    return 0
-                d1 = line1.split()
-                if (len(d1) != HVSERIALDATALENGTH):
-                    logging.error('HV data from serial not the right length')
-                    logging.error(line1)
-                    return 0
+                currents = []
+                voltages = []
 
-                if (d1[6] != "|" or d1[13] != "|" or d1[15]!= "|" or d1[17]!= "|"):
-                    logging.error('HV data from serial not right format')
-                    logging.error(line1)
-                    return 0
+                # get currents
+                self.outep0.write(current_string)
+                from_device = self.inep0.read(24)
+                for channel in range(6):
+                    v = format(from_device[4*channel + 3], '008b') + format(from_device[4*channel + 2], '008b') + format(from_device[4*channel + 1], '008b') + format(from_device[4*channel], '008b')
+                    sign = (-1) ** int(v[0],2)
+                    exponent = int(v[1:9],2)-127
+                    mantissa = int(v[9::],2)
+                    output_value = sign * (1+mantissa*(2**-23)) * 2**exponent
+                    currents.append(output_value)
+                
+                # get voltages
+                self.outep0.write(voltage_string)
+                from_device = self.inep0.read(24)
+                for channel in range(6):
+                    v = format(from_device[4*channel + 3], '008b') + format(from_device[4*channel + 2], '008b') + format(from_device[4*channel + 1], '008b') + format(from_device[4*channel], '008b')
+                    sign = (-1) ** int(v[0],2)
+                    exponent = int(v[1:9],2)-127
+                    mantissa = int(v[9::],2)
+                    output_value = sign * (1+mantissa*(2**-23)) * 2**exponent
+                    voltages.append(output_value)
+
+
 
                 hvlist = []
                 self.ihv0 = [0]*NHVCHANNELS
                 self.vhv0 = [0]*NHVCHANNELS
                 for ich in range(6):
-                    self.ihv0[ich] = float(d1[5-ich])
-                    self.vhv0[ich] = float(d1[12-ich])
+                    self.ihv0[ich] = float(currents[ich])
+                    self.vhv0[ich] = float(voltages[ich])
                     hvlist.append(self.ihv0[ich])
                     hvlist.append(self.vhv0[ich])
 

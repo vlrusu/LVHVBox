@@ -7,6 +7,9 @@ import json
 import serial
 import os
 
+import usb.core
+import usb.util
+
 from commands import *
 
 
@@ -230,43 +233,72 @@ if __name__ == '__main__':
     logging.basicConfig(filename='lvhvbox.log', format='%(asctime)s:%(levelname)s:(%(threadName)-9s):%(message)s', encoding='utf-8', level=logging.DEBUG)
 
 
-    # Decide which serial is 1 and which is 2
+    # Get connections to USB peripherals
     if not is_test:
-        sertmp1 = serial.Serial('/dev/ttyACM0', 115200, timeout=10,write_timeout = 1)
-        sertmp2 = serial.Serial('/dev/ttyACM1', 115200, timeout=10,write_timeout = 1)
+        dev0 = usb.core.find(idVendor=0xcaf1, idProduct=0x4003)
+        dev1 = usb.core.find(idVendor=0xcaf2, idProduct=0x4003)
 
-        sertmp1.timeout = None
-        line = ""
-        while(len(line)) < 30:
-            line = sertmp1.readline().decode('ascii')
-        line = line.split("|")
+        # get inep & outep for dev1
+        cfg0 = dev0.get_active_configuration()
+        intf0 = cfg0[(1, 0)]
+        if dev0.is_kernel_driver_active(1):
+            try:
+                dev0.detach_kernel_driver(1)
+            except:
+                print('error')
+
+        usb.util.claim_interface(dev0, 1)
+
+        outep0 = usb.util.find_descriptor(
+            intf0,
+            # match the first OUT endpoint
+            custom_match= \
+                lambda e: \
+                    usb.util.endpoint_direction(e.bEndpointAddress) == \
+                    usb.util.ENDPOINT_OUT)
+
+        inep0 = usb.util.find_descriptor(
+            intf0,
+            # match the first IN endpoint
+            custom_match= \
+                lambda e: \
+                    usb.util.endpoint_direction(e.bEndpointAddress) == \
+                    usb.util.ENDPOINT_IN)
         
+        assert inep0 is not None
+        assert outep0 is not None
 
-        for i in range(len(line)):
-            line[i] = line[i].split(" ")
-            temp = []
-            for y in range(len(line[i])):
-                if line[i][y] != '':
-                    temp.append(line[i][y])
-            line[i] = temp
 
-        whichone = int(line[3][0])
+        # get inep & outep for dev2
+        cfg1 = dev1.get_active_configuration()
+        intf1 = cfg1[(1, 0)]
+        if dev1.is_kernel_driver_active(1):
+            try:
+                dev1.detach_kernel_driver(1)
+            except:
+                print('error')
 
-        print("ser1 is " + str(whichone))
+        usb.util.claim_interface(dev1, 1)
 
-        if whichone == 1:
-            ser1=sertmp1
-            ser2=sertmp2
-        else:
-            ser1 = sertmp2
-            ser2 = sertmp1
+        outep1 = usb.util.find_descriptor(
+            intf1,
+            # match the first OUT endpoint
+            custom_match= \
+                lambda e: \
+                    usb.util.endpoint_direction(e.bEndpointAddress) == \
+                    usb.util.ENDPOINT_OUT)
 
-        sertmp2.timeout = None
-        line = ""
-        while(len(line)) < 30:
-            line = sertmp2.readline().decode('ascii')
-        whichone = line.split("|")[3][1]
-        print("ser2 is " + str(whichone))
+        inep1 = usb.util.find_descriptor(
+            intf1,
+            # match the first IN endpoint
+            custom_match= \
+                lambda e: \
+                    usb.util.endpoint_direction(e.bEndpointAddress) == \
+                    usb.util.ENDPOINT_IN)
+        
+        assert inep1 is not None
+        assert outep1 is not None
+      
 
 
     # Log files
@@ -281,7 +313,7 @@ if __name__ == '__main__':
     if is_test:
         ser1=False
         ser2=False
-    lvhvbox = LVHVBox(ser1,ser2,hvlog0, hvlog1,lvlog,is_test)
+    lvhvbox = LVHVBox(outep0, inep0, outep1, inep1 ,hvlog0, hvlog1,lvlog,is_test)
 
 
     lvThrd = threading.Thread(target=lvloop, args=[is_test], daemon = True, name="LVTHREAD")
