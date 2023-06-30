@@ -40,15 +40,16 @@ def ramp_hv(channel, value, nsteps, dac):
 
         current_value += value/nsteps
     
-    
-channel = int(sys.argv[1])
-voltage = int(sys.argv[2])
-nsteps = 200
-dac = initialization()
 
-value = voltage*2.3/1510
+if __name__=="__main__":
+    channel = int(sys.argv[1])
+    voltage = int(sys.argv[2])
+    nsteps = 200
+    dac = initialization()
 
-ramp_hv(channel,value,nsteps,dac)
+    value = voltage*2.3/1510
 
-print("Channel " + str(channel) + " ramped to " + str(voltage) + " volts.")
+    ramp_hv(channel,value,nsteps,dac)
+
+    print("Channel " + str(channel) + " ramped to " + str(voltage) + " volts.")
     
