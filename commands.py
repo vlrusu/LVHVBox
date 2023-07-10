@@ -267,8 +267,6 @@ class LVHVBox:
                     voltages.append(output_value)
 
 
-
-
                 hvlist = []
                 self.ihv1 = [0]*NHVCHANNELS
                 self.vhv1 = [0]*NHVCHANNELS

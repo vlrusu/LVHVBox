@@ -45,11 +45,11 @@ static inline pio_sm_config clock_program_get_default_config(uint offset) {
 void clock_0_program_init(PIO pio, uint sm, uint offset, uint pin, float div) {
     pio_sm_config c = clock_program_get_default_config(offset);
     pio_gpio_init(pio, 16);
-    pio_gpio_init(pio, 27);
+    pio_gpio_init(pio, 18);
     sm_config_set_sideset_pins(&c, 16);
-    sm_config_set_set_pins(&c, 27, 1);
+    sm_config_set_set_pins(&c, 18, 1);
     pio_sm_set_consecutive_pindirs(pio, sm, 16, 1, true);
-    pio_sm_set_consecutive_pindirs(pio, sm, 27, 1, true);
+    pio_sm_set_consecutive_pindirs(pio, sm, 18, 1, true);
     sm_config_set_clkdiv(&c, div);
     pio_sm_init(pio, sm, offset, &c);
 }

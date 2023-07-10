@@ -21,7 +21,7 @@ global adc_to_uA
 adc_to_uA = 2.048/((2**15)*8200)*1E6
 
 # find our device
-dev = usb.core.find(idVendor=0xcaff, idProduct=0x4003)
+dev = usb.core.find(idVendor=0xcaf1, idProduct=0x4003)
 
 
 # was it found?
@@ -61,7 +61,7 @@ assert inep is not None
 assert outep is not None
 
 #test_string = "Hello World!"
-test_string = b'\x00'
+
 #test_string += 'h'.encode('utf-8')
 #for i in range(64):
 #     test_string += 'h'.encode('utf-8')
@@ -134,7 +134,7 @@ raw_data = [0 for i in range(60*count)]
 
 
 output_data=[]
-test_string = 'I'
+test_string = 'V'
 count = 1
 channel_count = 6
 start = time.time()

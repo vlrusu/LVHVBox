@@ -25,6 +25,8 @@
 
 
 
+
+
 // Channel count
 #define mAdc  12		// Maximum number of ADCs to read
 #define nAdc  6		// Number of SmartSwitches
@@ -89,7 +91,7 @@ void variable_init() {
     }
 
     all_pins.P1_0 = 20;					// Offset
-    all_pins.sclk_0 = 27;						// SPI clock
+    all_pins.sclk_0 = 18;						// SPI clock
     all_pins.csPin_0 = 16;					// SPI Chip select for I
     all_pins.sclk_1 = 26;						// SPI clock
     all_pins.csPin_1 = 15;					// SPI Chip select for I
@@ -159,10 +161,6 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6], int16
           *burst_position += 15;
         }
       }
-      
-  
-      
-
     }
 }
 
@@ -194,12 +192,12 @@ void get_all_averaged_currents(PIO pio_0, PIO pio_1, uint sm[], float current_ar
 int main(){
   
   stdio_init_all();
-  //set_sys_clock_khz(210000, true);
+  set_sys_clock_khz(210000, true);
 
   board_init();
   //board_led_write(true);
   
-  float clkdiv = 7;
+  float clkdiv = 11;
   uint32_t start_mask = -1;
 
   adc_init();
@@ -289,6 +287,8 @@ sm_array[5] = sm_channel_5;
 pio_enable_sm_mask_in_sync(pio_0, start_mask);
 pio_enable_sm_mask_in_sync(pio_1, start_mask);
 
+uint32_t enable_mask = 1 << 7;
+
 
 
 for (uint8_t i=0; i<6; i++) {
@@ -304,8 +304,10 @@ gpio_put(all_pins.P1_0, 1);
     // ----- Collect averaged current measurements ----- //
 
     // set mux to current
-    gpio_put(all_pins.enablePin, 0);
-    sleep_ms(1);
+
+    //gpio_put(all_pins.enablePin, 0);
+    gpio_clr_mask(enable_mask);
+    sleep_ms(0.1);
 
     // clear rx fifos
     for (uint32_t i=0; i<3; i++) {
@@ -315,7 +317,7 @@ gpio_put(all_pins.P1_0, 1);
 
 
     // acquire averaged current values
-    for (uint32_t i=0; i<100; i++) {
+    for (uint32_t i=0; i<10; i++) {
       get_all_averaged_currents(pio_0, pio_1, sm_array, channel_current_averaged);
 
       /*
@@ -336,8 +338,10 @@ gpio_put(all_pins.P1_0, 1);
 
     // set mux to voltage
 
-    gpio_put(all_pins.enablePin, 1);
-    sleep_ms(1);
+    //gpio_put(all_pins.enablePin, 1);
+    gpio_set_mask(enable_mask);
+    sleep_ms(0.1);
+
 
     cdc_task(channel_current_averaged, channel_voltage, burst_current, sm_array, &burst_position);
     tud_task();
@@ -353,6 +357,7 @@ gpio_put(all_pins.P1_0, 1);
 
       channel_voltage[channel+3] = get_single_voltage(pio_1, sm_array[channel+3]);
     }
+
   }
   return 0;
 }
