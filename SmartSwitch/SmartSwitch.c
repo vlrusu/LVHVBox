@@ -227,7 +227,7 @@ int main(){
   // Start clock state machine
   uint sm_clock = pio_claim_unused_sm(pio_0, true);
   uint offset_clock = pio_add_program(pio_0, &clock_program);
-  clock_0_program_init(pio_0,sm_clock,offset_clock,all_pins.csPin_0,clkdiv);
+  clock_0_program_init(pio_0,sm_clock,offset_clock,all_pins.csPin_0,all_pins.sclk_0,clkdiv);
 
 
   // start channel 0 state machine
@@ -250,7 +250,7 @@ int main(){
   // Start clock 1 state machine
   uint sm_clock_1 = pio_claim_unused_sm(pio_1, true);
   uint offset_clock_1 = pio_add_program(pio_1, &clock_program);
-  clock_1_program_init(pio_1,sm_clock_1,offset_clock_1,all_pins.csPin_1,clkdiv);
+  clock_1_program_init(pio_1,sm_clock_1,offset_clock_1,all_pins.csPin_1,all_pins.sclk_1,clkdiv);
 
 
   // start channel 3 state machine

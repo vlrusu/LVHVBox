@@ -42,25 +42,25 @@ static inline pio_sm_config clock_program_get_default_config(uint offset) {
     return c;
 }
 
-void clock_0_program_init(PIO pio, uint sm, uint offset, uint pin, float div) {
+void clock_0_program_init(PIO pio, uint sm, uint offset, uint csPin_0, uint sclk_0, float div) {
     pio_sm_config c = clock_program_get_default_config(offset);
-    pio_gpio_init(pio, 16);
-    pio_gpio_init(pio, 18);
-    sm_config_set_sideset_pins(&c, 16);
-    sm_config_set_set_pins(&c, 18, 1);
-    pio_sm_set_consecutive_pindirs(pio, sm, 16, 1, true);
-    pio_sm_set_consecutive_pindirs(pio, sm, 18, 1, true);
+    pio_gpio_init(pio, csPin_0);
+    pio_gpio_init(pio, sclk_0);
+    sm_config_set_sideset_pins(&c, csPin_0);
+    sm_config_set_set_pins(&c, sclk_0, 1);
+    pio_sm_set_consecutive_pindirs(pio, sm, csPin_0, 1, true);
+    pio_sm_set_consecutive_pindirs(pio, sm, sclk_0, 1, true);
     sm_config_set_clkdiv(&c, div);
     pio_sm_init(pio, sm, offset, &c);
 }
-void clock_1_program_init(PIO pio, uint sm, uint offset, uint pin, float div) {
+void clock_1_program_init(PIO pio, uint sm, uint offset, uint csPin_1, uint sclk_1, float div) {
     pio_sm_config c = clock_program_get_default_config(offset);
-    pio_gpio_init(pio, 15);
-    pio_gpio_init(pio, 26);
-    sm_config_set_sideset_pins(&c, 15);
-    sm_config_set_set_pins(&c, 26, 1);
-    pio_sm_set_consecutive_pindirs(pio, sm, 15, 1, true);
-    pio_sm_set_consecutive_pindirs(pio, sm, 26, 1, true);
+    pio_gpio_init(pio, csPin_1);
+    pio_gpio_init(pio, sclk_1);
+    sm_config_set_sideset_pins(&c, csPin_1);
+    sm_config_set_set_pins(&c, sclk_1, 1);
+    pio_sm_set_consecutive_pindirs(pio, sm, csPin_1, 1, true);
+    pio_sm_set_consecutive_pindirs(pio, sm, sclk_1, 1, true);
     sm_config_set_clkdiv(&c, div);
     pio_sm_init(pio, sm, offset, &c);
 }
