@@ -13,6 +13,8 @@ import usb.util
 import time
 import struct
 import ramphv
+import rampup
+import rampdown
 
 
 
@@ -69,7 +71,7 @@ if __name__=="__main__":
     adc_to_uA = 2.048/((2**15)*8200)*1E6
 
     # find our device
-    dev = usb.core.find(idVendor=0xcaff, idProduct=0x4003)
+    dev = usb.core.find(idVendor=0xcaf1, idProduct=0x4003)
 
 
     # was it found?
@@ -109,7 +111,7 @@ if __name__=="__main__":
     assert outep is not None
 
 
-    channel = 0
+    channel = 2
 
     current_data = []
     voltage_data = []
@@ -145,7 +147,7 @@ if __name__=="__main__":
 
         # ramp hv down
         value = 0*2.3/1510
-        ramphv.ramp_hv(channel, value, 200, dac)
+        rampdown.rampdown(channel, value, 200, dac)
 
         for j in range(100):
             current_data.append(get_current(channel, inep, outep))
@@ -166,7 +168,7 @@ if __name__=="__main__":
 
         # ramp hv up
         value = 1450*2.3/1510
-        ramphv.ramp_hv(channel, value, 200, dac)
+        rampup.rampup(channel, value, 200, dac)
 
         for j in range(40):
             current_data.append(get_current(channel, inep, outep))

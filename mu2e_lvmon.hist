@@ -783,3 +783,16 @@ powerOn
 readvoltage
 readvoltage -c 0
 powerOff
+powerOn
+readvoltage -c 0
+readvoltage -c 5
+powerOff -c 0
+powerOn -c 1
+powerOn -c 0
+powerOff -c 5
+powerOn
+powerOff
+powerOn
+powerOff
+powerOn
+powerOff

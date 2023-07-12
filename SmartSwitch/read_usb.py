@@ -134,7 +134,7 @@ raw_data = [0 for i in range(60*count)]
 
 
 output_data=[]
-test_string = 'V'
+test_string = 'I'
 count = 1
 channel_count = 6
 start = time.time()

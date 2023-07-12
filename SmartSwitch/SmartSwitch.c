@@ -47,10 +47,11 @@ struct Pins {
 
 // Trip constants and variables
 const uint32_t trip_pins[6] = {1, 1, 1, 1, 1, 1};
-const float trip_current = 2500;
+
 
 PIO pio_0 = pio0;
 PIO pio_1 = pio1;
+
 
 
 // Converstion from ADC to microamps
@@ -98,10 +99,15 @@ void variable_init() {
     all_pins.enablePin = 7;     // enable pin for MUX
   }
   else {
+    uint8_t crowbarPins[6] = { 2, 5, 8, 11, 14, 21};
+    uint8_t headerPins[6] = { 1, 3, 6, 10, 12, 9};
     
-    all_pins.P1_0 = 15;					// Offset
-    all_pins.sclk_0 = 11;						// SPI clock
-    all_pins.csPin_0 = 12;					// SPI Chip select for I
+    all_pins.P1_0 = 20;					// Offset
+    all_pins.sclk_0 = 18;						// SPI clock
+    all_pins.csPin_0 = 16;					// SPI Chip select for I
+    all_pins.sclk_1 = 26;						// SPI clock
+    all_pins.csPin_1 = 15;					// SPI Chip select for I
+    all_pins.enablePin = 7;     // enable pin for MUX
   }
 }
 
@@ -111,13 +117,13 @@ void get_current_burst(PIO pio, uint sm, int16_t current_array[60000]) {
   }
 }
 
-void cdc_task(float channel_current_averaged[6], float channel_voltage[6], int16_t burst_current[60000], uint sm[6], uint16_t *burst_position)
+void cdc_task(float channel_current_averaged[6], float channel_voltage[6], int16_t burst_current[60000], uint sm[6], uint16_t *burst_position, float* trip_current)
 {
   if ( tud_cdc_available() )
     {
-      uint8_t receive_chars[5];
-      for (uint8_t i=0; i<5; i++) {
-        tud_cdc_read(&receive_chars[0], sizeof(receive_chars[0]));
+      uint8_t receive_chars[3];
+      for (uint8_t i=0; i<3; i++) {
+        tud_cdc_read(&receive_chars[i], sizeof(receive_chars[i]));
       }
       tud_cdc_read_flush();
 
@@ -129,7 +135,12 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6], int16
         uint8_t tripPin = all_pins.crowbarPins[receive_chars[0] - 109];
         gpio_put(tripPin, 0);
       } else if (receive_chars[0] == 83) { // ----- Set new trip value ----- //
-        ;
+        uint16_t trip_bits = ((uint16_t)receive_chars[2]) + ((uint16_t)receive_chars[1]) << 8;
+
+        // max trip value is 1000 nA
+        // set trip_current to proper value
+        *trip_current = trip_bits / 65536 * 1000;
+
       } else if (receive_chars[0] == 86) { // ----- Send Voltages ----- //
         for (uint8_t i=0; i<6; i++) {
           tud_cdc_write(&channel_voltage[i],sizeof(&channel_voltage[i]));
@@ -190,6 +201,7 @@ void get_all_averaged_currents(PIO pio_0, PIO pio_1, uint sm[], float current_ar
 //******************************************************************************
 // Standard loop function, called repeatedly
 int main(){
+  float trip_current = 200;
   
   stdio_init_all();
   set_sys_clock_khz(210000, true);
@@ -307,7 +319,7 @@ gpio_put(all_pins.P1_0, 1);
 
     //gpio_put(all_pins.enablePin, 0);
     gpio_clr_mask(enable_mask);
-    sleep_ms(0.1);
+    sleep_ms(1);
 
     // clear rx fifos
     for (uint32_t i=0; i<3; i++) {
@@ -320,15 +332,16 @@ gpio_put(all_pins.P1_0, 1);
     for (uint32_t i=0; i<10; i++) {
       get_all_averaged_currents(pio_0, pio_1, sm_array, channel_current_averaged);
 
-      /*
-      for (uint32_t i; i<6; i++) {
-        if ((channel_current_averaged[i] > trip_current) & (trip_pins[i] != 0)) {
+
+      for (uint32_t i=0; i<6; i++) {
+        if ((channel_current_averaged[i] > trip_current) && (trip_pins[i] == 1)) {
           gpio_put(all_pins.crowbarPins[i],1);
         }
       }
-      */
+  
       
-      cdc_task(channel_current_averaged, channel_voltage, burst_current, sm_array, &burst_position);
+      
+      cdc_task(channel_current_averaged, channel_voltage, burst_current, sm_array, &burst_position, &trip_current);
       tud_task();
     }
 
@@ -340,10 +353,10 @@ gpio_put(all_pins.P1_0, 1);
 
     //gpio_put(all_pins.enablePin, 1);
     gpio_set_mask(enable_mask);
-    sleep_ms(0.1);
+    sleep_ms(1);
 
 
-    cdc_task(channel_current_averaged, channel_voltage, burst_current, sm_array, &burst_position);
+    cdc_task(channel_current_averaged, channel_voltage, burst_current, sm_array, &burst_position, &trip_current);
     tud_task();
 
     // clear rx fifos

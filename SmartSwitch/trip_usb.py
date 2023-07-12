@@ -12,6 +12,7 @@ import usb.core
 import usb.util
 import time
 import struct
+import sys
 
 
 
@@ -21,7 +22,7 @@ global adc_to_uA
 adc_to_uA = 2.048/((2**15)*8200)*1E6
 
 # find our device
-dev = usb.core.find(idVendor=0xcaff, idProduct=0x4003)
+dev = usb.core.find(idVendor=0xcaf1, idProduct=0x4003)
 
 
 # was it found?
@@ -133,16 +134,34 @@ raw_data = [0 for i in range(60*count)]
 
 
 
+'''
 output_data=[]
-test_string = 'g'
+test_string = chr(109)
 count = 1
 channel_count = 6
 start = time.time()
 
 for i in range(count):
     outep.write(test_string)
+'''
+
+
+
    
 
 
-     
+if __name__=="__main__":
+    desired_trip = int(sys.argv[1])
+
+    binary_trip = format(desired_trip, '#018b')[2::]
+    print(binary_trip)
+    print(int('0b' + binary_trip[0:8], 2))
+    print(int('0b' + binary_trip[8::], 2))
+
+    send_chars = chr(83) + chr(int('0b' + binary_trip[0:8], 2)) + chr(int('0b' + binary_trip[8::], 2))
+    
+    for i in range(len(send_chars)):
+        print(ord(send_chars[i]))
+    outep.write(send_chars)
+
 
