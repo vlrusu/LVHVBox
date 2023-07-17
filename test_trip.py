@@ -111,7 +111,7 @@ if __name__=="__main__":
     assert outep is not None
 
 
-    channel = 2
+    channel = 0
 
     current_data = []
     voltage_data = []
@@ -127,7 +127,7 @@ if __name__=="__main__":
 
     start = time.time()
 
-    count = 500
+    count = 2
 
     for i in range(count):
         for j in range(30):

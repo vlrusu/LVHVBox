@@ -21,6 +21,9 @@ import numpy as np
 
 import control_hv
 
+import rampup
+import rampdown
+
 
 NLVCHANNELS = 6
 NHVCHANNELS = 6
@@ -70,6 +73,10 @@ class LVHVBox:
         self.battery_voltage = 0
 
         self.powerChMap = [5,6,7,2,3,4]
+
+        self.hv_ramp_value = 1450
+
+        self.hv_status = [0 for i in range(12)]
 
         if not self.is_test:
             GPIO.setmode(GPIO.BOARD)
@@ -373,9 +380,9 @@ class LVHVBox:
                     hvlist.append(self.ihv0[ich])
                     hvlist.append(self.vhv0[ich])
 
-                    self.hv_board_current = d1[14]
+                    #self.hv_board_current = d1[14]
 
-                self.i12V = float(d1[14])
+                #self.i12V = float(d1[14])
                 hvlist.append(self.i12V)
             else:
                 hvlist = []
@@ -530,6 +537,12 @@ class LVHVBox:
         except:
             return False
     
+    def get_all_hv_status(self):
+        try:
+            return self.hv_status
+        except:
+            return False
+    
     def get_all_data(self,channel):
         ret = {}
         try:
@@ -546,6 +559,7 @@ class LVHVBox:
             ret['boardcurrent']=self.get_hv_board_current()
             ret['batteryvoltage']=self.get_battery_voltage()
             ret['batterycapacity']=self.get_battery_capacity()
+            ret['hv_status']=self.get_all_hv_status()
 
 
             print(ret)
@@ -570,22 +584,39 @@ class LVHVBox:
     # ramphvup()
     def ramphvup(self,channel,voltage):
         hvlock.acquire()
-
         nsteps = 200
-        control_hv.ramp_hv(int(channel),voltage,nsteps,self.hv_dac)
+
+        rampup.rampup(int(channel),voltage,nsteps,self.hv_dac)
 
         hvlock.release()
         return ("HV channel " + str(channel) + " done ramping " + " to " + str(voltage) + "V")
+
+    # ramphvdown()
+    def ramphvdown(self,channel,voltage):
+        hvlock.acquire()
+        nsteps = 200
+
+        rampdown.rampdown(int(channel), voltage, nsteps, self.hv_dac)
+        hvlock.release()
+
+        return ("HV channel " + str(channel) + " done ramping " + " down from " + str(voltage) + "V")
 
     # rampHV()
     def rampHV(self,arglist):
         """ VADIM'S COMMENT: spi linux driver is thread safe but the exteder operations are not. However, I
         only need to worry about the HV, since other LV stuff is on different pins and the MCP writes should
         not affect them"""
-        rampThrd = threading.Thread(target=self.ramphvup,args=(arglist[0],arglist[1]))
+        self.hv_status[int(arglist[0])] = 1
+        if int(arglist[1]) == -1:
+            rampThrd = threading.Thread(target=self.ramphvup,args=(arglist[0],self.hv_ramp_value))
+        else:
+            rampThrd = threading.Thread(target=self.ramphvup,args=(arglist[0],arglist[1]))
         rampThrd.start()
         return 0
 
+    # set_hv_value()
+    def set_hv_value(self,arglist):
+        self.hv_ramp_value = arglist[0]
 
     # Set voltage
     # ===========
@@ -606,7 +637,12 @@ class LVHVBox:
         """ VADIM'S COMMENT: spi linux driver is thread safe but the exteder operations are not. However, I
         only need to worry about the HV, since other LV stuff is on different pins and the MCP writes should
         not affect them"""
-        rampThrd = threading.Thread(target=self.sethv,args=(arglist[0],0))
+        self.hv_status[int(arglist[0])] = 0
+
+        if int(arglist[0]) < 6:
+            rampThrd = threading.Thread(target=self.ramphvdown,args=(arglist[0],self.vhv0[int(arglist[0])]))
+        else:
+            rampThrd = threading.Thread(target=self.ramphvdown,args=(arglist[0],self.vhv1[int(arglist[0]) - 6]))
         rampThrd.start()
         return 0
 
@@ -628,10 +664,14 @@ class LVHVBox:
     # -> 1: serial 2
 
     def resetHV(self,arglist):
-        if arglist[0] == 0:
-            self.ser1.write(str.encode('R'))
+        channel = int(arglist[0])
+        
+        if channel < 6:
+            send_chars = chr(109 + channel)
+            self.outep0.write(send_chars)
         else:
-            self.ser2.write(str.encode('R'))
+            send_chars = chr(109 + channel)
+            self.outep1.write(send_chars)
         return 0
 
 
@@ -639,20 +679,30 @@ class LVHVBox:
     # ===========
     # Set a trip treshold in nA
 
+
+
     def setHVtrip(self,arglist):
         #cmd = "T"+str(arglist[1]) #T100 changes trip point to 100nA
-        cmd = "T"
-        if arglist[0] == 0:
-            self.ser1.write(str.encode(cmd))
-        else:
-            self.ser2.write(str.encode(cmd))
+        desired_trip = int(arglist[1])
 
-        cmd = str(arglist[1]) + "\r\n"
-        if arglist[0] == 0:
-            self.ser1.write(str.encode(cmd))
-        else:
-            self.ser2.write(str.encode(cmd))
+        binary_trip = format(desired_trip, '#018b')[2::]
 
+        send_chars = chr(83) + chr(int('0b' + binary_trip[0:8], 2)) + chr(int('0b' + binary_trip[8::], 2))
+        
+        self.outep0.write(send_chars)
+        self.outep1.write(send_chars)
+        return 0
+
+    def tripHV(self,arglist):
+        channel = int(arglist[0])
+
+
+        if channel < 6:
+            send_chars = chr(103 + channel)
+            self.outep0.write(send_chars)
+        else:
+            send_chars = chr(103 + channel - 6)
+            self.outep1.write(send_chars)
         return 0
 
 
@@ -682,6 +732,21 @@ class LVHVBox:
             return "Please select proper pico"
 
         return ret
+
+    def get_hv_status(self,arglist):
+        channel = int(arglist[0])
+        if channel == -1:
+            return self.hv_status
+        else:
+            return self.hv_status[channel]
+    
+    def set_hv_status(self,arglist):
+        channel = int(arglist[0])
+        status = int(arglist[1])
+
+        self.hv_status[channel] = status
+
+        return status
 
 
 

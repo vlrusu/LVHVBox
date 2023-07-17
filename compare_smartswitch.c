@@ -56,8 +56,8 @@ PIO pio_1 = pio1;
 
 // Converstion from ADC to microamps
 const float adc_to_V  = 2.048 / pow(2, 15) * 1000;			// ADC full-scale voltage / ADC full scale reading * divider ratio
-const float adc_to_uA = 2.048 / pow(2, 15) / 8200.0 * 1.E6;	// ADC full-scale voltage / ADC full scale reading / shunt resistance * uA per amp
-//const float adc_to_uA = (2.048 / pow(2, 15)) / (22.56* 470.0) * 1.E6;	// dev
+//const float adc_to_uA = 2.048 / pow(2, 15) / 8200.0 * 1.E6;	// ADC full-scale voltage / ADC full scale reading / shunt resistance * uA per amp
+const float adc_to_uA = (2.048 / pow(2, 15)) / (22.56* 470.0) * 1.E6;	// dev
 
 void port_init() {
 
@@ -139,7 +139,7 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6], int16
 
         // max trip value is 1000 nA
         // set trip_current to proper value
-        *trip_current = trip_bits / 65535 * 1000;
+        *trip_current = trip_bits / 65536 * 1000;
 
       } else if (receive_chars[0] == 86) { // ----- Send Voltages ----- //
         for (uint8_t i=0; i<6; i++) {
@@ -317,9 +317,9 @@ gpio_put(all_pins.P1_0, 1);
 
     // set mux to current
 
-    gpio_put(all_pins.enablePin, 0);
-    //gpio_clr_mask(enable_mask);
-    sleep_ms(10);
+    //gpio_put(all_pins.enablePin, 0);
+    gpio_clr_mask(enable_mask);
+    sleep_ms(1);
 
     // clear rx fifos
     for (uint32_t i=0; i<3; i++) {
@@ -351,9 +351,9 @@ gpio_put(all_pins.P1_0, 1);
 
     // set mux to voltage
 
-    gpio_put(all_pins.enablePin, 1);
-    //gpio_set_mask(enable_mask);
-    sleep_ms(10);
+    //gpio_put(all_pins.enablePin, 1);
+    gpio_set_mask(enable_mask);
+    sleep_ms(1);
 
 
     cdc_task(channel_current_averaged, channel_voltage, burst_current, sm_array, &burst_position, &trip_current);

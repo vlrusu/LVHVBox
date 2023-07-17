@@ -78,8 +78,9 @@ class CmdLoop(cmd2.Cmd):
         serialized = json.dumps(data)
         msg = f"{len(serialized):<{HEADER_LENGTH}}"
 
-        self.socket.send(bytes(msg,"utf-8"))
-        self.socket.sendall(bytes(serialized,"utf-8"))
+        self.socket.send(bytes(msg+serialized,"utf-8"))
+        #self.socket.sendall(bytes(serialized,"utf-8"))
+       
 
 
 
@@ -244,6 +245,19 @@ class CmdLoop(cmd2.Cmd):
     # HV commands
     # ===========
 
+
+    # set_hv_value()
+    pprint_parser = cmd2.Cmd2ArgumentParser()
+    pprint_parser.add_argument('-v', '--voltage', type=float, help='Voltage to set as default rampup value')
+    @cmd2.with_argparser(pprint_parser)
+    def do_set_hv_value(self, args):
+        data = {
+            "type" : HVTYPE0,
+            "cmdname" : args.cmd2_statement.get().command,
+            "args" : [args.voltage]
+        }
+        self.send(data)
+
     # rampHV()
     pprint_parser = cmd2.Cmd2ArgumentParser()
     pprint_parser.add_argument('-c', '--channel', type=int,   help='HV channel number')
@@ -254,11 +268,12 @@ class CmdLoop(cmd2.Cmd):
 
         data= {
             "type" : HVTYPE0 if args.channel<6 else HVTYPE1,
-            "cmdname": args.cmd2_statement.get().command,
+            "cmdname" : args.cmd2_statement.get().command,
             "args" : [args.channel,args.voltage]
         }
         self.send(data)
-
+    
+ 
 
     # downHV()
     pprint_parser = cmd2.Cmd2ArgumentParser()
@@ -378,6 +393,18 @@ class CmdLoop(cmd2.Cmd):
             "args" : [args.channel]
         }
         self.send(data)
+    
+    # tripHV()
+    pprint_parser = cmd2.Cmd2ArgumentParser()
+    pprint_parser.add_argument('-c', '--channel',   type=int, help='HV channel number')
+    @cmd2.with_argparser(pprint_parser)
+    def do_tripHV(self, args):
+        data = {
+            "type" : HVTYPE0 if args.channel<6 else HVTYPE1,
+            "cmdname" : args.cmd2_statement.get().command,
+            "args" : [args.channel]
+        }
+        self.send(data)
 
 
     # setHVtrip()
@@ -387,10 +414,35 @@ class CmdLoop(cmd2.Cmd):
     @cmd2.with_argparser(pprint_parser)
     def do_setHVtrip(self, args):
         """Print the options and argument list this options command was called with."""
-        data= {
+        data = {
             "type" : HVTYPE0 if args.channel<6 else HVTYPE1,
             "cmdname": args.cmd2_statement.get().command,
             "args" : [args.channel,args.trippoint]
+        }
+        self.send(data)
+    
+    # get_hv_status()
+    pprint_parser = cmd2.Cmd2ArgumentParser()
+    pprint_parser.add_argument('-c', '--channel',   type=int, help='HV channel number')
+    @cmd2.with_argparser(pprint_parser)
+    def do_get_hv_status(self, args):
+        data = {
+            "type" : HVTYPE0 if int(args.channel)<6 else HVTYPE1,
+            "cmdname" : args.cmd2_statement.get().command,
+            "args" : [args.channel]
+        }
+        self.send(data)
+    
+    # set_hv_status()
+    pprint_parser = cmd2.Cmd2ArgumentParser()
+    pprint_parser.add_argument('-c', '--channel', type=int, help='HV channel number')
+    pprint_parser.add_argument('-s', '--status', type=int, help='HV power status')
+    @cmd2.with_argparser(pprint_parser)
+    def do_set_hv_status(self, args):
+        data = {
+            "type" : HVTYPE0 if int(args.channel)<6 else HVTYPE1,
+            "cmdname" : args.cmd2_statement.get().command,
+            "args" : [args.channel,args.status]
         }
         self.send(data)
     
@@ -418,7 +470,8 @@ class CmdLoop(cmd2.Cmd):
             "args" : None
         }
         self.send(data)
-
+    
+   
 
 
 ## Main function

@@ -21,6 +21,7 @@ def initialization():
 
 
 def rampup(channel, value, nsteps, dac):
+    value = value*2.3/1510
     idac = int(channel/4)
 
     alphas = [0.9055, 0.9073, 0.9051, 0.9012, 0.9012, 0.9034,
@@ -46,7 +47,7 @@ if __name__=="__main__":
     nsteps = 200
     dac = initialization()
 
-    value = value*2.3/1510
+    
 
     rampup(channel,value,nsteps,dac)
     
