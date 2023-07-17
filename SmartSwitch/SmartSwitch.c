@@ -49,6 +49,7 @@ struct Pins {
 const uint32_t trip_pins[6] = {1, 1, 1, 1, 1, 1};
 
 
+
 PIO pio_0 = pio0;
 PIO pio_1 = pio1;
 
@@ -134,6 +135,10 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6], int16
       } else if (108 < receive_chars[0] && receive_chars[0] < 114) { // ----- Reset Trip ----- //
         uint8_t tripPin = all_pins.crowbarPins[receive_chars[0] - 109];
         gpio_put(tripPin, 0);
+      } else if (115 < receive_chars[0] && receive_chars[0] < 121) { // ----- Disable Trip ----- //
+        trip_pins[receive_chars[0] - 115] = 0;
+      } else if (121 > receive_chars[0] && receive_chars[0] < 127) { // ----- Enable Trip ----- //
+        trip_pins[receive_chars[0] - 121] = 1;
       } else if (receive_chars[0] == 83) { // ----- Set new trip value ----- //
         uint16_t trip_bits = ((uint16_t)receive_chars[2]) + ((uint16_t)receive_chars[1]) << 8;
 
@@ -201,7 +206,7 @@ void get_all_averaged_currents(PIO pio_0, PIO pio_1, uint sm[], float current_ar
 //******************************************************************************
 // Standard loop function, called repeatedly
 int main(){
-  float trip_current = 200;
+  float trip_current = 900;
   
   stdio_init_all();
   set_sys_clock_khz(210000, true);
@@ -319,7 +324,7 @@ gpio_put(all_pins.P1_0, 1);
 
     gpio_put(all_pins.enablePin, 0);
     //gpio_clr_mask(enable_mask);
-    sleep_ms(10);
+    sleep_ms(1);
 
     // clear rx fifos
     for (uint32_t i=0; i<3; i++) {
@@ -353,7 +358,7 @@ gpio_put(all_pins.P1_0, 1);
 
     gpio_put(all_pins.enablePin, 1);
     //gpio_set_mask(enable_mask);
-    sleep_ms(10);
+    sleep_ms(1);
 
 
     cdc_task(channel_current_averaged, channel_voltage, burst_current, sm_array, &burst_position, &trip_current);
