@@ -19,7 +19,6 @@ HEADER_LENGTH=10
 
 
 def process_command(command):
-
     func = getattr(lvhvbox,command.data["cmdname"])
     ret = func(command.data["args"])
 
@@ -61,7 +60,7 @@ def hvloop0(test):
 
         except queue.Empty:
             lvhvbox.loghvdata0()
-            time.sleep(1)
+            time.sleep(0.25)
 
 
 # HV channels 6 to 11
@@ -75,7 +74,7 @@ def hvloop1(test):
 
         except queue.Empty:
             lvhvbox.loghvdata1()
-            time.sleep(1)
+            time.sleep(0.25)
 
 # Battery Commands
 # ================

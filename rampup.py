@@ -44,7 +44,7 @@ def rampup(channel, value, nsteps, dac):
 if __name__=="__main__":
     channel = int(sys.argv[1])
     value = int(sys.argv[2])
-    nsteps = 200
+    nsteps = 500
     dac = initialization()
 
     

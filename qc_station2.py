@@ -115,10 +115,10 @@ class QC:
     
     def set_limits(self):
         for i in range(6):
-            self.ax[i][0].set_ylim(0,200) # max current of short term plot
+            self.ax[i][0].set_ylim(0,250) # max current of short term plot
             self.ax[i][0].set_xlim(0,300) # max time of short term plot in seconds
 
-            self.ax[i][1].set_ylim(0,200) # max current of long term plot
+            self.ax[i][1].set_ylim(0,250) # max current of long term plot
             self.ax[i][1].set_xlim(0,21600) # max time of long term plot in seconds
 
             self.vax[i].set_ylim(0,2000)
@@ -234,13 +234,18 @@ if __name__=="__main__":
     count = 0
     time_var = time.time()
     while True:
-        qc.grab_new_values()
-        qc.update_plot()
+        try:
+            qc.grab_new_values()
+            qc.update_plot()
 
-        count+=1
-        print(str(count) + ": " + str(qc.current[0]))
-        print(str(time.time() - time_var))
-        time_var = time.time()
+            count+=1
+            print(str(count) + ": " + str(qc.current[0]))
+            print(str(time.time() - time_var))
+            time_var = time.time()
+        except KeyboardInterrupt:
+            sys.exit()
+        except:
+            print("Issue with update")
 
 
 

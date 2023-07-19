@@ -305,6 +305,18 @@ class CmdLoop(cmd2.Cmd):
             "args" : [args.channel,args.voltage]
         }
         self.send(data)
+    
+    # getHVtrip()
+    pprint_parser = cmd2.Cmd2ArgumentParser()
+    pprint_parser.add_argument('-c', '--channel', type=int,   help='HV channel number')
+    @cmd2.with_argparser(pprint_parser)
+    def do_getHVtrip(self, args):
+        data = {
+            "type" : HVTYPE0 if args.channel<6 else HVTYPE1,
+            "cmdname" : args.cmd2_statement.get().command,
+            "args" : [args.channel]
+        }
+        self.send(data)
 
     # get_hv_board_temperature()
     pprint_parser = cmd2.Cmd2ArgumentParser()
@@ -376,6 +388,31 @@ class CmdLoop(cmd2.Cmd):
         }
         self.send(data)
 
+    
+    # enable hv trip
+    pprint_parser = cmd2.Cmd2ArgumentParser()
+    pprint_parser.add_argument('-c', '--channel', type=int, help='HV channel number')
+    @cmd2.with_argparser(pprint_parser)
+    def do_enableTrip(self, args):
+        data = {
+            "type" : HVTYPE0 if args.channel<6 else HVTYPE1,
+            "cmdname" : args.cmd2_statement.get().command,
+            "args" : [args.channel]
+        }
+        self.send(data)
+    
+
+    # disable hv trip
+    pprint_parser = cmd2.Cmd2ArgumentParser()
+    pprint_parser.add_argument('-c', '--channel', type=int, help='HV channel number')
+    @cmd2.with_argparser(pprint_parser)
+    def do_disableTrip(self, args):
+        data = {
+            "type" : HVTYPE0 if args.channel<6 else HVTYPE1,
+            "cmdname" : args.cmd2_statement.get().command,
+            "args" : [args.channel]
+        }
+        self.send(data)
 
 
 # these next two commands refer to channel as pico channel not HV channel (so 0 or 1).

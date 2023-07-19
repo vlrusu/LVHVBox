@@ -606,17 +606,27 @@ class LVHVBox:
         """ VADIM'S COMMENT: spi linux driver is thread safe but the exteder operations are not. However, I
         only need to worry about the HV, since other LV stuff is on different pins and the MCP writes should
         not affect them"""
-        self.hv_status[int(arglist[0])] = 1
-        if int(arglist[1]) == -1:
-            rampThrd = threading.Thread(target=self.ramphvup,args=(arglist[0],self.hv_ramp_value))
-        else:
-            rampThrd = threading.Thread(target=self.ramphvup,args=(arglist[0],arglist[1]))
-        rampThrd.start()
-        return 0
+        try:
+            channel = int(arglist[0])
+            value = int(arglist[1])
+            self.hv_status[channel] = 1
+            if value == -1:
+                rampThrd = threading.Thread(target=self.ramphvup,args=(arglist[0],self.hv_ramp_value))
+            else:
+                rampThrd = threading.Thread(target=self.ramphvup,args=(arglist[0],arglist[1]))
+            rampThrd.start()
+
+            return "Channel " + str(channel) + " ramping to " + str(self.hv_ramp_value) + " volts"
+        except:
+            return False
 
     # set_hv_value()
     def set_hv_value(self,arglist):
-        self.hv_ramp_value = arglist[0]
+        try:
+            self.hv_ramp_value = int(arglist[0])
+            return "Default HV ramp value set to " + str(self.hv_ramp_value) + " volts"
+        except:
+            return False
 
     # Set voltage
     # ===========
@@ -626,25 +636,31 @@ class LVHVBox:
     # sethv()
     def sethv(self,channel,voltage):
         hvlock.acquire()
-
         control_hv.set_hv(int(channel),voltage,self.hv_dac)
-
         hvlock.release()
-        return "HV channel " + str(channel) + " set " + " to " + str(voltage) + " V"
+        return "HV channel " + str(channel) + " set to " + str(voltage) + " V"
 
     # downHV()
     def downHV(self,arglist):
         """ VADIM'S COMMENT: spi linux driver is thread safe but the exteder operations are not. However, I
         only need to worry about the HV, since other LV stuff is on different pins and the MCP writes should
         not affect them"""
-        self.hv_status[int(arglist[0])] = 0
 
-        if int(arglist[0]) < 6:
-            rampThrd = threading.Thread(target=self.ramphvdown,args=(arglist[0],self.vhv0[int(arglist[0])]))
-        else:
-            rampThrd = threading.Thread(target=self.ramphvdown,args=(arglist[0],self.vhv1[int(arglist[0]) - 6]))
-        rampThrd.start()
-        return 0
+        try:
+            channel = int(arglist[0])
+
+            self.hv_status[channel] = 0
+
+            if channel < 6:
+                rampThrd = threading.Thread(target=self.ramphvdown,args=(arglist[0],self.vhv0[channel]))
+            else:
+                rampThrd = threading.Thread(target=self.ramphvdown,args=(arglist[0],self.vhv1[channel - 6]))
+            rampThrd.start()
+
+            return "HV channel " + str(channel) + " set to 0 volts" 
+
+        except:
+            return False
 
 
     # setHV()
@@ -670,8 +686,47 @@ class LVHVBox:
             send_chars = chr(109 + channel)
             self.outep0.write(send_chars)
         else:
-            send_chars = chr(109 + channel)
+            send_chars = chr(109 + channel - 6)
             self.outep1.write(send_chars)
+        return 0
+    
+
+    # Disable HV Trip
+    # ===========
+    # Disable a trip pin
+
+    def disableTrip(self,arglist):
+
+        channel = int(arglist[0])
+
+        
+        if channel < 6:
+            send_chars0 = chr(115+channel)
+            self.outep0.write(send_chars0)
+        else:
+            send_chars1 = chr(115+channel-6)
+            self.outep1.write(send_chars1)
+
+        return 0
+    
+    # Enable HV Trip
+    # ===========
+    # Enable a trip pin
+
+    def enableTrip(self,arglist):
+        channel = int(arglist[0])
+
+        send_chars0 = chr(121+channel)
+        self.outep0.write(send_chars0)
+        
+        '''
+        if channel < 6:
+            send_chars0 = chr(121+channel)
+            self.outep0.write(send_chars0)
+        else:
+            send_chars1 = chr(121+channel-6)
+            self.outep1.write(send_chars)
+        '''
         return 0
 
 
@@ -683,15 +738,53 @@ class LVHVBox:
 
     def setHVtrip(self,arglist):
         #cmd = "T"+str(arglist[1]) #T100 changes trip point to 100nA
-        desired_trip = int(arglist[1])
 
-        binary_trip = format(desired_trip, '#018b')[2::]
+        try:
+            channel = int(arglist[0])
+            desired_trip = int(arglist[1])
 
-        send_chars = chr(83) + chr(int('0b' + binary_trip[0:8], 2)) + chr(int('0b' + binary_trip[8::], 2))
-        
-        self.outep0.write(send_chars)
-        self.outep1.write(send_chars)
-        return 0
+            binary_trip = format(desired_trip, '#018b')[2::]
+
+            
+            
+            if channel < 6:
+                send_chars = chr(76+channel) + chr(int('0b' + binary_trip[0:8], 2)) + chr(int('0b' + binary_trip[8::], 2))
+                self.outep0.write(send_chars)
+            else:
+                send_chars = chr(76+channel - 6) + chr(int('0b' + binary_trip[0:8], 2)) + chr(int('0b' + binary_trip[8::], 2))
+                self.outep1.write(send_chars)
+            
+            return "Set channel " + str(channel) + " to " + str(desired_trip) + "mA"
+        except:
+            return False
+    
+    def getHVtrip(self,arglist):
+        try:
+            channel = int(arglist[0])
+            send_chars = chr(33)
+
+
+            results = []
+
+            if channel < 6:
+                self.outep0.write(send_chars)
+                tripped = self.inep0.read(4)
+                binary_tripped = format(tripped[0], '#018b')[2::]
+                for i in range(1,7):
+                    results.append(int(binary_tripped[-i]))
+
+            else:
+                self.outep1.write(send_chars)
+                tripped = self.inep1.read(4)
+                binary_tripped = format(tripped[0], '#018b')[2::]
+                for i in range(1,7):
+                    results.append(int(binary_tripped[-i]))
+        except:
+            return False
+
+        return results
+
+            
 
     def tripHV(self,arglist):
         channel = int(arglist[0])
