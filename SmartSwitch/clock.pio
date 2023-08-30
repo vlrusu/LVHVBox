@@ -1,0 +1,60 @@
+.program clock
+.side_set 1;
+
+.wrap_target
+
+    initialize_high:
+        set x, 17    side 1 ;
+        set pins, 1    side 1 ;
+        set pins, 1    side 0 ;
+        
+
+    bitloop_high:
+        set pins, 0 side 0 ;
+        set pins, 1 side 0 ;
+        nop    side 0  ;
+        jmp x-- bitloop_high   side 0 ;
+
+    jmp initialize_high side 1  ;
+
+    
+
+.wrap
+
+% c-sdk {
+
+void clock_0_program_init(PIO pio, uint sm, uint offset, uint csPin_0, uint sclk_0, float div) {
+    pio_sm_config c = clock_program_get_default_config(offset);
+
+    pio_gpio_init(pio, csPin_0);
+    pio_gpio_init(pio, sclk_0);
+
+    sm_config_set_sideset_pins(&c, csPin_0);
+    sm_config_set_set_pins(&c, sclk_0, 1);
+
+    pio_sm_set_consecutive_pindirs(pio, sm, csPin_0, 1, true);
+    pio_sm_set_consecutive_pindirs(pio, sm, sclk_0, 1, true);
+
+    sm_config_set_clkdiv(&c, div);
+
+    pio_sm_init(pio, sm, offset, &c);
+}
+
+void clock_1_program_init(PIO pio, uint sm, uint offset, uint csPin_1, uint sclk_1, float div) {
+    pio_sm_config c = clock_program_get_default_config(offset);
+
+    pio_gpio_init(pio, csPin_1);
+    pio_gpio_init(pio, sclk_1);
+
+    sm_config_set_sideset_pins(&c, csPin_1);
+    sm_config_set_set_pins(&c, sclk_1, 1);
+
+    pio_sm_set_consecutive_pindirs(pio, sm, csPin_1, 1, true);
+    pio_sm_set_consecutive_pindirs(pio, sm, sclk_1, 1, true);
+
+    sm_config_set_clkdiv(&c, div);
+
+    pio_sm_init(pio, sm, offset, &c);
+}
+
+%}

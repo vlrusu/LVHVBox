@@ -1,0 +1,44 @@
+.program channel
+
+.wrap_target
+
+    initialize_read:
+        set x, 17    ;
+        push noblock   [1] ;
+
+    
+    bitloop:
+        nop [1];
+        in pins, 1    ;
+        jmp x-- bitloop    ;
+    
+    jmp initialize_read ;
+
+    
+
+.wrap
+
+% c-sdk {
+
+void channel_program_init(PIO pio, uint sm, uint offset, uint pin, float div) {
+    pio_sm_config c_channel = channel_program_get_default_config(offset);
+
+    pio_gpio_init(pio, pin);
+
+    sm_config_set_in_pins(&c_channel, pin);
+    pio_sm_set_consecutive_pindirs(pio, sm, pin, 1, false);
+
+    // Shifting to left matches the customary MSB-first ordering of SPI.
+    sm_config_set_in_shift(
+        &c_channel,
+        false, // Shift-to-right = false (i.e. shift to left)
+        false,  // Autopush enabled
+        18      // Autopush threshold = 1
+    );
+    
+    sm_config_set_clkdiv(&c_channel, div);
+
+    pio_sm_init(pio, sm, offset, &c_channel);
+}
+
+%}
