@@ -86,7 +86,6 @@ void set_hv(int channel, float value){
   if ( channel == 11 ) alpha = 1.;  // BURNED BOARD - FIX ME!!
 
   uint32_t digvalue = ( (int) (alpha*16383.*(value/2.5))) & 0x3FFF;
-  printf("%d\n",digvalue);
 
   DAC8164_writeChannel(&dac[idac], channel, digvalue);
 }
@@ -97,13 +96,21 @@ void set_hv(int channel, float value){
 int main(int argc, char *argv[])
 {
   int channel = atoi(argv[1]);
-  float value = atoi(argv[2]);
+  float current_voltage = atoi(argv[2])*2.3/1500;
 
-  value = value*2.3/1510.;
 
   initialization();
 
-  set_hv(channel,value);
+  int idac = (int) (channel/4);
+  float increment = current_voltage/NSTEPS;
+
+  for (int itick=0; itick<NSTEPS; itick++) {
+    usleep(50000);
+    current_voltage -= increment;
+    set_hv(channel,current_voltage);
+  }
+  set_hv(channel,0);
 
   return 0;
 }
+
