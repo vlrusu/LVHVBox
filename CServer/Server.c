@@ -1535,7 +1535,7 @@ int main( int argc, char **argv )
 
   
   // ----- initialize pico 1 communications, etc ----- //
-
+  /*
   struct arg_struct args_1;
   args_1.array_indicator = 0;
   args_1.pico = 1;
@@ -1547,6 +1547,7 @@ int main( int argc, char **argv )
   // create txt save thread
   pthread_t save_thread_1;
   pthread_create(&save_thread_1, NULL, save_txt, &args_1);
+  */
   
   
 
