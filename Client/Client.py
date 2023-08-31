@@ -76,7 +76,7 @@ def process_input(input):
         return 0
         
     # check if channel arg is within proper range
-    if valid_commands[split_command[0]][1] == 'a':
+    if valid_commands[split_command[0]][1] in ['a','c']:
         if int(split_command[1]) not in list(range(6)):
             return 0
     
