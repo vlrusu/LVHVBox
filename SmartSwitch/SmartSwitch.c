@@ -398,7 +398,6 @@ gpio_put(all_pins.P1_0, 1); // put pedestal pin high
       }
       
   
-      
       // cdc_task reads in commands from PI via usb and responds appropriately
       cdc_task(channel_current_averaged, channel_voltage, burst_current, sm_array, &burst_position, trip_currents, &trip_mask, &trip_status, average_current_history, &average_store_position);
       tud_task(); // tinyUSB formality

@@ -87,12 +87,12 @@ uint8_t powerChMap[6] = {5, 6, 7, 2, 3, 4};
 uint8_t lv_mcp_reset = 2;
 uint8_t lv_global_enable = 1;
 
-struct arg_struct {
+typedef struct {
   float all_currents[6][HISTORY_LENGTH];
   float all_currents_stored[6][HISTORY_LENGTH];
   uint8_t array_indicator;
   uint8_t pico;
-};
+} arg_struct ;
 
 // ----- Structures used in server communications with clients ----- //
 typedef struct {
@@ -103,13 +103,6 @@ typedef struct {
   int client_addr;
 } command ;
 
-struct command {
-  char command_name;
-  char command_type;
-  uint8_t char_parameter;
-  float float_parameter;
-  int client_addr;
-} ;
 
 typedef struct {
   int client_addr;
@@ -120,8 +113,6 @@ typedef struct {
 #define SPISPEED 40000000
 #define NSTEPS 200
 #define SPICS 0
-
-#define DAC8164DELAY 2
 
 int msleep(long msec)
 {
@@ -176,13 +167,9 @@ float i2c_ltc2497(int address, int channelLTC){
       return -1;
     }
 
-
-
   uint32_t val = ((block[0]&0x3f)<<16)+(block[1]<<8) + (block[2]&0xE0);
 
-
   return val*vref/max_reading;
-
 }
 
 void powerOn(uint8_t channel) {
@@ -208,13 +195,10 @@ void powerOff(uint8_t channel) {
 }
 
 void hv_initialization(){
-
-
   //setup MCP
   int retc = mcp23s08Setup (HVPINBASE, SPICS, 2);
   printf("mcp setup done %d\n",retc);
 
-  
   //set RESET to DACs to low
   digitalWrite (HVPINBASE+4, 0);
 
@@ -224,8 +208,6 @@ void hv_initialization(){
   digitalWrite (HVPINBASE+2, 0);
   pinMode(HVPINBASE+2, OUTPUT);
 
-
-  
   DAC8164_setup (&dac[0], HVPINBASE, 6, 7, 0, -1, -1);
   DAC8164_setup (&dac[1], HVPINBASE, 3, 7, 0, -1, -1);
   DAC8164_setup (&dac[2], HVPINBASE, 5, 7, 0, -1, -1);
@@ -248,7 +230,7 @@ void set_hv(int channel, float value){
   if ( channel == 10 ) alpha = 0.9015;
   if ( channel == 11 ) alpha = 1.;  // BURNED BOARD - FIX ME!!
 
-  uint32_t digvalue = ( (int) (alpha * 16383.*(value/2.5))) & 0x3FFF;
+  uint32_t digvalue = ( (int) (alpha * 16383.*(value*1631.3))) & 0x3FFF;
 
   DAC8164_writeChannel(&dac[idac], channel, digvalue);
 }
@@ -263,7 +245,6 @@ int Rear = - 1;
 int Front = 0;
 
 command add_command;
-command read_command;
 
 void enqueue(command array[SIZE], command insert_item) {
     if (Rear == SIZE - 1)
@@ -327,7 +308,7 @@ void ramp_hv(uint8_t channel, float voltage) {
   printf("In ramp \n");
   printf("desired voltage: %f \n",voltage);
   int idac = (int) (channel/4);
-  float increment = voltage/NSTEPS*2.3/1500.;
+  float increment = voltage/NSTEPS;
   float current_value = 0;
 
   for (int itick=0; itick<NSTEPS; itick++) {
@@ -343,9 +324,9 @@ void ramp_hv(uint8_t channel, float voltage) {
 void down_hv(uint8_t channel) {
   float current_voltage;
   if (channel < 6) {
-    current_voltage = voltages_0[channel]*2.3/1500;
+    current_voltage = voltages_0[channel];
   } else {
-    current_voltage = voltages_1[channel - 6]*2.3/1500;
+    current_voltage = voltages_1[channel - 6];
   }
 
   int idac = (int) (channel/4);
@@ -485,7 +466,6 @@ void readMonV48(uint8_t channel, int client_addr) {
   float v48scale = 0.0012089;
   float acplscale = 8.2;
 
-
   uint8_t index = v48map[channel];
   uint8_t channelLTC = (5 << 5) + index;
   uint8_t address = LTCaddress[channel];
@@ -493,7 +473,6 @@ void readMonV48(uint8_t channel, int client_addr) {
 
   float ret = i2c_ltc2497(address, channelLTC);
   ret = ret/(v48scale*acplscale);
-
 
   write(client_addr, &ret, sizeof(&ret));
 }
@@ -510,10 +489,8 @@ void readMonI48(uint8_t channel, int client_addr) {
   uint8_t channelLTC = (5 << 5) + index;
   uint8_t address = LTCaddress[channel];
 
-
   float ret = i2c_ltc2497(address, channelLTC);
   ret = ret/(i48scale*acplscale);
-
 
   write(client_addr, &ret, sizeof(&ret));
 }
@@ -530,12 +507,10 @@ void readMonV6(uint8_t channel, int client_addr) {
   uint8_t channelLTC = (5 << 5) + index;
   uint8_t address = LTCaddress[channel];
 
-
   float ret = i2c_ltc2497(address, channelLTC);
   ret = ret/(v6scale*acplscale);
   printf("return val: %f \n", ret);
 
-  
   write(client_addr, &ret, sizeof(&ret));
 }
 
@@ -548,18 +523,13 @@ void readMonI6(uint8_t channel, int client_addr) {
   float i6scale = 0.010;
   float acplscale = 8.2;
 
-
-  
   uint8_t index = i6map[channel];
   uint8_t channelLTC = (5 << 5) + index;
   uint8_t address = LTCaddress[channel];
 
-
   float ret = i2c_ltc2497(address, channelLTC);
   ret = ret/(i6scale*acplscale);
   
-
-
   write(client_addr, &ret, sizeof(&ret));
 }
 
@@ -571,8 +541,6 @@ void *hv_request() {
     uint8_t char_parameter = (uint8_t) check_command->char_parameter;
     float  float_parameter = check_command->float_parameter;
     int client_addr = check_command->client_addr;
-    
-    
     
     // check if command is hv type, else do nothing
     if (current_type == 'a') {
@@ -589,12 +557,7 @@ void *hv_request() {
         pthread_mutex_unlock(&lock);
         get_ihv(char_parameter, client_addr);
       }
-      
-      
     }
-    
-    
-    
     
     sleep(0.1);
   }
@@ -629,9 +592,6 @@ void *hv_execution() {
       }
     }
     
-    
-    
-    
     sleep(0.1);
   }
 }
@@ -646,9 +606,6 @@ void *hv_pico() {
     float  float_parameter = check_command->float_parameter;
     int client_addr = check_command->client_addr;
 
-    
-    
-    
     // check if command is pico type, else do nothing
     if (current_type == 'c') {
 
@@ -761,7 +718,6 @@ void *lv_execution() {
       pthread_mutex_unlock(&lock);
     }
     
-    
     sleep(1);
   }
 }
@@ -775,9 +731,6 @@ void *handle_client(void *args) {
   char buffer[9];
   char flush_buffer[1];
   
-  
-
-
   while (1) {
     // read command into buffer
     int return_val = read(inner_socket, buffer, 9);
@@ -814,12 +767,6 @@ void *handle_client(void *args) {
       // release lock
       pthread_mutex_unlock(&lock);
     }
-
-    
-    
-
-
-
   }
 }
 
@@ -830,7 +777,6 @@ void *create_connections() {
   struct sockaddr_in address;
   int opt = 1;
   int addrlen = sizeof(address);
-
 
   // Creating socket file descriptor
   if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
@@ -870,37 +816,19 @@ void *create_connections() {
         exit(EXIT_FAILURE);
     }
 
- 
-
-
     pthread_t client_thread;
     pthread_create(&client_thread, NULL, handle_client, &new_socket);
    
-
-
   }
-
 }
-
-
-
-
-
-
-
-
-
-
 
 
 // ----- Code to handle HV data acquisition & storage ----- //
 
 void *acquire_data(void *arguments) {
-  struct arg_struct *common = arguments;
+  arg_struct *common = arguments;
 
   uint8_t pico = common->pico;
-
-
 
    // Our ADU's USB device handle
 	char value_str[8]; // 8-byte buffer to store string values read from device 
@@ -932,11 +860,6 @@ void *acquire_data(void *arguments) {
   }
     
 
-  
- 
-
-
-
   uint16_t inner_loop = 1;
 
   char current_char = 'H';
@@ -953,8 +876,6 @@ void *acquire_data(void *arguments) {
 
   uint8_t allow_read = 1;
 
-
-  
 
   while (1) {
     command * check_command = &incoming_commands[Front];
@@ -1148,7 +1069,7 @@ void *save_txt(void *arguments) {
   char *filename_I;
   char *filename_V;
 
-  struct arg_struct *common = arguments;
+  arg_struct *common = arguments;
 
   time_t seconds;
 
@@ -1259,7 +1180,7 @@ int main( int argc, char **argv )
 
 
   // ----- initialize pico 0 communications, etc ----- //
-  struct arg_struct args_0;
+  arg_struct args_0;
   args_0.array_indicator = 0;
   args_0.pico = 0;
 
