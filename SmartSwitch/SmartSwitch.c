@@ -21,9 +21,7 @@
 #include "bsp/board.h"
 #include "tusb.h"
 
-
 // Channel count
-#define mAdc  12		// Maximum number of ADCs to read
 #define nAdc  6		// Number of SmartSwitches
 #define mChn  6		// Number of channels for trip processing
 
@@ -50,8 +48,10 @@ uint16_t num_trigger[6] = {0, 0, 0, 0, 0, 0}; // increments/decrements based upo
 float trip_currents[6] = {180, 180, 180, 180, 180}; // tripping threshold currents
 
 const float adc_to_V  = 2.048 / pow(2, 15) * 1000;			// ADC full-scale voltage / ADC full scale reading * divider ratio
-//const float adc_to_uA = (2.048 / pow(2, 15)) / (27.9* 470.0) * 1.E6;	// constant multiplicative factor for current measurements from ADCs -> uA
 const float adc_to_uA = (2.048 / pow(2, 15)) / (24.7 * 475) * 1.E6;
+
+uint32_t size_current_burst = 60000;
+uint32_t average_current_history_length = 2000;
 
 
 void port_init() {
@@ -73,7 +73,6 @@ void port_init() {
 
 // Variables
 void variable_init() {
-
   // pinouts/ins same for both picos
   uint8_t crowbarPins[6] = { 2, 5, 8, 11, 14, 21};
   uint8_t headerPins[6] = { 1, 3, 6, 10, 12, 9};
@@ -92,14 +91,15 @@ void variable_init() {
 
 }
 
-void get_current_burst(PIO pio, uint sm, int16_t current_array[60000]) // gets 60000 sequential current values from PIO at full speed
+void get_current_burst(PIO pio, uint sm, int16_t current_array[size_current_burst]) // gets sequential current values from PIO at full speed
+
 {
-  for (uint32_t i=0; i<60000; i++) {
+  for (uint32_t i=0; i<size_current_burst; i++) {
     current_array[i] = (int16_t) pio_sm_get_blocking(pio, sm);
   }
 }
 
-void cdc_task(float channel_current_averaged[6], float channel_voltage[6], int16_t burst_current[60000], uint sm[6], uint16_t *burst_position, float trip_currents[6], uint8_t* trip_mask, uint8_t* trip_status, float average_current_history[6][2000], uint16_t* average_store_position)
+void cdc_task(float channel_current_averaged[6], float channel_voltage[6], int16_t burst_current[size_current_burst], uint sm[6], uint16_t *burst_position, float trip_currents[6], uint8_t* trip_mask, uint8_t* trip_status, float average_current_history[6][average_current_history_length], uint16_t* average_store_position)
 {
   if ( tud_cdc_available() )
     {
@@ -175,7 +175,7 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6], int16
           tud_cdc_write(&temp_current,sizeof(&temp_current));
         }
         tud_cdc_write_flush();
-        if (*burst_position < 60000) {
+        if (*burst_position < size_current_burst) {
           *burst_position += 15;
         }
 
@@ -274,7 +274,7 @@ int main(){
   board_init(); // tinyUSB formality
   
   float clkdiv = 13; // set clock divider for PIO
-  uint32_t start_mask = -1; // mask to select which state machines in each PIO block are started
+  uint32_t pio_start_mask = -1; // mask to select which state machines in each PIO block are started
 
   adc_init();
   adc_gpio_init(28);
@@ -285,11 +285,11 @@ int main(){
 
   float channel_current_averaged[6] = {0, 0, 0, 0, 0, 0};
   float channel_voltage[6] = {0, 0, 0, 0, 0, 0};
-  int16_t burst_current[60000];
+  int16_t burst_current[size_current_burst];
   uint16_t burst_position = 0;
 
 
-  float average_current_history[6][2000];
+  float average_current_history[6][average_current_history_length];
   uint16_t average_position = 0;
   uint16_t average_store_position = 0;
 
@@ -340,10 +340,6 @@ int main(){
   channel_program_init(pio_1,sm_channel_5,offset_channel_5,all_pins.headerPins[5],clkdiv);
   
 
-
-
-
-
 // create array of state machines
 // this is used to acquire data from DAQ state machines in other areas of this code
 uint sm_array[6];
@@ -355,8 +351,8 @@ sm_array[4] = sm_channel_4;
 sm_array[5] = sm_channel_5;
 
 // start all state machines in pio block in sync
-pio_enable_sm_mask_in_sync(pio_0, start_mask);
-pio_enable_sm_mask_in_sync(pio_1, start_mask);
+pio_enable_sm_mask_in_sync(pio_0, pio_start_mask);
+pio_enable_sm_mask_in_sync(pio_1, pio_start_mask);
 
 
 

@@ -8,7 +8,7 @@ project(Server
 )
 
 
-add_executable(Server Server.c i2cbusses.c )
+add_executable(Server Server.c i2cbusses.c dac8164.c)
 
 
 target_link_libraries(Server /usr/lib/gcc/aarch64-linux-gnu/10/../../../aarch64-linux-gnu/libusb-1.0.a pthread udev wiringPi i2c)

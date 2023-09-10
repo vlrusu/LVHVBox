@@ -44,23 +44,14 @@
 #include <i2c/smbus.h>
 #include "i2cbusses.h"
 
-#define BASE    1000 // LV mcp pin base
-#define MCPPINBASE 2000 // HV mcp pin base
-
-// Global file descriptor used to talk to the I2C bus:
-int i2c_fd = -1;
-
-// Default RPi B device name for the I2C bus exposed on GPIO2,3 pins (GPIO2=SDA, GPIO3=SCL): 
-const char *i2c_fname = "/dev/i2c-3";
-
-
+#define LVPINBASE    1000 // LV mcp pin base
+#define HVPINBASE 2000 // HV mcp pin base
 
 // ----- libusb constants and variables ----- //
 #define HISTORY_LENGTH  100
 #define VENDOR_ID_0      0xcaf0
 #define VENDOR_ID_1      0xcaf1
 #define PRODUCT_ID     0x4003
-#define TRANSFER_SIZE    8  
 
 uint8_t usb0_lock = 0;
 uint8_t usb1_lock = 0;
@@ -83,8 +74,6 @@ pthread_mutex_t lock;
 pthread_mutex_t usb0_mutex_lock;
 pthread_mutex_t usb1_mutex_lock;
 
-
-
 // assorted values to be returned upon client request
 float voltages_0[6];
 float voltages_1[6];
@@ -92,21 +81,11 @@ float voltages_1[6];
 float currents_0[6];
 float currents_1[6];
 
-float readMonV48_vals[6];
-float readMonI48_vals[6];
-float readMonV6_vals[6];
-float readMonI6_vals[6];
-
-
 
 // LV channel information
 uint8_t powerChMap[6] = {5, 6, 7, 2, 3, 4};
 uint8_t lv_mcp_reset = 2;
 uint8_t lv_global_enable = 1;
-
-// HV  Constants
-const float adc_to_V  = 2.048 / pow(2, 15) * 1000;
-const float adc_to_uA = 2.048 / pow(2, 15) / 8200.0 * 1.E6;
 
 struct arg_struct {
   float all_currents[6][HISTORY_LENGTH];
@@ -165,140 +144,6 @@ int msleep(long msec)
     return res;
 }
 
-
-void DAC8164_setup(DAC8164 *self, int MCP, uint8_t sync, int sclk, uint8_t sdi, int enable_pin, uint8_t ldac_pin)
-{
-  self->_MCP = MCP;
-  self->_sync_pin = sync;
-  self->_sclk_pin = sclk;
-  self->_sdi_pin = sdi;
-  self->_enable_pin = enable_pin;
-  self->_ldac_pin = ldac_pin;
-
-
-  if (enable_pin != -1) {
-    digitalWrite(self->_MCP + self->_enable_pin, HIGH);
-    pinMode(self->_MCP + self->_enable_pin, OUTPUT);
-  }
-
-
-   // LDAC to low
-  if (ldac_pin != -1)
-  {
-    digitalWrite(self->_MCP + self->_ldac_pin, HIGH);
-    pinMode(self->_MCP + self->_ldac_pin, OUTPUT);
-
-  }
-
-  digitalWrite(self->_MCP + self->_sync_pin, 1);
-  pinMode(self->_MCP + self->_sync_pin, OUTPUT);
-
-  digitalWrite(self->_MCP + self->_sclk_pin, 0);
-  pinMode(self->_MCP + self->_sclk_pin, OUTPUT);
-
-  digitalWrite(self->_MCP + self->_sdi_pin, 0);
-  pinMode(self->_MCP + self->_sdi_pin, OUTPUT);
-
-}
-
-
-
-
-
-
-void DAC8164_write(DAC8164 *self, uint32_t data)
-{
-
-  if (self->_enable_pin != -1)
-    digitalWrite(self->_MCP + self->_enable_pin, LOW);
-    ;
-
-
-
-  digitalWrite(self->_MCP + self->_sclk_pin, 0);
-  digitalWrite(self->_MCP + self->_sync_pin, 0);
-  delayMicroseconds(DAC8164DELAY);
-
-  for (int i=23;i>=0;i--){
-    uint8_t thisbit;
-    if ((0x1<<i) & data)
-      thisbit = 1;
-    else
-      thisbit = 0;
-
-    digitalWrite(self->_MCP + self->_sdi_pin, thisbit);
-    delayMicroseconds(DAC8164DELAY);
-    digitalWrite(self->_MCP + self->_sclk_pin, 1);
-    delayMicroseconds(DAC8164DELAY);
-    digitalWrite(self->_MCP + self->_sclk_pin, 0);
-    delayMicroseconds(DAC8164DELAY);
-  }
-
-  digitalWrite(self->_MCP + self->_sync_pin, 1);
-
-  if (self->_enable_pin != -1)
-    digitalWrite(self->_enable_pin, HIGH);
-    ;
-
-}
-
-
-void DAC8164_setReference(DAC8164 *self, uint16_t reference)
-{
-  uint32_t data = DAC_MASK_PD0;
-
-  // set reference mde
-  data |= reference;
-
-  DAC8164_write(self, data);
-
-}
-
-
-void DAC8164_writeChannel(DAC8164 *self, uint8_t channel, uint16_t value)
-{
-  uint32_t data ;
-  uint32_t dac_mask;
-
-  uint8_t mod_channel = channel % 4;
-
-  if ((channel - mod_channel) == 8) {
-    dac_mask = DAC_MASK_2;
-  }
-  else if ((channel - mod_channel) == 4) {
-    dac_mask = DAC_MASK_1;
-  }
-  else {
-    dac_mask = DAC_MASK_0;
-  }
-  mod_channel = mod_channel + 1;
-
-
-  if (mod_channel == DAC_CHANNEL_A)
-    data = DAC_SINGLE_CHANNEL_UPDATE  | dac_mask ;
-
-  else if (mod_channel == DAC_CHANNEL_B)
-    data = DAC_SINGLE_CHANNEL_UPDATE | DAC_MASK_DACSEL0 | dac_mask ;
-
-  else if (mod_channel == DAC_CHANNEL_C)
-    data = DAC_SINGLE_CHANNEL_UPDATE| DAC_MASK_DACSEL1 | dac_mask ;
-
-  else if (mod_channel == DAC_CHANNEL_D)
-    data = DAC_SINGLE_CHANNEL_UPDATE | DAC_MASK_DACSEL1 | DAC_MASK_DACSEL0 | dac_mask ;
-
-  else if (mod_channel == DAC_CHANNEL_ALL)
-    data = DAC_BROADCAST_UPDATE | DAC_MASK_DACSEL1 ;
-  else
-    // avoid writing bad data
-    return;
-
-  // value is 12 MSB bits (last LSB nibble to 0)
-
-  data |= value << 2;
-  // Send to chip
-  DAC8164_write (self, data);
-}
-
 float i2c_ltc2497(int address, int channelLTC){
 
   float max_reading = 8388608.0;
@@ -320,7 +165,6 @@ float i2c_ltc2497(int address, int channelLTC){
       return -1;
     }
 
-  
   msleep(500);
 
 //----- READ BYTES -----
@@ -341,40 +185,14 @@ float i2c_ltc2497(int address, int channelLTC){
 
 }
 
-/*
-void lv_initialization(){
-  pinMode(lv_global_enable, OUTPUT);
-  digitalWrite(lv_global_enable, LOW);
-
-
-  pinMode(lv_mcp_reset, OUTPUT);
-  digitalWrite(lv_mcp_reset, LOW);
-  digitalWrite(lv_global_enable, LOW);
-
-  
-  
-
-  //setup MCP
-  int retc = mcp23s08Setup(BASE, 0, 1);
-  printf("mcp setup done %d\n",retc);
-
-  digitalWrite(lv_mcp_reset, HIGH);
-
-  for (int i=0; i<6; i++) {
-    pinMode(BASE+powerChMap[i], OUTPUT);
-    digitalWrite(BASE+powerChMap[i],0);
-  }
-}
-*/
-
 void powerOn(uint8_t channel) {
   digitalWrite(lv_global_enable, HIGH);
   if (channel == 6) {
     for (int i=0; i<6; i++) {
-      digitalWrite(BASE+powerChMap[i], 1);
+      digitalWrite(LVPINBASE+powerChMap[i], 1);
     }
   } else {
-    digitalWrite(BASE+powerChMap[channel], 1);
+    digitalWrite(LVPINBASE+powerChMap[channel], 1);
   }
 }
 
@@ -382,10 +200,10 @@ void powerOff(uint8_t channel) {
   if (channel == 6) {
     digitalWrite(lv_global_enable, LOW);
     for (int i=0; i<6; i++) {
-      digitalWrite(BASE+powerChMap[i], 0);
+      digitalWrite(LVPINBASE+powerChMap[i], 0);
     }
   } else {
-    digitalWrite(BASE+powerChMap[channel], 0);
+    digitalWrite(LVPINBASE+powerChMap[channel], 0);
   }
 }
 
@@ -393,24 +211,24 @@ void hv_initialization(){
 
 
   //setup MCP
-  int retc = mcp23s08Setup (MCPPINBASE, SPICS, 2);
+  int retc = mcp23s08Setup (HVPINBASE, SPICS, 2);
   printf("mcp setup done %d\n",retc);
 
   
   //set RESET to DACs to low
-  digitalWrite (MCPPINBASE+4, 0);
+  digitalWrite (HVPINBASE+4, 0);
 
-  pinMode(MCPPINBASE+4, OUTPUT);
+  pinMode(HVPINBASE+4, OUTPUT);
 
   //set LDAC to DACs to low
-  digitalWrite (MCPPINBASE+2, 0);
-  pinMode(MCPPINBASE+2, OUTPUT);
+  digitalWrite (HVPINBASE+2, 0);
+  pinMode(HVPINBASE+2, OUTPUT);
 
 
   
-  DAC8164_setup (&dac[0], MCPPINBASE, 6, 7, 0, -1, -1);
-  DAC8164_setup (&dac[1], MCPPINBASE, 3, 7, 0, -1, -1);
-  DAC8164_setup (&dac[2], MCPPINBASE, 5, 7, 0, -1, -1);
+  DAC8164_setup (&dac[0], HVPINBASE, 6, 7, 0, -1, -1);
+  DAC8164_setup (&dac[1], HVPINBASE, 3, 7, 0, -1, -1);
+  DAC8164_setup (&dac[2], HVPINBASE, 5, 7, 0, -1, -1);
 }
 
 void set_hv(int channel, float value){
@@ -542,24 +360,6 @@ void down_hv(uint8_t channel) {
 
 }
 
-
-
-
-/*
-uint8_t usb0_lock = 0;
-uint8_t usb1_lock = 0;
-uint8_t desire_lock_0 = 0;
-uint8_t desire_lock_1 = 0;
-struct libusb_device_handle * device_handle_0 = NULL;
-struct libusb_device_handle * device_handle_1 = NULL;
-
-
-pthread_mutex_t lock;
-pthread_mutex_t usb0_mutex_lock;
-pthread_mutex_t usb1_mutex_lock;
-*/
-
-
 // trip
 void trip(uint8_t channel, int client_addr) {
   uint8_t send_val = 103 + (channel % 6);
@@ -641,7 +441,6 @@ void trip_status(uint8_t channel, int client_addr) {
     libusb_bulk_transfer(device_handle_1, 0x82, input_data, sizeof(input_data), 0, 0);
   }
 
-
   float return_val = 1;
 
   if ((*input_data & 1<<(channel)) == 0) {
@@ -661,25 +460,13 @@ void set_trip(uint8_t channel, float value, int client_addr) {
   send_int = (uint16_t) (value/1000*65535);
   printf("send int: %u \n",(unsigned int)send_int);
 
-
   uint8_t right_mask = -1;
   
   send_val[1] = send_int >> 8 & right_mask;
   send_val[2] = send_int & right_mask;
 
-
-
   uint16_t one = send_val[1] << 8;
   uint16_t two = send_val[2] + one;
-  printf("one: %u \n", (unsigned int)one);
-  printf("two: %u \n", (unsigned int)two);
-
-
-
-
-
-  printf("float test: %f \n",(float)two/ 65535 * 1000);
-
 
   if (channel < 6) {
     libusb_bulk_transfer(device_handle_0, 0x02, &send_val[0], sizeof(send_val), 0, 0);
@@ -689,16 +476,6 @@ void set_trip(uint8_t channel, float value, int client_addr) {
   
 }
  
-
-
-
-
-
-
-
-
-
-
 
 // readMonV48
 void readMonV48(uint8_t channel, int client_addr) {
@@ -786,16 +563,6 @@ void readMonI6(uint8_t channel, int client_addr) {
   write(client_addr, &ret, sizeof(&ret));
 }
 
-
-
-
-
-
-
-
-
-
-
 void *hv_request() {
   while (1) {
     command * check_command = &incoming_commands[Front];
@@ -868,20 +635,6 @@ void *hv_execution() {
     sleep(0.1);
   }
 }
-
-
-/*
-uint8_t usb0_lock = 0;
-uint8_t usb1_lock = 0;
-uint8_t desire_lock_0 = 0;
-uint8_t desire_lock_1 = 0;
-struct libusb_device_handle * device_handle_0 = NULL;
-struct libusb_device_handle * device_handle_1 = NULL;
-
-pthread_mutex_t lock;
-pthread_mutex_t usb0_mutex_lock;
-pthread_mutex_t usb1_mutex_lock;
-*/
 
 // hv commands which require pico interaction
 void *hv_pico() {
@@ -1365,8 +1118,6 @@ void *acquire_data(void *arguments) {
 
       // save voltages in txt file
       
-      
-
       FILE *fp_V = fopen(filename_V, "a");
       if (fp_V == NULL) {
         printf("Error opening the voltage file %s", filename_V);
@@ -1392,9 +1143,6 @@ void *acquire_data(void *arguments) {
   
 
 }
-
-
-
 
 void *save_txt(void *arguments) {
   char *filename_I;
@@ -1463,14 +1211,14 @@ int lv_initialization() {
   digitalWrite(lv_global_enable, LOW);
   
   //setup MCP
-  int retc = mcp23s08Setup(BASE, 0, 1);
+  int retc = mcp23s08Setup(LVPINBASE, 0, 1);
   printf("mcp setup done %d\n",retc);
 
   digitalWrite(lv_mcp_reset, HIGH);
 
   for (int i=0; i<6; i++) {
-    pinMode(BASE+powerChMap[i], OUTPUT);
-    digitalWrite(BASE+powerChMap[i],0);
+    pinMode(LVPINBASE+powerChMap[i], OUTPUT);
+    digitalWrite(LVPINBASE+powerChMap[i],0);
   }
 
   sleep(1);
@@ -1487,8 +1235,6 @@ int lv_initialization() {
   lv_i2cbus = lookup_i2c_bus("3");
   sprintf(lv_i2cname, "/dev/i2c-%d", 3);
   lv_i2c = open_i2c_dev(lv_i2cbus, lv_i2cname, sizeof(lv_i2cname), 0);
-  
-  
 
 }
 
@@ -1501,17 +1247,11 @@ int main( int argc, char **argv )
   wiringPiSetup();
   wiringPiSPISetup(SPICS, SPISPEED);
 
-
-
   pinMode(2, OUTPUT);
   digitalWrite(2, LOW);
   digitalWrite(2, HIGH);
 
-
-  
   lv_initialization();
-
-
 
   sleep(1);
   hv_initialization();
@@ -1532,8 +1272,6 @@ int main( int argc, char **argv )
   pthread_create(&save_thread_0, NULL, save_txt, &args_0);
 
   
-
-  
   // ----- initialize pico 1 communications, etc ----- //
   /*
   struct arg_struct args_1;
@@ -1549,11 +1287,6 @@ int main( int argc, char **argv )
   pthread_create(&save_thread_1, NULL, save_txt, &args_1);
   */
   
-  
-
-  
-
-
 
   // create socket initialization thread
   pthread_t socket_creation_thread;
@@ -1576,15 +1309,6 @@ int main( int argc, char **argv )
 
 
 
-
-
-
-  
-
- 
-  
-
-
   while (1) {
     sleep(100);
   }
@@ -1597,12 +1321,6 @@ int main( int argc, char **argv )
   //pthread_cancel(save_thread_1);
 
   //pthread_cancel(socket_creation_thread);
-
-
-  
-
-
-
   
   return 0;
 }
