@@ -230,7 +230,7 @@ void set_hv(int channel, float value){
   if ( channel == 10 ) alpha = 0.9015;
   if ( channel == 11 ) alpha = 1.;  // BURNED BOARD - FIX ME!!
 
-  uint32_t digvalue = ( (int) (alpha * 16383.*(value*1631.3))) & 0x3FFF;
+  uint32_t digvalue = ( (int) (alpha * 16383.*(value/1631.3))) & 0x3FFF;
 
   DAC8164_writeChannel(&dac[idac], channel, digvalue);
 }
@@ -311,6 +311,7 @@ void ramp_hv(uint8_t channel, float voltage) {
   float increment = voltage/NSTEPS;
   float current_value = 0;
 
+  
   for (int itick=0; itick<NSTEPS; itick++) {
     usleep(50000);
     current_value += increment;
@@ -318,6 +319,7 @@ void ramp_hv(uint8_t channel, float voltage) {
 
     set_hv(channel, current_value);
   }
+  
 }
 
 // down_hv
