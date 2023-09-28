@@ -13,25 +13,26 @@ import struct
 #   -num char args
 #   -num float args
 #   -read bytes
+#   -allow 0 input vars
 
-valid_commands = {"get_vhv": ["a","a",1,0,4],
-                "get_ihv": ["b","a",1,0,4],
-                "ramp_hv": ["c","a",1,1,0],
-                "down_hv": ["d","a",1,0,0],
-                "trip": ["k","c",1,0,0],
-                "reset_trip": ["l","c",1,0,0],
-                "disable_trip": ["m","c",1,0,0],
-                "enable_trip": ["n","c",1,0,0],
-                "trip_status": ["o","c",1,0,4],
-                "set_trip": ["p","c",1,1,0],
-                "powerOn": ["e","b",1,0,0],
-                "powerOff": ["f","b",1,0,0],
-                "readMonV48": ["g","b",1,0,4],
-                "readMonI48": ["h","b",1,0,4],
-                "readMonV6": ["i","b",1,0,4],
-                "readMonI6": ["j","b",1,0,4],
-                "enable_ped": ['%',"c",1,0,0],
-                "disable_ped": ["&", "c",1,0,0]
+valid_commands = {"get_vhv": ["a","a",1,0,4,0],
+                "get_ihv": ["b","a",1,0,4,0],
+                "ramp_hv": ["c","a",1,1,0,0],
+                "down_hv": ["d","a",1,0,0,0],
+                "trip": ["k","c",1,0,0,0],
+                "reset_trip": ["l","c",1,0,0,0],
+                "disable_trip": ["m","c",1,0,0,0],
+                "enable_trip": ["n","c",1,0,0,0],
+                "trip_status": ["o","c",1,0,4,0],
+                "set_trip": ["p","c",1,1,0,0],
+                "powerOn": ["e","b",1,0,0,1],
+                "powerOff": ["f","b",1,0,0,1],
+                "readMonV48": ["g","b",1,0,4,0],
+                "readMonI48": ["h","b",1,0,4,0],
+                "readMonV6": ["i","b",1,0,4,0],
+                "readMonI6": ["j","b",1,0,4,0],
+                "enable_ped": ['%',"c",1,0,0,0],
+                "disable_ped": ["&", "c",1,0,0,0]
 }
 
 
@@ -73,7 +74,10 @@ def process_input(input):
     # check if there's a valid number of args
     desired_args = valid_commands[split_command[0]][2] + valid_commands[split_command[0]][3]
     if desired_args != len(split_command[1::]):
-        return 0
+        if valid_commands[split_command[0]][5] == 0:
+            return 0
+        else:
+            split_command.append(6)
         
     # check if channel arg is within proper range
     if valid_commands[split_command[0]][1] in ['a','c']:
@@ -85,7 +89,6 @@ def process_input(input):
             return 0
     
     # check if float is in valid range
-    
     if valid_commands[split_command[0]][3] != 0:
         if float(split_command[2]) >= 10000:
             return 0
