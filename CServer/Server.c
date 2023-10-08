@@ -23,14 +23,10 @@
 #include <netinet/in.h>
 
 
-#include <wiringPi.h>
-#include <wiringPiSPI.h>
-#include <mcp23s08.h>
-#include <softPwm.h>
 #include <linux/spi/spidev.h>
 #include "dac8164.h"
+#include "mcp23s08.h"
 
-#include <wiringPiI2C.h>
 
 
 #include <sys/ioctl.h>
@@ -44,8 +40,7 @@
 #include <i2c/smbus.h>
 #include "i2cbusses.h"
 
-#define LVPINBASE    1000 // LV mcp pin base
-#define HVPINBASE 2000 // HV mcp pin base
+
 
 // ----- libusb constants and variables ----- //
 #define HISTORY_LENGTH  100
@@ -109,8 +104,19 @@ typedef struct {
 } client_data ;
 
 
+static const uint8_t spi_mode = 0;
+static const uint8_t spi_bpw = 8; // bits per word
+static const uint32_t spi_speed = 40000000; // 10MHz
+static const uint16_t spi_delay = 0;
 
-#define SPISPEED 40000000
+static const char spidev = "/dev/spidev0.0"; //this is the SPI device. Assume here that there is only one SPI bus
+static int         spiFds; //SPI file descriptor 
+
+MCP lvpowerMCP;
+MCP lvpgoodMCP;
+MCP hvMCP;
+
+
 #define NSTEPS 200
 #define SPICS 0
 
@@ -1133,15 +1139,13 @@ int lv_initialization() {
   pinMode(lv_mcp_reset, OUTPUT);
   digitalWrite(lv_global_enable, LOW);
   
-  //setup MCP
-  int retc = mcp23s08Setup(LVPINBASE, 0, 1);
-  printf("mcp setup done %d\n",retc);
+  
 
   digitalWrite(lv_mcp_reset, HIGH);
 
   for (int i=0; i<6; i++) {
-    pinMode(LVPINBASE+powerChMap[i], OUTPUT);
-    digitalWrite(LVPINBASE+powerChMap[i],0);
+    MCP_pinMode(lvpowerMCP,  powerChMap[i], OUTPUT);
+    MCP_pinWrite(lvpowerMCP  powerChMap[i],0)
   }
 
   sleep(1);
@@ -1162,17 +1166,131 @@ int lv_initialization() {
 }
 
 
+// Function to export a GPIO pin
+int export_gpio(const char *pin) {
+    int fd_export = open("/sys/class/gpio/export", O_WRONLY);
+    if (fd_export == -1) {
+        perror("Failed to open /sys/class/gpio/export");
+        return -1;
+    }
+    
+    if (write(fd_export, pin, strlen(pin)) == -1) {
+        perror("Failed to export GPIO pin");
+        close(fd_export);
+        return -1;
+    }
+    
+    close(fd_export);
+    return 0;
+}
+
+// Function to set the direction of a GPIO pin to "out"
+int set_gpio_direction_out(const char *pin) {
+    char direction_path[128];
+    snprintf(direction_path, sizeof(direction_path), "/sys/class/gpio/gpio%s/direction", pin);
+
+    int fd_direction = open(direction_path, O_WRONLY);
+    if (fd_direction == -1) {
+        perror("Failed to open GPIO direction file");
+        return -1;
+    }
+    
+    if (write(fd_direction, "out", 3) == -1) {
+        perror("Failed to set GPIO direction to 'out'");
+        close(fd_direction);
+        return -1;
+    }
+    
+    close(fd_direction);
+    return 0;
+}
+
+// Function to write a value (1 or 0) to a GPIO pin
+int write_gpio_value(const char *pin, int value) {
+    char value_path[128];
+    snprintf(value_path, sizeof(value_path), "/sys/class/gpio/gpio%s/value", pin);
+
+    int fd_value = open(value_path, O_WRONLY);
+    if (fd_value == -1) {
+        perror("Failed to open GPIO value file");
+        return -1;
+    }
+    
+    char buffer[2];
+    snprintf(buffer, sizeof(buffer), "%d", value);
+    
+    if (write(fd_value, buffer, 1) == -1) {
+        perror("Failed to write GPIO value");
+        close(fd_value);
+        return -1;
+    }
+    
+    close(fd_value);
+    return 0;
+}
 
 
 
 int main( int argc, char **argv )
 {
-  wiringPiSetup();
-  wiringPiSPISetup(SPICS, SPISPEED);
 
-  pinMode(2, OUTPUT);
-  digitalWrite(2, LOW);
-  digitalWrite(2, HIGH);
+  /**
+   * @brief setup SPI comm
+   * 
+   */
+  
+if ((spiFds = open (spiDev, O_RDWR)) < 0){
+  printf("Unable to open SPI device: %s\n",spidev);
+  return 0;
+}
+ 
+  if (ioctl (fd, SPI_IOC_WR_MODE, &spi_mode)            < 0){
+    printf("SPI Mode Change failure: %s\n",spidev)
+    return 0;
+  }
+   
+  
+  if (ioctl (fd, SPI_IOC_WR_BITS_PER_WORD, &spi_bpw) < 0){
+    printf("SPI BPW Change failure: %s\n",spidev);
+    return 0;
+  }
+
+  if (ioctl (fd, SPI_IOC_WR_MAX_SPEED_HZ, &spi_speed)   < 0){
+    printf("SPI Speed Change failure: %s\n",spidev);
+    return 0;
+  }
+
+/**
+ * @brief setup MCPs with their appropriate addresses
+ * 
+ */
+
+  MCP_setup(lvpowerMCP,0); //check the addresses (0?) here
+  MCP_setup(lvpgoodMCP,1);
+  MCP_setup(hvMCP,2);
+
+
+// Export the GPIO pins
+    if (export_gpio(2) == -1) {
+        return 1;
+    }
+
+// Set the GPIO pin direction to "out"
+    if (set_gpio_direction_out(2) == -1) {
+        return 1;
+    }
+    
+    // Turn off the GPIO pin (set it to 1)
+    if (write_gpio_value(2, 0) == -1) {
+        return 1;
+    }
+
+    // Turn on the GPIO pin (set it to 1)
+    if (write_gpio_value(2, 1) == -1) {
+        return 1;
+    }
+
+  
 
   lv_initialization();
 
