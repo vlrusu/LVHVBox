@@ -24,10 +24,23 @@ HVTYPE0 = 1
 HVTYPE1 = 2
 BATTERYTYPE = 3
 
+CONFIG_PATH = "../config.txt"
 
 
 class QC:
     def __init__(self, total_values, frequency):
+
+        # open config.txt file
+        with open(CONFIG_PATH) as file:
+            lines = file.readlines()
+        
+            parameters = {}
+
+            for item in lines:
+                parameter = item.split(":")
+                parameters[parameter[0]] = parameter[1]
+        
+        self.parameters = parameters
 
         self.total_values = total_values
         self.frequency = frequency
@@ -168,7 +181,8 @@ class QC:
         num_chars = 78*num_lines
         avg = [0 for i in range(6)]
 
-        with open("../Server/Currents_0.txt", "rb") as file:
+
+        with open("../" + self.parameters["CServer_Path"]+"/Currents_0.txt", "rb") as file:
             try:
                 file.seek(-num_chars, os.SEEK_END)
                 while file.read(1) != b'\n':
@@ -205,7 +219,7 @@ class QC:
         potential_maxes=[]
         
 
-        with open("../Server/Currents_0.txt", "rb") as file:
+        with open("../" + self.parameters["CServer_Path"]+"/Currents_0.txt", "rb") as file:
             try:
                 file.seek(-num_chars, os.SEEK_END)
                 while file.read(1) != b'\n':
@@ -257,7 +271,7 @@ class QC:
         self.short_current = np.delete(self.short_current,np.arange(0,len(self.short_current[0])-self.short_plot_length),1)
 
         avg = [0 for i in range(6)]
-        with open("../Server/Voltages_0.txt", "rb") as file:
+        with open("../" + self.parameters["CServer_Path"]+"/Voltages_0.txt", "rb") as file:
             try:
                 num_lines = 10
                 num_chars = 78*num_lines

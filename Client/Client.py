@@ -7,6 +7,8 @@ import atexit
 import threading
 import struct
 
+CONFIG_PATH = "../config.txt"
+
 # list order is:
 #   -command name
 #   -command type
@@ -34,6 +36,18 @@ valid_commands = {"get_vhv": ["a","a",1,0,4,0],
                 "enable_ped": ['%',"c",1,0,0,0],
                 "disable_ped": ["&", "c",1,0,0,0]
 }
+
+def open_config():
+    with open(CONFIG_PATH) as file:
+        lines = file.readlines()
+    
+    parameters = {}
+
+    for item in lines:
+        parameter = item.split(":")
+        parameters[parameter[0]] = parameter[1]
+    
+    return parameters
 
 
 
@@ -109,6 +123,8 @@ def process_input(input):
 
 
 if __name__=="__main__":
+    parameters = open_config()
+    
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     host = "127.0.0.1"
     port = 12000
