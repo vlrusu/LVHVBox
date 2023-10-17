@@ -44,6 +44,17 @@
 #include <i2c/smbus.h>
 #include "i2cbusses.h"
 
+
+
+#include <stdlib.h>
+#include <string.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <errno.h>
+
+
 #define LVPINBASE    1000 // LV mcp pin base
 #define HVPINBASE 2000 // HV mcp pin base
 
@@ -113,6 +124,11 @@ typedef struct {
 #define SPISPEED 40000000
 #define NSTEPS 200
 #define SPICS 0
+
+
+#define PIPE_PATH "/tmp/data_pipe"
+#define ALPHA 0.1  // Choose a value between 0 and 1. Smaller values result in heavier filtering.
+
 
 int msleep(long msec)
 {
@@ -1082,6 +1098,21 @@ void *save_txt(void *arguments) {
 
   float store_all_currents_internal[6][HISTORY_LENGTH];
 
+  float last_output[6] = {0};  // State for each channel's filter
+  struct stat st;
+  if (stat(PIPE_PATH, &st) == -1) {
+    if (mkfifo(PIPE_PATH, 0666) == -1) {
+      perror("Failed to create named pipe");
+      }
+  }
+  
+  int fd = open(PIPE_PATH, O_WRONLY | O_NONBLOCK);
+  if (fd == -1) {
+    perror("Error opening pipe");
+  
+  }
+
+  
   while (1) {
     uint8_t array_indicator = common->array_indicator;
 
@@ -1094,6 +1125,8 @@ void *save_txt(void *arguments) {
         }
       }
 
+
+
       if (pico == 0) {
         filename_I = "../Currents_0.txt";
       } else {   
@@ -1102,6 +1135,33 @@ void *save_txt(void *arguments) {
 
       // open the current file for writing
       if (pico == 0) {
+
+
+	char buffer[1024];  // A buffer to format and write data
+	time_t seconds;
+
+	for (uint32_t time_index = 0; time_index < HISTORY_LENGTH; time_index++) {
+	  for (uint8_t channel = 0; channel < 6; channel++) {
+	    // Apply the first-order low-pass filter
+	    float input_value = store_all_currents_internal[channel][time_index];
+	    float filtered_value = ALPHA * input_value + (1 - ALPHA) * last_output[channel];
+	    last_output[channel] = filtered_value;
+
+	    // Decimation by 5: Only write every 5th sample
+	    if (time_index % 5 == 0) {
+	      int length = snprintf(buffer, sizeof(buffer), "%f ", filtered_value);
+	      write(fd, buffer, length);  // Write to the pipe
+	    }
+	  }
+
+	  if (time_index % 5 == 0) {
+	    int length = snprintf(buffer, sizeof(buffer), "\n", (float)seconds);
+	    write(fd, buffer, length);  // Write the timestamp to the pipe
+	  }
+	}
+
+
+	
         FILE *fp_I = fopen(filename_I, "a");
         if (fp_I == NULL)
         {
