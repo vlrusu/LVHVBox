@@ -126,9 +126,12 @@ typedef struct {
 #define SPICS 0
 
 
-#define PIPE_PATH "/tmp/data_pipe"
-#define ALPHA 0.1  // Choose a value between 0 and 1. Smaller values result in heavier filtering.
+const char *LIVE_STATUS_FILENAME = "live_status.txt";
 
+#define PIPE_PATH "/tmp/data_pipe"
+#define V_PIPE_PATH "/tmp/vdata_pipe"
+#define ALPHA 0.1  // Choose a value between 0 and 1. Smaller values result in heavier filtering.
+#define DECIMATION_FACTOR 5
 
 int msleep(long msec)
 {
@@ -425,6 +428,25 @@ void disable_ped(uint8_t channel, int client_addr) {
   }
 }
 
+
+void write_fixed_location(const char *filename, long position, int value) {
+    if (value != 0 && value != 1) {
+        printf("Invalid value. Only 0 or 1 allowed.\n");
+        return;
+    }
+
+    FILE *file = fopen(filename, "r+");
+    if (file == NULL) {
+        perror("Error opening file");
+        return;
+    }
+
+    fseek(file, position, SEEK_SET);
+    fprintf(file, "%d ", value);
+    
+    fclose(file);
+}
+
 // trip_status
 void trip_status(uint8_t channel, int client_addr) {
   uint8_t send_val = 33;
@@ -440,15 +462,20 @@ void trip_status(uint8_t channel, int client_addr) {
     libusb_bulk_transfer(device_handle_1, 0x82, input_data, sizeof(input_data), 0, 0);
   }
 
-  float return_val = 1;
+  int return_val = 1;
 
   if ((*input_data & 1<<(channel)) == 0) {
     return_val = 0;
   }
 
-  write(client_addr, &return_val, sizeof(&return_val));
-
+  if (client_addr!=-9999)
+    write(client_addr, &return_val, sizeof(&return_val));
+  else
+    write_fixed_location(LIVE_STATUS_FILENAME, 2*channel, return_val);  // writes at fixed location
 }
+
+
+
 
 // set_trip
 void set_trip(uint8_t channel, float value, int client_addr) {
@@ -581,6 +608,11 @@ void *hv_request() {
   }
 }
 
+
+
+
+
+
 // acquire and execute commands in loop
 void *hv_execution() {
   while (1) {
@@ -614,95 +646,7 @@ void *hv_execution() {
   }
 }
 
-// hv commands which require pico interaction
-void *hv_pico() {
-  while (1) {
-    command * check_command = &incoming_commands[Front];
-    char current_command = check_command->command_name;
-    char current_type = check_command->command_type;
-    uint8_t char_parameter = (uint8_t) check_command->char_parameter;
-    float  float_parameter = check_command->float_parameter;
-    int client_addr = check_command->client_addr;
 
-    // check if command is pico type, else do nothing
-    if (current_type == 'c') {
-
-      // acquire control of USB
-      if (char_parameter < 6) {
-        printf("Pico 0 selected \n");
-        desire_lock_0 = 1;
-        pthread_mutex_lock(&usb0_mutex_lock);
-        usb0_lock = 1;
-        pthread_mutex_unlock(&usb0_mutex_lock);
-      } else {
-        printf("Pico 1 selected \n");
-        desire_lock_1 = 1;
-        pthread_mutex_lock(&usb1_mutex_lock);
-        usb1_lock = 1;
-        pthread_mutex_unlock(&usb1_mutex_lock);
-      }
-      
-      // select proper hv function
-      if (current_command == 'k') { // trip
-        pthread_mutex_lock(&lock);
-        dequeue(incoming_commands);
-        pthread_mutex_unlock(&lock);
-        trip(char_parameter, client_addr);
-      } else if (current_command == 'l') { // reset trip
-        pthread_mutex_lock(&lock);
-        dequeue(incoming_commands);
-        pthread_mutex_unlock(&lock);
-        reset_trip(char_parameter, client_addr);
-      } else if (current_command == 'm') { // disable trip
-        pthread_mutex_lock(&lock);
-        dequeue(incoming_commands);
-        pthread_mutex_unlock(&lock);
-        disable_trip(char_parameter, client_addr);
-      } else if (current_command == 'n') { // enable trip
-        pthread_mutex_lock(&lock);
-        dequeue(incoming_commands);
-        pthread_mutex_unlock(&lock);
-        enable_trip(char_parameter, client_addr);
-      } else if (current_command == 'p') { // set trip
-        pthread_mutex_lock(&lock);
-        dequeue(incoming_commands);
-        pthread_mutex_unlock(&lock);
-        set_trip(char_parameter, float_parameter, client_addr);
-      } else if (current_command == 'o') { // trip status
-        pthread_mutex_lock(&lock);
-        dequeue(incoming_commands);
-        pthread_mutex_unlock(&lock);
-        trip_status(char_parameter, client_addr);
-      } else if (current_command == '%') { // enable ped
-        pthread_mutex_lock(&lock);
-        dequeue(incoming_commands);
-        pthread_mutex_unlock(&lock);
-        enable_ped(char_parameter,client_addr);
-      } else if (current_command == '&') { // disable ped
-        pthread_mutex_lock(&lock);
-        dequeue(incoming_commands);
-        pthread_mutex_unlock(&lock);
-        disable_ped(char_parameter,client_addr);
-      }
-
-      // release control of USB
-      if (char_parameter < 6) {
-        pthread_mutex_lock(&usb0_mutex_lock);
-        usb0_lock = 0;
-        desire_lock_0 = 0;
-        pthread_mutex_unlock(&usb0_mutex_lock);
-      } else {
-        pthread_mutex_lock(&usb1_mutex_lock);
-        usb1_lock = 0;
-        desire_lock_1 = 0;
-        pthread_mutex_unlock(&usb1_mutex_lock);
-      }
-    }
-    
-    
-    sleep(0.1);
-  }
-}
 
 // acquire and execute commands in loop
 void *lv_execution() {
@@ -787,6 +731,39 @@ void *handle_client(void *args) {
     }
   }
 }
+
+
+
+// ----- Code to handle socket stuff ----- //
+void *live_status(void *args) {
+  char buffer[9];
+  char flush_buffer[1];
+  
+  while (1) {
+
+
+    for (int ichannel =0 ; ichannel<6; ichannel++){
+      // acquire lock
+      pthread_mutex_lock(&lock);
+      
+      // create command
+      add_command.command_name = 'o';
+      add_command.command_type = 'c';
+      add_command.char_parameter = ichannel;
+      add_command.float_parameter = 0;
+      add_command.client_addr = -9999;
+      
+      // add command to queue
+      enqueue(incoming_commands, add_command);
+
+      // release lock
+      pthread_mutex_unlock(&lock);
+    }
+    sleep(1);
+  }
+
+}
+
 
 
 void *create_connections() {
@@ -894,6 +871,20 @@ void *acquire_data(void *arguments) {
 
   uint8_t allow_read = 1;
 
+
+
+  struct stat st;
+  if (stat(V_PIPE_PATH, &st) == -1) {
+    if (mkfifo(V_PIPE_PATH, 0666) == -1) {
+      perror("Failed to create named pipe");
+    }
+  }
+  
+  int vfd = open(V_PIPE_PATH, O_WRONLY | O_NONBLOCK);
+  if (vfd == -1) {
+    perror("Error opening pipe");
+    
+  }
 
   while (1) {
     command * check_command = &incoming_commands[Front];
@@ -1065,8 +1056,11 @@ void *acquire_data(void *arguments) {
 
       // append to voltages txt file
       if (pico == 0) {
+	char buffer[1024];  // A buffer to format and write data
         for (int channel=0; channel<6; channel++) {
           fprintf(fp_V, "%f ", voltages_0[channel]);
+	  int length = snprintf(buffer, sizeof(buffer), "%f ", voltages_0[channel]);
+	  write(vfd, buffer, length);  // Write to the pipe
         }
       } else {
         for (int channel=0; channel<6; channel++) {
@@ -1075,6 +1069,13 @@ void *acquire_data(void *arguments) {
       }
       seconds = time(NULL);
       fprintf(fp_V, "%f\n", (float)seconds);
+
+      if (pico == 0) {
+	char buffer[1024];  // A buffer to format and write data
+	int length = snprintf(buffer, sizeof(buffer), "\n");
+	write(vfd, buffer, length);  // Write to the pipe
+      }
+      
       fclose(fp_V);
 
     }
@@ -1112,6 +1113,20 @@ void *save_txt(void *arguments) {
   
   }
 
+  if (pico == 0) {
+    filename_I = "../Currents_0.txt";
+  } else {   
+    filename_I = "../Currents_1.txt";
+  }
+
+
+  FILE *fp_I = fopen(filename_I, "w");
+  if (fp_I == NULL)
+    {
+      printf("Error opening the current file %s", filename_I);
+    }
+
+
   
   while (1) {
     uint8_t array_indicator = common->array_indicator;
@@ -1127,11 +1142,6 @@ void *save_txt(void *arguments) {
 
 
 
-      if (pico == 0) {
-        filename_I = "../Currents_0.txt";
-      } else {   
-        filename_I = "../Currents_1.txt";
-      }
 
       // open the current file for writing
       if (pico == 0) {
@@ -1148,25 +1158,22 @@ void *save_txt(void *arguments) {
 	    last_output[channel] = filtered_value;
 
 	    // Decimation by 5: Only write every 5th sample
-	    if (time_index % 5 == 0) {
+	    if (time_index % DECIMATION_FACTOR == 0) {
 	      int length = snprintf(buffer, sizeof(buffer), "%f ", filtered_value);
+	      fprintf(fp_I, "%f ", filtered_value);
 	      write(fd, buffer, length);  // Write to the pipe
 	    }
 	  }
 
-	  if (time_index % 5 == 0) {
-	    int length = snprintf(buffer, sizeof(buffer), "\n", (float)seconds);
+	  if (time_index % DECIMATION_FACTOR == 0) {
+	    int length = snprintf(buffer, sizeof(buffer), "\n");
+	    fprintf(fp_I,"\n");
 	    write(fd, buffer, length);  // Write the timestamp to the pipe
 	  }
 	}
 
 
-	
-        FILE *fp_I = fopen(filename_I, "a");
-        if (fp_I == NULL)
-        {
-            printf("Error opening the current file %s", filename_I);
-        }
+	/*	
 
         for (uint32_t time_index=0; time_index<HISTORY_LENGTH; time_index++) {
           for (uint8_t channel=0; channel<6; channel++) {
@@ -1178,11 +1185,13 @@ void *save_txt(void *arguments) {
         
         // close the current file
         fclose(fp_I);
+	*/
       }
 
 
     }
   }
+  fclose(fp_I);
 }
 
 int lv_initialization() {
@@ -1240,6 +1249,15 @@ int main( int argc, char **argv )
   hv_initialization();
 
 
+  FILE *file = fopen(LIVE_STATUS_FILENAME, "w");
+  fclose(file);
+  
+  for (int i = 0 ; i < 6 ; i++){
+    write_fixed_location(LIVE_STATUS_FILENAME, 2*i, 0);  // writes 1
+  }
+
+    
+  
 
   // ----- initialize pico 0 communications, etc ----- //
   arg_struct args_0;
@@ -1250,6 +1268,10 @@ int main( int argc, char **argv )
   pthread_t acquisition_thread_0;
   pthread_create(&acquisition_thread_0, NULL, acquire_data, &args_0);
 
+  // create statusing thread
+  pthread_t status_thread_0;
+  pthread_create(&status_thread_0, NULL, live_status, &args_0);
+  
   // create txt save thread
   pthread_t save_thread_0;
   pthread_create(&save_thread_0, NULL, save_txt, &args_0);
