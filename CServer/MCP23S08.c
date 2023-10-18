@@ -14,10 +14,6 @@
 #include <sys/ioctl.h>
 #include <linux/spi/spidev.h>
 
-#define HIGH (1)
-#define LOW (0)
-#define ON (1)
-#define OFF (0)
 
 #define MCPDELAY 1
 
@@ -91,12 +87,15 @@ static inline void cs_deselect()
 
 #endif
 
-void MCP_setup(MCP *mcp, uint8_t address)
+void MCP_setup(MCP* mcp, uint8_t address)
 {
 
   mcp->_address = address;
 
+
   MCP_byteWrite(mcp, IOCON, IOCON_INIT);
+
+  
 
   mcp->_modeCache = 0xFF;   // Default I/O mode is all input, 0xFFFF
   mcp->_outputCache = 0x00; // Default output state is all off, 0x0000
@@ -105,12 +104,12 @@ void MCP_setup(MCP *mcp, uint8_t address)
 
   MCP_byteWrite(mcp, IODIR, mcp->_modeCache);
   MCP_byteWrite(mcp, IOCON, IOCON_INIT);
+
 };
 
 void MCP_byteWrite(MCP *mcp, uint8_t reg, uint8_t value)
 { // Accept the register and byte
 
-  
   uint8_t tx_buf[3];
   tx_buf[0] = OPCODEW | (mcp->_address << 1);
   tx_buf[1] = reg;
@@ -206,7 +205,7 @@ void MCP_pinMode(MCP *mcp, uint8_t pin, uint8_t mode)
   {
     mcp->_modeCache &= ~(1 << (pin)); // If not, the mode must be output, so and in a 0 in the appropriate place
   }
-  MCP_wordWrite(mcp, IODIRA, mcp->_modeCache);
+  MCP_maskWrite(mcp, IODIR, mcp->_modeCache);
 }
 
 void MCP_maskpinMode(MCP *mcp, uint16_t mask, uint8_t mode)
@@ -218,7 +217,7 @@ void MCP_maskpinMode(MCP *mcp, uint16_t mask, uint8_t mode)
   else
     mcp->_modeCache = (mcp->_modeCache & ~mask) | (0 & mask);
 
-  MCP_wordWrite(mcp, IODIRA, mcp->_modeCache);
+  MCP_maskWrite(mcp, IODIR, mcp->_modeCache);
 }
 
 // THE FOLLOWING WRITE FUNCTIONS ARE NEARLY IDENTICAL TO THE FIRST AND ARE NOT INDIVIDUALLY COMMENTED
@@ -241,7 +240,7 @@ void MCP_pullupMode(MCP *mcp, uint8_t pin, uint8_t mode)
   {
     mcp->_pullupCache &= ~(1 << (pin));
   }
-  MCP_wordWrite(mcp, GPPUA, mcp->_pullupCache);
+  MCP_maskWrite(mcp, GPPU, mcp->_pullupCache);
 }
 
 void MCP_maskpullupMode(MCP *mcp, uint16_t mask, uint8_t mode)
@@ -253,7 +252,7 @@ void MCP_maskpullupMode(MCP *mcp, uint16_t mask, uint8_t mode)
   else
     mcp->_pullupCache = (mcp->_pullupCache & ~mask) | (0 & mask);
 
-  MCP_wordWrite(mcp, GPPUA, mcp->_pullupCache);
+  MCP_maskWrite(mcp, GPPU, mcp->_pullupCache);
 }
 
 // WRITE FUNCTIONS
@@ -274,7 +273,7 @@ void MCP_pinWrite(MCP *mcp, uint8_t pin, uint8_t value)
   {
     mcp->_outputCache &= ~(1 << (pin));
   }
-  MCP_wordWrite(mcp, GPIOA, mcp->_outputCache);
+  MCP_maskWrite(mcp, GPIO, mcp->_outputCache);
 }
 
 void MCP_maskWrite(MCP *mcp, uint16_t mask, uint8_t value)
@@ -286,9 +285,10 @@ void MCP_maskWrite(MCP *mcp, uint16_t mask, uint8_t value)
   else
     mcp->_outputCache = (mcp->_outputCache & ~mask) | (0 & mask);
 
-  MCP_wordWrite(mcp, GPIOA, mcp->_outputCache);
+  MCP_maskWrite(mcp, GPIO, mcp->_outputCache);
 }
 
+/*
 uint8_t MCP_pinRead(MCP *mcp, uint8_t pin)
 { // Return a single bit value, supply the necessary bit (1-16)
   if (pin > 16)
@@ -297,11 +297,14 @@ uint8_t MCP_pinRead(MCP *mcp, uint8_t pin)
     return;
   }
 
-  return MCP_wordRead(mcp, GPIOA) & (1 << (pin)) ? HIGH : LOW; // Call the word reading function, extract HIGH/LOW information from the requested pin
+  return MCP_wordRead(mcp, GPIO) & (1 << (pin)) ? HIGH : LOW; // Call the word reading function, extract HIGH/LOW information from the requested pin
 }
+*/
 
+/*
 uint16_t MCP_pinReadAll(MCP *mcp)
 { // Return a single bit value, supply the necessary bit (1-16)
 
-  return MCP_wordRead(mcp, GPIOA); // Call the word reading function, extract HIGH/LOW information from the requested pin
+  return MCP_wordRead(mcp, GPIO); // Call the word reading function, extract HIGH/LOW information from the requested pin
 }
+*/

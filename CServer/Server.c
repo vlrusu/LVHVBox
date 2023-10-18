@@ -25,7 +25,7 @@
 
 #include <linux/spi/spidev.h>
 #include "dac8164.h"
-#include "mcp23s08.h"
+#include "MCP23S08.h"
 
 
 
@@ -103,18 +103,19 @@ typedef struct {
   int client_addr;
 } client_data ;
 
+uint8_t spi_bpw = 8; // bits per word
+uint32_t spi_speed = 40000000; // 10MHz
+uint16_t spi_delay = 0;
+
+int spiFds;
 
 static const uint8_t spi_mode = 0;
-static const uint8_t spi_bpw = 8; // bits per word
-static const uint32_t spi_speed = 40000000; // 10MHz
-static const uint16_t spi_delay = 0;
 
-static const char spidev = "/dev/spidev0.0"; //this is the SPI device. Assume here that there is only one SPI bus
-static int         spiFds; //SPI file descriptor 
+static const char* spidev = "/dev/spidev0.0"; //this is the SPI device. Assume here that there is only one SPI bus
 
-MCP lvpowerMCP;
-MCP lvpgoodMCP;
-MCP hvMCP;
+MCP* hvMCP;
+MCP* lvpowerMCP;
+MCP* lvpgoodMCP;
 
 
 #define NSTEPS 200
@@ -179,44 +180,66 @@ float i2c_ltc2497(int address, int channelLTC){
 }
 
 void powerOn(uint8_t channel) {
-  digitalWrite(lv_global_enable, HIGH);
+  //digitalWrite(lv_global_enable, HIGH);
   if (channel == 6) {
     for (int i=0; i<6; i++) {
-      digitalWrite(LVPINBASE+powerChMap[i], 1);
+      //digitalWrite(LVPINBASE+powerChMap[i], 1);
+      ;
     }
   } else {
-    digitalWrite(LVPINBASE+powerChMap[channel], 1);
+    //digitalWrite(LVPINBASE+powerChMap[channel], 1);
+    ;
   }
 }
 
 void powerOff(uint8_t channel) {
   if (channel == 6) {
-    digitalWrite(lv_global_enable, LOW);
+    //digitalWrite(lv_global_enable, LOW);
     for (int i=0; i<6; i++) {
-      digitalWrite(LVPINBASE+powerChMap[i], 0);
+      //digitalWrite(LVPINBASE+powerChMap[i], 0);
+      ;
     }
   } else {
-    digitalWrite(LVPINBASE+powerChMap[channel], 0);
+    //digitalWrite(LVPINBASE+powerChMap[channel], 0);
+    ;
   }
 }
 
+
+
+
+
+
+
 void hv_initialization(){
   //setup MCP
-  int retc = mcp23s08Setup (HVPINBASE, SPICS, 2);
-  printf("mcp setup done %d\n",retc);
+  //int retc = mcp23s08Setup (hvMCP, SPICS, 2);
+  //printf("mcp setup done %d\n",retc);
 
   //set RESET to DACs to low
-  digitalWrite (HVPINBASE+4, 0);
+  //digitalWrite (HVPINBASE+4, 0);
 
-  pinMode(HVPINBASE+4, OUTPUT);
+  //pinMode(HVPINBASE+4, OUTPUT);
 
   //set LDAC to DACs to low
-  digitalWrite (HVPINBASE+2, 0);
-  pinMode(HVPINBASE+2, OUTPUT);
+  //digitalWrite (HVPINBASE+2, 0);
+  //pinMode(HVPINBASE+2, OUTPUT);
 
-  DAC8164_setup (&dac[0], HVPINBASE, 6, 7, 0, -1, -1);
-  DAC8164_setup (&dac[1], HVPINBASE, 3, 7, 0, -1, -1);
-  DAC8164_setup (&dac[2], HVPINBASE, 5, 7, 0, -1, -1);
+  MCP_setup(hvMCP, 2);
+
+  MCP_pinMode(hvMCP, SPICS, OUTPUT);
+  MCP_pinWrite(hvMCP, SPICS, LOW);
+
+  MCP_pinMode(hvMCP, 2, OUTPUT);
+  MCP_pinWrite(hvMCP, 2, LOW);
+
+
+  DAC8164_setup (&dac[0], hvMCP, 6, 7, 0, -1, -1);
+  DAC8164_setup (&dac[1], hvMCP, 3, 7, 0, -1, -1);
+  DAC8164_setup (&dac[2], hvMCP, 5, 7, 0, -1, -1);
+
+
+  
 }
 
 void set_hv(int channel, float value){
@@ -1131,57 +1154,41 @@ void *save_txt(void *arguments) {
   }
 }
 
-int lv_initialization() {
-  
-  pinMode(lv_global_enable, OUTPUT);
-  digitalWrite(lv_global_enable, LOW);
-
-  pinMode(lv_mcp_reset, OUTPUT);
-  digitalWrite(lv_global_enable, LOW);
-  
-  
-
-  digitalWrite(lv_mcp_reset, HIGH);
-
-  for (int i=0; i<6; i++) {
-    MCP_pinMode(lvpowerMCP,  powerChMap[i], OUTPUT);
-    MCP_pinWrite(lvpowerMCP  powerChMap[i],0)
-  }
-
-  sleep(1);
-  
-
-  
-  int file;
-  int i;
-  int res;
-  int oldvalue;
-
-  char lv_i2cname[20];
-  
-  lv_i2cbus = lookup_i2c_bus("3");
-  sprintf(lv_i2cname, "/dev/i2c-%d", 3);
-  lv_i2c = open_i2c_dev(lv_i2cbus, lv_i2cname, sizeof(lv_i2cname), 0);
-
-}
-
 
 // Function to export a GPIO pin
-int export_gpio(const char *pin) {
+int export_gpio(const char* pin) {
+  /*
+    printf("inner 1\n");
     int fd_export = open("/sys/class/gpio/export", O_WRONLY);
+    printf("inner 2\n");
     if (fd_export == -1) {
         perror("Failed to open /sys/class/gpio/export");
         return -1;
     }
+
+    printf("inner 3\n");
     
     if (write(fd_export, pin, strlen(pin)) == -1) {
         perror("Failed to export GPIO pin");
         close(fd_export);
         return -1;
     }
+
+    printf("inner 4\n");
     
     close(fd_export);
     return 0;
+  */
+
+  //char select_pin[] = 0;
+
+  FILE *sysfs_export;
+  sysfs_export = fopen("/sys/class/gpio/export", "w");
+	fwrite(pin, 1, sizeof(pin), sysfs_export);
+	fclose(sysfs_export);
+
+  printf("fine\n");
+
 }
 
 // Function to set the direction of a GPIO pin to "out"
@@ -1189,6 +1196,7 @@ int set_gpio_direction_out(const char *pin) {
     char direction_path[128];
     snprintf(direction_path, sizeof(direction_path), "/sys/class/gpio/gpio%s/direction", pin);
 
+    /*
     int fd_direction = open(direction_path, O_WRONLY);
     if (fd_direction == -1) {
         perror("Failed to open GPIO direction file");
@@ -1202,6 +1210,18 @@ int set_gpio_direction_out(const char *pin) {
     }
     
     close(fd_direction);
+    */
+
+    FILE *sysfs_export;
+    sysfs_export = fopen(direction_path, "w");
+    printf("before\n");
+    fwrite(pin, 1, sizeof(pin), sysfs_export);
+    printf("after\n");
+    fclose(sysfs_export);
+
+    printf("fine\n");
+
+    
     return 0;
 }
 
@@ -1230,63 +1250,122 @@ int write_gpio_value(const char *pin, int value) {
 }
 
 
+int lv_initialization() {
+  
+  //pinMode(lv_global_enable, OUTPUT);
+  //digitalWrite(lv_global_enable, LOW);
+
+  //pinMode(lv_mcp_reset, OUTPUT);
+  //digitalWrite(lv_global_enable, LOW);
+  
+  
+
+  //digitalWrite(lv_mcp_reset, HIGH);
+
+  set_gpio_direction_out(&lv_global_enable);
+  write_gpio_value(&lv_global_enable, LOW);
+
+  set_gpio_direction_out(&lv_mcp_reset);
+  write_gpio_value(&lv_mcp_reset, HIGH);
+
+  for (int i=0; i<6; i++) {
+    MCP_pinMode(lvpowerMCP, powerChMap[i], OUTPUT);
+    MCP_pinWrite(lvpowerMCP, powerChMap[i],0);
+  }
+
+  sleep(1);
+  
+
+  
+  int file;
+  int i;
+  int res;
+  int oldvalue;
+
+  char lv_i2cname[20];
+  
+  lv_i2cbus = lookup_i2c_bus("3");
+  sprintf(lv_i2cname, "/dev/i2c-%d", 3);
+  lv_i2c = open_i2c_dev(lv_i2cbus, lv_i2cname, sizeof(lv_i2cname), 0);
+
+}
+
+
 
 int main( int argc, char **argv )
 {
+  //a=(struct Node*)malloc(sizeof(struct Node));
+
+  hvMCP=(struct MCP*)malloc(sizeof(struct MCP*));
+  lvpowerMCP=(struct MCP*)malloc(sizeof(struct MCP*));
+  lvpgoodMCP=(struct MCP*)malloc(sizeof(struct MCP*));
+
+
 
   /**
    * @brief setup SPI comm
    * 
    */
+
   
-if ((spiFds = open (spiDev, O_RDWR)) < 0){
+if ((spiFds = open (spidev, O_RDWR)) < 0){
   printf("Unable to open SPI device: %s\n",spidev);
   return 0;
 }
+
  
-  if (ioctl (fd, SPI_IOC_WR_MODE, &spi_mode)            < 0){
-    printf("SPI Mode Change failure: %s\n",spidev)
+  if (ioctl (spiFds, SPI_IOC_WR_MODE, &spi_mode)            < 0){
+    printf("SPI Mode Change failure: %s\n",spidev);
     return 0;
   }
+
    
   
-  if (ioctl (fd, SPI_IOC_WR_BITS_PER_WORD, &spi_bpw) < 0){
+  if (ioctl (spiFds, SPI_IOC_WR_BITS_PER_WORD, &spi_bpw) < 0){
     printf("SPI BPW Change failure: %s\n",spidev);
     return 0;
   }
 
-  if (ioctl (fd, SPI_IOC_WR_MAX_SPEED_HZ, &spi_speed)   < 0){
+
+  if (ioctl (spiFds, SPI_IOC_WR_MAX_SPEED_HZ, &spi_speed)   < 0){
     printf("SPI Speed Change failure: %s\n",spidev);
     return 0;
   }
+
 
 /**
  * @brief setup MCPs with their appropriate addresses
  * 
  */
 
+
   MCP_setup(lvpowerMCP,0); //check the addresses (0?) here
+
   MCP_setup(lvpgoodMCP,1);
   MCP_setup(hvMCP,2);
 
 
+printf("one\n");
 // Export the GPIO pins
-    if (export_gpio(2) == -1) {
+char export_pin = 2;
+    if (export_gpio(&export_pin) == -1) {
         return 1;
     }
 
+    printf("two\n");
+
 // Set the GPIO pin direction to "out"
-    if (set_gpio_direction_out(2) == -1) {
+    if (set_gpio_direction_out(&export_pin) == -1) {
         return 1;
     }
     
     // Turn off the GPIO pin (set it to 1)
-    if (write_gpio_value(2, 0) == -1) {
+    if (write_gpio_value(&export_pin, 0) == -1) {
         return 1;
     }
 
     // Turn on the GPIO pin (set it to 1)
-    if (write_gpio_value(2, 1) == -1) {
+    if (write_gpio_value(&export_pin, 1) == -1) {
         return 1;
     }
 
@@ -1327,6 +1406,7 @@ if ((spiFds = open (spiDev, O_RDWR)) < 0){
   pthread_t save_thread_1;
   pthread_create(&save_thread_1, NULL, save_txt, &args_1);
   */
+
   
 
   // create socket initialization thread

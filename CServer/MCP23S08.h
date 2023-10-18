@@ -12,6 +12,13 @@
 #ifndef MCP23S08_h
 #define MCP23S08_h
 
+#define HIGH (1)
+#define LOW (0)
+#define ON (1)
+#define OFF (0)
+#define OUTPUT (0)
+#define INPUT (1)
+
 /**
  * @brief registers defintion
  *
@@ -112,15 +119,14 @@
 #include <stdint.h>
 
 
-extern uint8_t spi_bpw = 8; // bits per word
-extern uint32_t spi_speed = 40000000; // 40MHz
-extern uint16_t spi_delay = 0;
+extern uint8_t spi_bpw; // bits per word
+extern uint32_t spi_speed; // 40MHz
+extern uint16_t spi_delay;
 
-extern int         spiFds; //SPI file descriptor 
+extern int  spiFds; //SPI file descriptor 
 
 
 /**
- * @brief address = address of the MCP in use
  *
  */
 typedef struct
@@ -151,8 +157,8 @@ uint8_t MCP_byteRead(MCP *mcp, uint8_t);
 
 uint16_t MCP_pinReadAll(MCP *mcp);
 
-void MCP_maskWrite(MCP *mcp, uint8_t mask, uint8_t value);
-void MCP_maskpullupMode(MCP *mcp, uint8_t mask, uint8_t value);
-void MCP_maskpinMode(MCP *mcp, uint8_t mask, uint8_t mode);
+void MCP_maskWrite(MCP *mcp, uint16_t mask, uint8_t value);
+void MCP_maskpullupMode(MCP *mcp, uint16_t mask, uint8_t value);
+void MCP_maskpinMode(MCP *mcp, uint16_t mask, uint8_t mode);
 
 #endif // MCP23S08

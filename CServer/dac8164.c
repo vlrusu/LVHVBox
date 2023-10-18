@@ -9,13 +9,14 @@
 #include "stdint.h"
 #include "wiringPi.h"
 #include "wiringPiSPI.h"
-#include "mcp23s17.h"
+#include "MCP23S08.h"
 #include <stdio.h>
 
 #define DAC8164DELAY 2
 
 
-void DAC8164_setup(DAC8164 *self, int MCP, uint8_t sync, int sclk, uint8_t sdi, int enable_pin, uint8_t ldac_pin)
+
+void DAC8164_setup(DAC8164 *self, MCP* MCP, uint8_t sync, int sclk, uint8_t sdi, int enable_pin, uint8_t ldac_pin)
 {
   self->_MCP = MCP;
   self->_sync_pin = sync;
@@ -26,19 +27,26 @@ void DAC8164_setup(DAC8164 *self, int MCP, uint8_t sync, int sclk, uint8_t sdi, 
 
 
   if (enable_pin != -1) {
-    digitalWrite(self->_MCP + self->_enable_pin, HIGH);
-    pinMode(self->_MCP + self->_enable_pin, OUTPUT);
+    //digitalWrite(self->_MCP + self->_enable_pin, HIGH);
+    //pinMode(self->_MCP + self->_enable_pin, OUTPUT);
+
+    MCP_pinMode(self->_MCP, self->_enable_pin, OUTPUT);
+    MCP_pinWrite(self->_MCP, self->_enable_pin, HIGH);
   }
 
 
    // LDAC to low
   if (ldac_pin != -1)
   {
-    digitalWrite(self->_MCP + self->_ldac_pin, HIGH);
-    pinMode(self->_MCP + self->_ldac_pin, OUTPUT);
+    //digitalWrite(self->_MCP + self->_ldac_pin, HIGH);
+    //pinMode(self->_MCP + self->_ldac_pin, OUTPUT);
+
+    MCP_pinMode(self->_MCP, self->_ldac_pin, OUTPUT);
+    MCP_pinWrite(self->_MCP, self->_ldac_pin, HIGH);
 
   }
 
+  /*
   digitalWrite(self->_MCP + self->_sync_pin, 1);
   pinMode(self->_MCP + self->_sync_pin, OUTPUT);
 
@@ -47,6 +55,18 @@ void DAC8164_setup(DAC8164 *self, int MCP, uint8_t sync, int sclk, uint8_t sdi, 
 
   digitalWrite(self->_MCP + self->_sdi_pin, 0);
   pinMode(self->_MCP + self->_sdi_pin, OUTPUT);
+  */
+
+  MCP_pinMode(self->_MCP, self->_sync_pin, OUTPUT);
+  MCP_pinWrite(self->_MCP, self->_sync_pin, HIGH);
+
+  MCP_pinMode(self->_MCP, self->_sclk_pin, OUTPUT);
+  MCP_pinWrite(self->_MCP, self->_sclk_pin, LOW);
+
+  MCP_pinMode(self->_MCP, self->_sdi_pin, OUTPUT);
+  MCP_pinWrite(self->_MCP, self->_sdi_pin, LOW);
+
+
 
 
 }
@@ -60,11 +80,14 @@ void DAC8164_write(DAC8164 *self, uint32_t data)
 {
 
   if (self->_enable_pin != -1)
-    digitalWrite(self->_MCP + self->_enable_pin, LOW);
+    //digitalWrite(self->_MCP + self->_enable_pin, LOW);
+    MCP_pinWrite(self->_MCP, self->_enable_pin, LOW);
 
 
-  digitalWrite(self->_MCP + self->_sclk_pin, 0);
-  digitalWrite(self->_MCP + self->_sync_pin, 0);
+  //digitalWrite(self->_MCP + self->_sclk_pin, 0);
+  //digitalWrite(self->_MCP + self->_sync_pin, 0);
+  MCP_pinWrite(self->_MCP, self->_sclk_pin, LOW);
+  MCP_pinWrite(self->_MCP, self->_sync_pin, LOW);
   delayMicroseconds(DAC8164DELAY);
 
   for (int i=23;i>=0;i--){
@@ -74,18 +97,23 @@ void DAC8164_write(DAC8164 *self, uint32_t data)
     else
       thisbit = 0;
 
-    digitalWrite(self->_MCP + self->_sdi_pin, thisbit);
+    //digitalWrite(self->_MCP + self->_sdi_pin, thisbit);
+    MCP_pinWrite(self->_MCP, self->_sdi_pin, thisbit);
     delayMicroseconds(DAC8164DELAY);
-    digitalWrite(self->_MCP + self->_sclk_pin, 1);
+    //digitalWrite(self->_MCP + self->_sclk_pin, 1);
+    MCP_pinWrite(self->_MCP, self->_sclk_pin, HIGH);
     delayMicroseconds(DAC8164DELAY);
-    digitalWrite(self->_MCP + self->_sclk_pin, 0);
+    //digitalWrite(self->_MCP + self->_sclk_pin, 0);
+    MCP_pinWrite(self->_MCP, self->_sclk_pin, LOW);
     delayMicroseconds(DAC8164DELAY);
   }
 
-  digitalWrite(self->_MCP + self->_sync_pin, 1);
+  //digitalWrite(self->_MCP + self->_sync_pin, 1);
+  MCP_pinWrite(self->_MCP, self->_sync_pin, HIGH);
 
   if (self->_enable_pin != -1)
-    digitalWrite(self->_enable_pin, HIGH);
+    //digitalWrite(self->_enable_pin, HIGH);
+    MCP_pinWrite(self->_MCP, self->_enable_pin, HIGH);
 }
 
 
