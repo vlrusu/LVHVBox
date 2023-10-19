@@ -7,6 +7,7 @@ import pyqtgraph as pg
 pipe_path = "/tmp/data_pipe"
 v_pipe_path = "/tmp/vdata_pipe"  # Second pipe
 
+SPIKE_THRESHOLD = 8.
 
 # Create the named pipes if they don't exist
 for path in [pipe_path, v_pipe_path]:
@@ -30,14 +31,15 @@ class DataReceiver(QtCore.QObject):
                     data = line.split()
                     self.newData.emit(data)
 
+
 class App(QtWidgets.QMainWindow):
     def __init__(self, channel=0, parent=None):
         super(App, self).__init__(parent)
-        self.setWindowTitle('Real Time Plot from Pipe')
+        self.setWindowTitle('Current (uA) channel '+str(channel))
         self.setGeometry(100, 100, 800, 500)
 
         self.channel = channel
-        
+
         layout = QtWidgets.QVBoxLayout()
 
         # Create a horizontal layout for the plot and the button
@@ -53,9 +55,37 @@ class App(QtWidgets.QMainWindow):
         top_layout.addWidget(self.label)
         
         layout.addLayout(top_layout)
+
+
         
         self.plotWidget = pg.PlotWidget()
         layout.addWidget(self.plotWidget)
+
+        self.spikesPerHour = np.zeros(72)
+        self.currentHourSpikes = 0
+
+        # Histogram plot
+        self.histogramWidget = pg.PlotWidget()
+        layout.addWidget(self.histogramWidget,stretch=1)  # This adds the histogram plot below the main plot
+
+        # Set up some sample histogram data (you can replace this with your actual data)
+        self.histogram = pg.BarGraphItem(x=np.arange(72)-0.5, height=self.spikesPerHour, width=1, brush='b')
+        self.histogramWidget.addItem(self.histogram)
+        
+        
+#        self.secondaryCurve = self.secondaryPlotWidget.plot()
+
+        # Set up a timer to update this plot once a minute
+        self.secondaryTimer = QtCore.QTimer(self)
+        self.secondaryTimer.timeout.connect(self.update_hourly_count)
+        self.secondaryTimer.start(20 * 1000)  # Every 60,000 ms or 1 minute
+
+
+        # Set up a timer to update to reset the spike plot
+        self.thirdTimer = QtCore.QTimer(self)
+        self.thirdTimer.timeout.connect(self.reset_hourly_count)
+        self.thirdTimer.start(40 * 1000)  # Every 60,000 ms or 1 minute
+        
         
         central_widget = QtWidgets.QWidget()
         central_widget.setLayout(layout)
@@ -86,6 +116,24 @@ class App(QtWidgets.QMainWindow):
         self.timer.start(1000)  # Every 1000 ms or 1 second
 
 
+
+    def update_hourly_count(self):
+
+
+        print(self.currentHourSpikes)
+        self.spikesPerHour[-1] = self.spikesPerHour[-1] + self.currentHourSpikes
+        self.histogram.setOpts(height=self.spikesPerHour)
+
+
+
+    def reset_hourly_count(self):
+
+        self.spikesPerHour[-1] = self.spikesPerHour[-1] + self.currentHourSpikes
+        self.spikesPerHour = np.roll(self.spikesPerHour, -1)  # Shift data to make space for new hour
+        self.currentHourSpikes = 0
+
+        
+
     def check_file_for_trigger(self):
         # Define the path of the file that contains the number.
         # Modify this path as needed.
@@ -112,9 +160,17 @@ class App(QtWidgets.QMainWindow):
     def update_plot(self, value):
         if self.paused:  # Check if paused
             return
-        self.data = np.append(self.data, float(value[self.channel]))[-10000:]
+
+        thissample = float(value[self.channel])
+        self.data = np.append(self.data, thissample)[-10000:]
+
+        if thissample > SPIKE_THRESHOLD:
+            self.currentHourSpikes += 1
+
         self.curve.setData(self.data)
 
+
+        
 
     def update_label(self, value):
         """Update the label with the data from the second pipe."""
