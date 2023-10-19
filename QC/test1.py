@@ -33,7 +33,7 @@ class DataReceiver(QtCore.QObject):
 class App(QtWidgets.QMainWindow):
     def __init__(self, channel=0, parent=None):
         super(App, self).__init__(parent)
-        self.setWindowTitle('Real Time Plot from Pipe')
+        self.setWindowTitle('Current (uA) channel '+str(channel))
         self.setGeometry(100, 100, 800, 500)
 
         self.channel = channel
@@ -133,7 +133,7 @@ if __name__ == "__main__":
     mainWindow1 = App(0)
     mainWindow1.show()
 
-    mainWindow2 = App(1)
+    mainWindow2 = App(2)
     mainWindow2.show()
 
     receiver = DataReceiver(pipe_path)
