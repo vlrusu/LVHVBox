@@ -189,7 +189,7 @@ if __name__ == "__main__":
     mainWindow1 = App(0)
     mainWindow1.show()
 
-    mainWindow2 = App(1)
+    mainWindow2 = App(2)
     mainWindow2.show()
 
     receiver = DataReceiver(pipe_path)
