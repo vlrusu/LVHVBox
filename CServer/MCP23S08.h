@@ -161,4 +161,7 @@ void MCP_maskWrite(MCP *mcp, uint16_t mask, uint8_t value);
 void MCP_maskpullupMode(MCP *mcp, uint16_t mask, uint8_t value);
 void MCP_maskpinMode(MCP *mcp, uint16_t mask, uint8_t mode);
 
+void lv_spi_pin_init();
+
+
 #endif // MCP23S08

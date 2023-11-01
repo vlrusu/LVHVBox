@@ -23,9 +23,13 @@
 #include <netinet/in.h>
 
 
+
+#include <mcp23s08.h>
+#include <softPwm.h>
 #include <linux/spi/spidev.h>
 #include "dac8164.h"
 #include "MCP23S08.h"
+#include "gpio.h"
 
 
 
@@ -40,7 +44,8 @@
 #include <i2c/smbus.h>
 #include "i2cbusses.h"
 
-
+#define LVPINBASE    1000 // LV mcp pin base
+#define HVPINBASE 2000 // HV mcp pin base
 
 // ----- libusb constants and variables ----- //
 #define HISTORY_LENGTH  100
@@ -79,8 +84,8 @@ float currents_1[6];
 
 // LV channel information
 uint8_t powerChMap[6] = {5, 6, 7, 2, 3, 4};
-uint8_t lv_mcp_reset = 2;
-uint8_t lv_global_enable = 1;
+uint8_t lv_mcp_reset = 3;
+uint8_t lv_global_enable = 18;
 
 typedef struct {
   float all_currents[6][HISTORY_LENGTH];
@@ -118,6 +123,8 @@ MCP* lvpowerMCP;
 MCP* lvpgoodMCP;
 
 
+
+#define SPISPEED 40000000
 #define NSTEPS 200
 #define SPICS 0
 
@@ -179,60 +186,42 @@ float i2c_ltc2497(int address, int channelLTC){
   return val*vref/max_reading;
 }
 
+
+
 void powerOn(uint8_t channel) {
-  //digitalWrite(lv_global_enable, HIGH);
+
+  write_gpio_value(lv_global_enable, HIGH);
+  
   if (channel == 6) {
     for (int i=0; i<6; i++) {
-      //digitalWrite(LVPINBASE+powerChMap[i], 1);
-      ;
+      MCP_pinWrite(lvpgoodMCP, powerChMap[i], HIGH);
     }
   } else {
-    //digitalWrite(LVPINBASE+powerChMap[channel], 1);
-    ;
+    MCP_pinWrite(lvpgoodMCP, powerChMap[channel], HIGH);
+    
   }
+
 }
 
 void powerOff(uint8_t channel) {
   if (channel == 6) {
-    //digitalWrite(lv_global_enable, LOW);
+    write_gpio_value(lv_global_enable, LOW);
+    
     for (int i=0; i<6; i++) {
-      //digitalWrite(LVPINBASE+powerChMap[i], 0);
-      ;
+      MCP_pinWrite(lvpgoodMCP, powerChMap[i], LOW);
     }
   } else {
-    //digitalWrite(LVPINBASE+powerChMap[channel], 0);
-    ;
+    MCP_pinWrite(lvpgoodMCP, powerChMap[channel], LOW);
   }
 }
 
-
-
-
-
-
-
 void hv_initialization(){
-  //setup MCP
-  //int retc = mcp23s08Setup (hvMCP, SPICS, 2);
-  //printf("mcp setup done %d\n",retc);
 
-  //set RESET to DACs to low
-  //digitalWrite (HVPINBASE+4, 0);
-
-  //pinMode(HVPINBASE+4, OUTPUT);
-
-  //set LDAC to DACs to low
-  //digitalWrite (HVPINBASE+2, 0);
-  //pinMode(HVPINBASE+2, OUTPUT);
-
-  MCP_setup(hvMCP, 2);
-
-  MCP_pinMode(hvMCP, SPICS, OUTPUT);
-  MCP_pinWrite(hvMCP, SPICS, LOW);
+  MCP_pinMode(hvMCP, 4, OUTPUT);
+  MCP_pinMode(hvMCP, 4, LOW);
 
   MCP_pinMode(hvMCP, 2, OUTPUT);
   MCP_pinWrite(hvMCP, 2, LOW);
-
 
   DAC8164_setup (&dac[0], hvMCP, 6, 7, 0, -1, -1);
   DAC8164_setup (&dac[1], hvMCP, 3, 7, 0, -1, -1);
@@ -453,7 +442,7 @@ void trip_status(uint8_t channel, int client_addr) {
     libusb_bulk_transfer(device_handle_1, 0x82, input_data, sizeof(input_data), 0, 0);
   }
 
-  float return_val = 1;
+  uint8_t return_val = 1;
 
   if ((*input_data & 1<<(channel)) == 0) {
     return_val = 0;
@@ -1155,123 +1144,25 @@ void *save_txt(void *arguments) {
 }
 
 
-// Function to export a GPIO pin
-int export_gpio(const char* pin) {
-  /*
-    printf("inner 1\n");
-    int fd_export = open("/sys/class/gpio/export", O_WRONLY);
-    printf("inner 2\n");
-    if (fd_export == -1) {
-        perror("Failed to open /sys/class/gpio/export");
-        return -1;
-    }
-
-    printf("inner 3\n");
-    
-    if (write(fd_export, pin, strlen(pin)) == -1) {
-        perror("Failed to export GPIO pin");
-        close(fd_export);
-        return -1;
-    }
-
-    printf("inner 4\n");
-    
-    close(fd_export);
-    return 0;
-  */
-
-  //char select_pin[] = 0;
-
-  FILE *sysfs_export;
-  sysfs_export = fopen("/sys/class/gpio/export", "w");
-	fwrite(pin, 1, sizeof(pin), sysfs_export);
-	fclose(sysfs_export);
-
-  printf("fine\n");
-
-}
-
-// Function to set the direction of a GPIO pin to "out"
-int set_gpio_direction_out(const char *pin) {
-    char direction_path[128];
-    snprintf(direction_path, sizeof(direction_path), "/sys/class/gpio/gpio%s/direction", pin);
-
-    /*
-    int fd_direction = open(direction_path, O_WRONLY);
-    if (fd_direction == -1) {
-        perror("Failed to open GPIO direction file");
-        return -1;
-    }
-    
-    if (write(fd_direction, "out", 3) == -1) {
-        perror("Failed to set GPIO direction to 'out'");
-        close(fd_direction);
-        return -1;
-    }
-    
-    close(fd_direction);
-    */
-
-    FILE *sysfs_export;
-    sysfs_export = fopen(direction_path, "w");
-    printf("before\n");
-    fwrite(pin, 1, sizeof(pin), sysfs_export);
-    printf("after\n");
-    fclose(sysfs_export);
-
-    printf("fine\n");
-
-    
-    return 0;
-}
-
-// Function to write a value (1 or 0) to a GPIO pin
-int write_gpio_value(const char *pin, int value) {
-    char value_path[128];
-    snprintf(value_path, sizeof(value_path), "/sys/class/gpio/gpio%s/value", pin);
-
-    int fd_value = open(value_path, O_WRONLY);
-    if (fd_value == -1) {
-        perror("Failed to open GPIO value file");
-        return -1;
-    }
-    
-    char buffer[2];
-    snprintf(buffer, sizeof(buffer), "%d", value);
-    
-    if (write(fd_value, buffer, 1) == -1) {
-        perror("Failed to write GPIO value");
-        close(fd_value);
-        return -1;
-    }
-    
-    close(fd_value);
-    return 0;
-}
 
 
 int lv_initialization() {
-  
-  //pinMode(lv_global_enable, OUTPUT);
-  //digitalWrite(lv_global_enable, LOW);
-
-  //pinMode(lv_mcp_reset, OUTPUT);
-  //digitalWrite(lv_global_enable, LOW);
-  
-  
-
-  //digitalWrite(lv_mcp_reset, HIGH);
-
-  set_gpio_direction_out(&lv_global_enable);
-  write_gpio_value(&lv_global_enable, LOW);
-
-  set_gpio_direction_out(&lv_mcp_reset);
-  write_gpio_value(&lv_mcp_reset, HIGH);
+  export_gpio(lv_global_enable);
+  set_gpio_direction_out(lv_global_enable);
+  write_gpio_value(lv_global_enable, LOW);
 
   for (int i=0; i<6; i++) {
-    MCP_pinMode(lvpowerMCP, powerChMap[i], OUTPUT);
-    MCP_pinWrite(lvpowerMCP, powerChMap[i],0);
+    MCP_pinMode(lvpgoodMCP, powerChMap[i], OUTPUT);
+
+    MCP_pinWrite(lvpgoodMCP, powerChMap[i],0);
   }
+  printf("after all pinwrites\n");
+
+
+
+  
+
+  
 
   sleep(1);
   
@@ -1294,12 +1185,8 @@ int lv_initialization() {
 
 int main( int argc, char **argv )
 {
-  //a=(struct Node*)malloc(sizeof(struct Node));
-
-  hvMCP=(struct MCP*)malloc(sizeof(struct MCP*));
-  lvpowerMCP=(struct MCP*)malloc(sizeof(struct MCP*));
-  lvpgoodMCP=(struct MCP*)malloc(sizeof(struct MCP*));
-
+  hvMCP=(MCP*)malloc(sizeof(struct MCP*));
+  lvpgoodMCP=(MCP*)malloc(sizeof(struct MCP*));
 
 
   /**
@@ -1337,44 +1224,39 @@ if ((spiFds = open (spidev, O_RDWR)) < 0){
  * @brief setup MCPs with their appropriate addresses
  * 
  */
-
-
-  MCP_setup(lvpowerMCP,0); //check the addresses (0?) here
-
-  MCP_setup(lvpgoodMCP,1);
-  MCP_setup(hvMCP,2);
-
-
-printf("one\n");
+  
 // Export the GPIO pins
-char export_pin = 2;
-    if (export_gpio(&export_pin) == -1) {
+
+    if (export_gpio(lv_mcp_reset) == -1) {
         return 1;
     }
 
-    printf("two\n");
 
 // Set the GPIO pin direction to "out"
-    if (set_gpio_direction_out(&export_pin) == -1) {
+    if (set_gpio_direction_out(lv_mcp_reset) == -1) {
         return 1;
     }
+
+
     
     // Turn off the GPIO pin (set it to 1)
-    if (write_gpio_value(&export_pin, 0) == -1) {
+    if (write_gpio_value(lv_mcp_reset, 0) == -1) {
         return 1;
     }
 
     // Turn on the GPIO pin (set it to 1)
-    if (write_gpio_value(&export_pin, 1) == -1) {
+    if (write_gpio_value(lv_mcp_reset, 1) == -1) {
         return 1;
     }
 
   
+  MCP_setup(hvMCP,2);
+  MCP_setup(lvpgoodMCP,1);
+  
 
-  lv_initialization();
-
-  sleep(1);
   hv_initialization();
+  lv_initialization();
+  
 
 
 
@@ -1406,7 +1288,6 @@ char export_pin = 2;
   pthread_t save_thread_1;
   pthread_create(&save_thread_1, NULL, save_txt, &args_1);
   */
-
   
 
   // create socket initialization thread
