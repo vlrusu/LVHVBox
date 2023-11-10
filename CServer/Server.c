@@ -22,7 +22,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 
-
+#include <signal.h> 
 
 #include <mcp23s08.h>
 #include <softPwm.h>
@@ -30,8 +30,6 @@
 #include "dac8164.h"
 #include "MCP23S08.h"
 #include "gpio.h"
-
-
 
 #include <sys/ioctl.h>
 #include <errno.h>
@@ -81,7 +79,6 @@ float voltages_1[6];
 float currents_0[6];
 float currents_1[6];
 
-
 // LV channel information
 uint8_t powerChMap[6] = {5, 6, 7, 2, 3, 4};
 uint8_t lv_mcp_reset = 3;
@@ -103,7 +100,6 @@ typedef struct {
   int client_addr;
 } command ;
 
-
 typedef struct {
   int client_addr;
 } client_data ;
@@ -121,8 +117,6 @@ static const char* spidev = "/dev/spidev0.0"; //this is the SPI device. Assume h
 MCP* hvMCP;
 MCP* lvpowerMCP;
 MCP* lvpgoodMCP;
-
-
 
 #define SPISPEED 40000000
 #define NSTEPS 200
@@ -216,7 +210,6 @@ void powerOff(uint8_t channel) {
 }
 
 void hv_initialization(){
-
   MCP_pinMode(hvMCP, 4, OUTPUT);
   MCP_pinMode(hvMCP, 4, LOW);
 
@@ -226,9 +219,6 @@ void hv_initialization(){
   DAC8164_setup (&dac[0], hvMCP, 6, 7, 0, -1, -1);
   DAC8164_setup (&dac[1], hvMCP, 3, 7, 0, -1, -1);
   DAC8164_setup (&dac[2], hvMCP, 5, 7, 0, -1, -1);
-
-
-  
 }
 
 void set_hv(int channel, float value){
@@ -254,8 +244,7 @@ void set_hv(int channel, float value){
 }
 
 
-// queue stuff
-
+// variables to manage command queue
 # define SIZE 100
 command incoming_commands[SIZE];
 int command_array[SIZE];
@@ -286,8 +275,6 @@ void dequeue(command array[SIZE]) {
         array[i] = array[i+1];
       }
       Rear -= 1;
-
-        
     }
 }
 
@@ -296,7 +283,6 @@ void dequeue(command array[SIZE]) {
 // get_vhv
 void get_vhv(uint8_t channel, int client_addr) {
   float return_val;
-
 
   if (channel < 6) {
     return_val = voltages_0[channel];
@@ -329,15 +315,12 @@ void ramp_hv(uint8_t channel, float voltage) {
   float increment = voltage/NSTEPS;
   float current_value = 0;
 
-  
   for (int itick=0; itick<NSTEPS; itick++) {
     usleep(50000);
     current_value += increment;
 
-
     set_hv(channel, current_value);
   }
-  
 }
 
 // down_hv
@@ -358,7 +341,6 @@ void down_hv(uint8_t channel) {
     set_hv(channel,current_voltage);
   }
   set_hv(channel,0);
-
 }
 
 // trip
@@ -449,7 +431,6 @@ void trip_status(uint8_t channel, int client_addr) {
   }
 
   write(client_addr, &return_val, sizeof(&return_val));
-
 }
 
 // set_trip
@@ -474,7 +455,6 @@ void set_trip(uint8_t channel, float value, int client_addr) {
   } else {
     libusb_bulk_transfer(device_handle_1, 0x02, &send_val[0], sizeof(send_val), 0, 0);
   }
-  
 }
  
 
@@ -566,12 +546,12 @@ void *hv_request() {
     if (current_type == 'a') {
       
       // select proper hv function
-      if (current_command == 'a') {
+      if (current_command == 'a') { // get_vhv
         pthread_mutex_lock(&lock);
         dequeue(incoming_commands);
         pthread_mutex_unlock(&lock);
         get_vhv(char_parameter, client_addr);
-      } else if (current_command == 'b') {
+      } else if (current_command == 'b') { // get_ihv
         pthread_mutex_lock(&lock);
         dequeue(incoming_commands);
         pthread_mutex_unlock(&lock);
@@ -593,18 +573,16 @@ void *hv_execution() {
     float  float_parameter = check_command->float_parameter;
     int client_addr = check_command->client_addr;
     
-    
-    
     // check if command is hv type, else do nothing
     if (current_type == 'a') {
       
       // select proper hv function
-      if (current_command == 'c') {
+      if (current_command == 'c') { // ramp_hv
         pthread_mutex_lock(&lock);
         dequeue(incoming_commands);
         pthread_mutex_unlock(&lock);
         ramp_hv(char_parameter, float_parameter);
-      } else if (current_command == 'd') {
+      } else if (current_command == 'd') { // down_hv
         pthread_mutex_lock(&lock);
         dequeue(incoming_commands);
         pthread_mutex_unlock(&lock);
@@ -719,17 +697,17 @@ void *lv_execution() {
     if (current_type == 'b') {
       
       // select proper lv function
-      if (current_command == 'g') {
+      if (current_command == 'g') { // readMonV48
         readMonV48(char_parameter, client_addr);
-      } else if (current_command == 'h') {
+      } else if (current_command == 'h') { // readMonI48
         readMonI48(char_parameter, client_addr);
-      } else if (current_command == 'i') {
+      } else if (current_command == 'i') { // readMonV6
         readMonV6(char_parameter, client_addr);
-      } else if (current_command == 'j') {
+      } else if (current_command == 'j') { // readMonI6
         readMonI6(char_parameter, client_addr);
-      } else if (current_command == 'e') {
+      } else if (current_command == 'e') { // powerOn
         powerOn(char_parameter);
-      } else if (current_command == 'f') {
+      } else if (current_command == 'f') { // powerOff
         powerOff(char_parameter);
       }
       
@@ -744,6 +722,8 @@ void *lv_execution() {
 
 // ----- Code to handle socket stuff ----- //
 void *handle_client(void *args) {
+  
+
   client_data *client_information = args;
 
   int inner_socket = client_information->client_addr;
@@ -752,12 +732,15 @@ void *handle_client(void *args) {
   char flush_buffer[1];
   
   while (1) {
+    printf("Front of queue: %i\n", Front);
+    printf("Rear of queue: %i\n", Rear);
+
     // read command into buffer
     int return_val = read(inner_socket, buffer, 9);
     //read(inner_socket, NULL, 1);
     
     // if return_val is -1, terminate thread
-    if (return_val == -1) {
+    if (return_val == 0) {
       printf("Thread terminated \n");
       return 0;
     }
@@ -835,6 +818,7 @@ void *create_connections() {
         perror("accept");
         exit(EXIT_FAILURE);
     }
+    printf("inside\n");
 
     pthread_t client_thread;
     pthread_create(&client_thread, NULL, handle_client, &new_socket);
@@ -850,20 +834,15 @@ void *acquire_data(void *arguments) {
 
   uint8_t pico = common->pico;
 
-   // Our ADU's USB device handle
-	char value_str[8]; // 8-byte buffer to store string values read from device 
-			  //(7 byte string + NULL terminating character)
-    
+  // Initialize libusb
+  int result = libusb_init( NULL );
+  if ( result < 0 )
+  {
+      printf( "Error initializing libusb: %s\n", libusb_error_name( result ) );
+      exit( -1 );
+  }
 
-    // Initialize libusb
-    int result = libusb_init( NULL );
-    if ( result < 0 )
-    {
-        printf( "Error initializing libusb: %s\n", libusb_error_name( result ) );
-        exit( -1 );
-    }
-
-    // Set debugging output to max level
+  // Set debugging output to max level
 	libusb_set_option( NULL, LIBUSB_OPTION_LOG_LEVEL, LIBUSB_LOG_LEVEL_WARNING );
 
   // Open our ADU device that matches our vendor id and product id
@@ -974,8 +953,6 @@ void *acquire_data(void *arguments) {
         allow_read = 0;
       }
     }
-    
-
 
     if (allow_read == 1) {
 
@@ -1078,11 +1055,8 @@ void *acquire_data(void *arguments) {
       seconds = time(NULL);
       fprintf(fp_V, "%f\n", (float)seconds);
       fclose(fp_V);
-
     }
   }
-  
-
 }
 
 void *save_txt(void *arguments) {
@@ -1156,18 +1130,8 @@ int lv_initialization() {
 
     MCP_pinWrite(lvpgoodMCP, powerChMap[i],0);
   }
-  printf("after all pinwrites\n");
 
 
-
-  
-
-  
-
-  sleep(1);
-  
-
-  
   int file;
   int i;
   int res;
@@ -1188,31 +1152,25 @@ int main( int argc, char **argv )
   hvMCP=(MCP*)malloc(sizeof(struct MCP*));
   lvpgoodMCP=(MCP*)malloc(sizeof(struct MCP*));
 
-
   /**
    * @brief setup SPI comm
    * 
    */
 
-  
-if ((spiFds = open (spidev, O_RDWR)) < 0){
-  printf("Unable to open SPI device: %s\n",spidev);
-  return 0;
-}
+  if ((spiFds = open (spidev, O_RDWR)) < 0){
+    printf("Unable to open SPI device: %s\n",spidev);
+    return 0;
+  }
 
- 
   if (ioctl (spiFds, SPI_IOC_WR_MODE, &spi_mode)            < 0){
     printf("SPI Mode Change failure: %s\n",spidev);
     return 0;
   }
 
-   
-  
   if (ioctl (spiFds, SPI_IOC_WR_BITS_PER_WORD, &spi_bpw) < 0){
     printf("SPI BPW Change failure: %s\n",spidev);
     return 0;
   }
-
 
   if (ioctl (spiFds, SPI_IOC_WR_MAX_SPEED_HZ, &spi_speed)   < 0){
     printf("SPI Speed Change failure: %s\n",spidev);
@@ -1256,7 +1214,7 @@ if ((spiFds = open (spidev, O_RDWR)) < 0){
 
   hv_initialization();
   lv_initialization();
-  
+
 
 
 

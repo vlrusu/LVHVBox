@@ -7,8 +7,6 @@ import atexit
 import threading
 import struct
 
-CONFIG_PATH = "../config.txt"
-
 # list order is:
 #   -command name
 #   -command type
@@ -16,38 +14,27 @@ CONFIG_PATH = "../config.txt"
 #   -num float args
 #   -read bytes
 #   -allow 0 input vars
+#   -return value type: int 0 float 1 none 2
 
-valid_commands = {"get_vhv": ["a","a",1,0,4,0],
-                "get_ihv": ["b","a",1,0,4,0],
-                "ramp_hv": ["c","a",1,1,0,0],
-                "down_hv": ["d","a",1,0,0,0],
-                "trip": ["k","c",1,0,0,0],
-                "reset_trip": ["l","c",1,0,0,0],
-                "disable_trip": ["m","c",1,0,0,0],
-                "enable_trip": ["n","c",1,0,0,0],
-                "trip_status": ["o","c",1,0,4,0],
-                "set_trip": ["p","c",1,1,0,0],
-                "powerOn": ["e","b",1,0,0,1],
-                "powerOff": ["f","b",1,0,0,1],
-                "readMonV48": ["g","b",1,0,4,0],
-                "readMonI48": ["h","b",1,0,4,0],
-                "readMonV6": ["i","b",1,0,4,0],
-                "readMonI6": ["j","b",1,0,4,0],
-                "enable_ped": ['%',"c",1,0,0,0],
-                "disable_ped": ["&", "c",1,0,0,0]
+valid_commands = {"get_vhv": ["a","a",1,0,4,0,1],
+                "get_ihv": ["b","a",1,0,4,0,1],
+                "ramp_hv": ["c","a",1,1,0,0,2],
+                "down_hv": ["d","a",1,0,0,0,2],
+                "trip": ["k","c",1,0,0,0,2],
+                "reset_trip": ["l","c",1,0,0,0,2],
+                "disable_trip": ["m","c",1,0,0,0,2],
+                "enable_trip": ["n","c",1,0,0,0,2],
+                "trip_status": ["o","c",1,0,4,0,0],
+                "set_trip": ["p","c",1,1,0,0,2],
+                "powerOn": ["e","b",1,0,0,1,2],
+                "powerOff": ["f","b",1,0,0,1,2],
+                "readMonV48": ["g","b",1,0,4,0,1],
+                "readMonI48": ["h","b",1,0,4,0,1],
+                "readMonV6": ["i","b",1,0,4,0,1],
+                "readMonI6": ["j","b",1,0,4,0,1],
+                "enable_ped": ['%',"c",1,0,0,0,0],
+                "disable_ped": ["&", "c",1,0,0,0,0]
 }
-
-def open_config():
-    with open(CONFIG_PATH) as file:
-        lines = file.readlines()
-    
-    parameters = {}
-
-    for item in lines:
-        parameter = item.split(":")
-        parameters[parameter[0]] = parameter[1]
-    
-    return parameters
 
 
 
@@ -123,8 +110,6 @@ def process_input(input):
 
 
 if __name__=="__main__":
-    parameters = open_config()
-    
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     host = "127.0.0.1"
     port = 12000
@@ -175,10 +160,20 @@ if __name__=="__main__":
             sock.send(bytes(command_string,"utf-8"))
 
             # if applicable, read return value
+            return_val_type = valid_commands[processed_input[0]][6]
             if valid_commands[processed_input[0]][4] > 0:
                 temp = sock.recv(1024)
-                return_val = process_float(temp)
+
+                if return_val_type == 1:
+                    # if return value is float
+                    return_val = process_float(temp)
+                    print(return_val)
+                elif return_val_type == 0:
+                    # if return value is int
+                    return_val = int(temp[0])
+                    print(return_val)
+
                 
-                print(return_val)
+             
 
 

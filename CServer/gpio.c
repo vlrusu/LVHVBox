@@ -12,6 +12,7 @@
 #include <unistd.h> // write(), read(), close()
 
 #include <time.h>
+#include <dirent.h> 
 
 
 int microsecond_sleep(long usec)
@@ -40,30 +41,57 @@ int microsecond_sleep(long usec)
 // Function to export a GPIO pin
 int export_gpio(uint8_t pin) {
     // create pin string
+    int already_exported = 0;
     char pin_string[2];
+    char exported_string[6];
     sprintf(pin_string, "%u", pin);
-  
-    
-    int fd_export = open("/sys/class/gpio/export", O_WRONLY);
-    if (fd_export == -1) {
-        perror("Failed to open /sys/class/gpio/export");
+    sprintf(exported_string, "gpio%u", pin);
 
-        return -1;
+
+
+
+    // check if pin has been exported
+    struct dirent *de;  // Pointer for directory entry 
+    // opendir() returns a pointer of DIR type.  
+    DIR *dr = opendir("/sys/class/gpio/"); 
+  
+    if (dr == NULL)  // opendir returns NULL if couldn't open directory 
+    { 
+        printf("Could not open current directory" ); 
+        return 0; 
+    } 
+  
+    int result;
+    while ((de = readdir(dr)) != NULL)  {
+            result = strcmp(de->d_name, exported_string);
+            if (result == 0) {
+                already_exported = 1;
+            }
     }
-    
-    if (write(fd_export, pin_string, strlen(pin_string)) == -1) {
-        perror("Failed to export GPIO pin");
-        printf("failed pin: %s\n",pin_string);
+    closedir(dr);
+
+
+    if (already_exported == 0) { // check if pin is already exported or not
+        int fd_export = open("/sys/class/gpio/export", O_WRONLY);
+        if (fd_export == -1) {
+            perror("Failed to open /sys/class/gpio/export");
+
+            return -1;
+        }
+        
+        if (write(fd_export, pin_string, strlen(pin_string)) == -1) {
+            perror("Failed to export GPIO pin");
+            printf("failed pin: %s\n",pin_string);
+            close(fd_export);
+            return -1;
+        }
+        
         close(fd_export);
-        return -1;
     }
-    
-    close(fd_export);
     return 0;
     
   
 
-  //char select_pin[] = 0;
 
   
 

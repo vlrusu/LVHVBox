@@ -26,7 +26,6 @@ BATTERYTYPE = 3
 
 CONFIG_PATH = "../config.txt"
 
-
 class QC:
     def __init__(self, total_values, frequency):
 
@@ -41,6 +40,11 @@ class QC:
                 parameters[parameter[0]] = parameter[1]
         
         self.parameters = parameters
+
+
+
+
+
 
         self.total_values = total_values
         self.frequency = frequency
@@ -180,7 +184,6 @@ class QC:
         num_lines = 600
         num_chars = 78*num_lines
         avg = [0 for i in range(6)]
-
 
         with open("../" + self.parameters["CServer_Path"]+"/Currents_0.txt", "rb") as file:
             try:
