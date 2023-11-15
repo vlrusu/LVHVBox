@@ -91,7 +91,7 @@ class QC:
     
         self.t = [None for i in range(6)]
         for i in range(6):
-            self.t[i] = self.ax[i][1].text(500,100,'')
+            self.t[i] = self.ax[i][1].text(500,50,'')
         
             
 
@@ -147,10 +147,10 @@ class QC:
     
     def set_limits(self):
         for i in range(6):
-            self.ax[i][0].set_ylim(0,260) # max current of short term plot
+            self.ax[i][0].set_ylim(0,60) # max current of short term plot
             self.ax[i][0].set_xlim(0,self.short_plot_length/self.frequency) # max time of short term plot in seconds
 
-            self.ax[i][1].set_ylim(0,260) # max current of long term plot
+            self.ax[i][1].set_ylim(0,60) # max current of long term plot
             self.ax[i][1].set_xlim(0,600) # max time of long term plot in seconds
 
             #[i].set_ylim(0,2000)
@@ -186,6 +186,7 @@ class QC:
         avg = [0 for i in range(6)]
 
         with open("../" + self.parameters["CServer_Path"]+"/Currents_0.txt", "rb") as file:
+
             try:
                 file.seek(-num_chars, os.SEEK_END)
                 while file.read(1) != b'\n':
@@ -222,7 +223,9 @@ class QC:
         potential_maxes=[]
         
 
+
         with open("../" + self.parameters["CServer_Path"]+"/Currents_0.txt", "rb") as file:
+
             try:
                 file.seek(-num_chars, os.SEEK_END)
                 while file.read(1) != b'\n':
@@ -274,7 +277,9 @@ class QC:
         self.short_current = np.delete(self.short_current,np.arange(0,len(self.short_current[0])-self.short_plot_length),1)
 
         avg = [0 for i in range(6)]
+
         with open("../" + self.parameters["CServer_Path"]+"/Voltages_0.txt", "rb") as file:
+
             try:
                 num_lines = 10
                 num_chars = 78*num_lines
