@@ -31,6 +31,7 @@
 
 #include "MCP23S08.h"
 #include "gpio.h"
+#include "utils.h"
 
 #include <sys/ioctl.h>
 #include <errno.h>
@@ -140,6 +141,7 @@ const char *LIVE_STATUS_FILENAME = "live_status.txt";
 #define V_PIPE_PATH "/tmp/vdata_pipe"
 #define ALPHA 0.1 // Choose a value between 0 and 1. Smaller values result in heavier filtering.
 #define DECIMATION_FACTOR 5
+
 
 float i2c_ltc2497(int address, int channelLTC)
 {
@@ -336,9 +338,8 @@ void ramp_hv(uint8_t channel, float voltage) {
   }
 }
 
-// down_hv
-void down_hv(uint8_t channel)
-{
+
+void down_hv(uint8_t channel) {
   float current_voltage;
   if (channel < 6)
   {
