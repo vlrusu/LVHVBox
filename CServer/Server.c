@@ -141,6 +141,7 @@ const char *LIVE_STATUS_FILENAME = "live_status.txt";
 #define V_PIPE_PATH "/tmp/vdata_pipe"
 #define ALPHA 0.1 // Choose a value between 0 and 1. Smaller values result in heavier filtering.
 #define DECIMATION_FACTOR 5
+uint8_t use_pipe = 1; // when server tries to open pipe, will be set to 0 upon fail - will then assume pipe is not to be used
 
 
 float i2c_ltc2497(int address, int channelLTC)
@@ -883,6 +884,9 @@ void *acquire_data(void *arguments)
     if (mkfifo(V_PIPE_PATH, 0666) == -1)
     {
       perror("Failed to create named pipe");
+
+      // ensure that pipe isn't used - would result in failure
+      use_pipe = 0;
     }
   }
 
@@ -890,6 +894,9 @@ void *acquire_data(void *arguments)
   if (vfd == -1)
   {
     perror("Error opening pipe");
+
+    // ensure that pipe isn't used - would result in failure
+    use_pipe = 0;
   }
 
   while (1)
@@ -1109,8 +1116,13 @@ void *acquire_data(void *arguments)
         for (int channel = 0; channel < 6; channel++)
         {
           fprintf(fp_V, "%f ", voltages_0[channel]);
-          int length = snprintf(buffer, sizeof(buffer), "%f ", voltages_0[channel]);
-          write(vfd, buffer, length); // Write to the pipe
+
+          // only write to pipe if connection was properly established earlier
+          if (use_pipe == 1) {
+            int length = snprintf(buffer, sizeof(buffer), "%f ", voltages_0[channel]);
+            write(vfd, buffer, length); // Write to the pipe
+          }
+
         }
       }
       else
@@ -1124,8 +1136,8 @@ void *acquire_data(void *arguments)
       fprintf(fp_V, "%f\n", (float)seconds);
 
 
-      if (pico == 0)
-      {
+      // only write to pipe if connection was properly established earlier
+      if (pico == 0 && use_pipe == 1) {
         char buffer[1024]; // A buffer to format and write data
         int length = snprintf(buffer, sizeof(buffer), "\n");
         write(vfd, buffer, length); // Write to the pipe
@@ -1158,6 +1170,8 @@ void *save_txt(void *arguments)
     if (mkfifo(PIPE_PATH, 0666) == -1)
     {
       perror("Failed to create named pipe");
+
+      use_pipe = 0; // ensure that pipe isn't used if failed
     }
   }
 
@@ -1165,6 +1179,8 @@ void *save_txt(void *arguments)
   if (fd == -1)
   {
     perror("Error opening pipe");
+
+    use_pipe = 0; // ensure that pipe isn't used if failed
   }
 
   if (pico == 0)
@@ -1215,7 +1231,7 @@ void *save_txt(void *arguments)
             last_output[channel] = filtered_value;
 
             // Decimation by 5: Only write every 5th sample
-            if (time_index % DECIMATION_FACTOR == 0)
+            if (time_index % DECIMATION_FACTOR == 0 && use_pipe == 1)
             {
               int length = snprintf(buffer, sizeof(buffer), "%f ", filtered_value);
               fprintf(fp_I, "%f ", filtered_value);
@@ -1223,7 +1239,7 @@ void *save_txt(void *arguments)
             }
           }
 
-          if (time_index % DECIMATION_FACTOR == 0)
+          if (time_index % DECIMATION_FACTOR == 0 && use_pipe == 1)
           {
             int length = snprintf(buffer, sizeof(buffer), "\n");
             fprintf(fp_I, "\n");
@@ -1406,14 +1422,6 @@ int main( int argc, char **argv ) {
   {
     sleep(100);
   }
-
-  // pthread_cancel(acquisition_thread_0);
-  // pthread_cancel(save_thread_0);
-
-  // pthread_cancel(acquisition_thread_1);
-  // pthread_cancel(save_thread_1);
-
-  // pthread_cancel(socket_creation_thread);
 
   return 0;
 }
