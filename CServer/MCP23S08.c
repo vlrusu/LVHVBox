@@ -40,7 +40,7 @@ void MCP_setup(MCP* mcp, uint8_t address)
   MCP_byteWrite(mcp, IOCON, IOCON_INIT);
 };
 
-void MCP_byteWrite(MCP *mcp, uint8_t reg, uint8_t value)
+int MCP_byteWrite(MCP *mcp, uint8_t reg, uint8_t value)
 { // Accept the register and byte
 
   uint8_t tx_buf[3];
@@ -60,12 +60,13 @@ void MCP_byteWrite(MCP *mcp, uint8_t reg, uint8_t value)
 
 
   // do the SPI transaction
-  if ((ioctl(spiFds, SPI_IOC_MESSAGE(1), &spi) < 0))
-  {
-    printf(
-        "mcp23s08_write_reg: There was a error during the SPI "
-        "transaction.\n");
+  if ((ioctl(spiFds, SPI_IOC_MESSAGE(1), &spi) < 0)) {
+    perror("mcp23s08_write_reg: Error during SPI transaction.");
+
+    return -1;
   }
+
+  return 0; // return value for succesful execution
 
 }
 
@@ -88,11 +89,8 @@ uint8_t MCP_byteRead(MCP *mcp, uint8_t reg)
   spi.bits_per_word = spi_bpw;
 
   // do the SPI transaction
-  if ((ioctl(spiFds, SPI_IOC_MESSAGE(1), &spi) < 0))
-  {
-    printf(
-        "mcp23s08_read_reg: There was a error during the SPI "
-        "transaction.\n");
+  if ((ioctl(spiFds, SPI_IOC_MESSAGE(1), &spi) < 0)) {
+    perror("mcp23s08_read_reg: Error during SPI transaction.")
     return -1;
   }
 
@@ -103,13 +101,12 @@ uint8_t MCP_byteRead(MCP *mcp, uint8_t reg)
 
 // MODE SETTING FUNCTIONS - BY PIN
 
-void MCP_pinMode(MCP *mcp, uint8_t pin, uint8_t mode)
+int MCP_pinMode(MCP *mcp, uint8_t pin, uint8_t mode)
 { // Accept the pin # and I/O mode
 
-  if (pin > 16)
-  {
-    printf("pin outta bounds\n");
-    return;
+  if (pin > 16) {
+    perror("MCP_pinMode: Pin out of bounds.")
+    return -1;
   }
   if (mode == MCP_INPUT)
   {                                // Determine the mode before changing the bit state in the mode cache
@@ -119,59 +116,17 @@ void MCP_pinMode(MCP *mcp, uint8_t pin, uint8_t mode)
   {
     mcp->_modeCache &= ~(1 << (pin)); // If not, the mode must be output, so and in a 0 in the appropriate place
   }
-  MCP_byteWrite(mcp, IODIR, mcp->_modeCache);
-}
 
-void MCP_maskpinMode(MCP *mcp, uint16_t mask, uint8_t mode)
-{
-  // idea here is that all devices off the MCP do the same thing
-
-  if (mode == MCP_INPUT)
-    mcp->_modeCache = (mcp->_modeCache & ~mask) | (0xffff & mask);
-  else
-    mcp->_modeCache = (mcp->_modeCache & ~mask) | (0 & mask);
-
-  MCP_maskWrite(mcp, IODIR, mcp->_modeCache);
-}
-
-// THE FOLLOWING WRITE FUNCTIONS ARE NEARLY IDENTICAL TO THE FIRST AND ARE NOT INDIVIDUALLY COMMENTED
-
-// WEAK PULL-UP SETTING FUNCTIONS - BY WORD AND BY PIN
-
-void MCP_pullupMode(MCP *mcp, uint8_t pin, uint8_t mode)
-{
-
-  if (pin > 16)
-  {
-    printf("pin outta bounds\n");
-    return;
+  if (MCP_byteWrite(mcp, IODIR, mcp->_modeCache) == -1) {
+    return -1; // return -1 upon bytewrite failure
   }
-  if (mode == ON)
-  {
-    mcp->_pullupCache |= 1 << (pin);
-  }
-  else
-  {
-    mcp->_pullupCache &= ~(1 << (pin));
-  }
-  MCP_maskWrite(mcp, GPPU, mcp->_pullupCache);
-}
 
-void MCP_maskpullupMode(MCP *mcp, uint16_t mask, uint8_t mode)
-{
-  // idea here is that all devices off the MCP do the same thing
-
-  if (mode == ON)
-    mcp->_pullupCache = (mcp->_pullupCache & ~mask) | (0xffff & mask);
-  else
-    mcp->_pullupCache = (mcp->_pullupCache & ~mask) | (0 & mask);
-
-  MCP_maskWrite(mcp, GPPU, mcp->_pullupCache);
+  return 0;
 }
 
 // WRITE FUNCTIONS
 
-void MCP_pinWrite(MCP *mcp, uint8_t pin, uint8_t value)
+int MCP_pinWrite(MCP *mcp, uint8_t pin, uint8_t value)
 {
   if (pin > 16)
   {
@@ -180,25 +135,15 @@ void MCP_pinWrite(MCP *mcp, uint8_t pin, uint8_t value)
     return;
   }
 
-  if (value)
-  {
+  if (value) {
     mcp->_outputCache |= 1 << (pin);
-  }
-  else
-  {
+  } else {
     mcp->_outputCache &= ~(1 << (pin));
   }
-  MCP_byteWrite(mcp, GPIO, mcp->_outputCache);
-}
+  
+  if (MCP_byteWrite(mcp, GPIO, mcp->_outputCache) == -1) {
+    return -1;
+  }
 
-void MCP_maskWrite(MCP *mcp, uint16_t mask, uint8_t value)
-{
-  // idea here is that all devices off the MCP do the same thing
-
-  if (value)
-    mcp->_outputCache = (mcp->_outputCache & ~mask) | (0xffff & mask);
-  else
-    mcp->_outputCache = (mcp->_outputCache & ~mask) | (0 & mask);
-
-  MCP_maskWrite(mcp, GPIO, mcp->_outputCache);
+  return 0;
 }
