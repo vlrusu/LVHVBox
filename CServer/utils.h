@@ -21,6 +21,7 @@ typedef struct
 
 int msleep(long msec);
 int write_fixed_location(const char *filename, long position, int value);
+char* load_config(char* constant_name);
 
 
 #endif
