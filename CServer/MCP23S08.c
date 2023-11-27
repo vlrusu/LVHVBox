@@ -139,7 +139,7 @@ int MCP_pinWrite(MCP *mcp, uint8_t pin, uint8_t value)
   {
     
     printf("pin outta bounds: %d\n",pin);
-    return;
+    return -1;
   }
 
   if (value) {
