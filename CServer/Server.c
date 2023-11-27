@@ -103,6 +103,14 @@ typedef struct
 } arg_struct;
 
 // ----- Structures used in server communications with clients ----- //
+typedef struct
+{
+  char command_name;
+  char command_type;
+  uint8_t char_parameter;
+  float float_parameter;
+  int client_addr;
+} command;
 
 
 typedef struct {
@@ -119,6 +127,7 @@ static const uint8_t spi_mode = 0;
 
 static const char* spidev = "/dev/spidev0.0"; //this is the SPI device. Assume here that there is only one SPI bus
 
+
 MCP* hvMCP;
 MCP* lvpowerMCP;
 MCP* lvpgoodMCP;
@@ -133,40 +142,6 @@ const char *LIVE_STATUS_FILENAME = "live_status.txt";
 #define V_PIPE_PATH "/tmp/vdata_pipe"
 #define ALPHA 0.1 // Choose a value between 0 and 1. Smaller values result in heavier filtering.
 #define DECIMATION_FACTOR 5
-uint8_t use_pipe = 1; // when server tries to open pipe, will be set to 0 upon fail - will then assume pipe is not to be used
-
-
-// variables to manage command queue
-command incoming_commands[COMMAND_LENGTH];
-int command_array[COMMAND_LENGTH];
-int Rear = -1;
-int Front = 0;
-
-command add_command;
-
-
-void enqueue(command array[COMMAND_LENGTH], command insert_item) {
-    if (Rear == COMMAND_LENGTH - 1)
-       printf("Overflow \n");
-    else
-    {      
-        Rear = Rear + 1;
-        array[Rear] = insert_item;
-    }
-} 
- 
-void dequeue(command array[COMMAND_LENGTH]) {
-    if (Front == - 1 || Front > Rear) {
-        printf("Underflow \n");
-        return ;
-    } else {
-      for (int i=0; i<COMMAND_LENGTH-1; i++) {
-        array[i] = array[i+1];
-      }
-    }
-    Rear -= 1;
-}
-
 
 
 float i2c_ltc2497(int address, int channelLTC)
@@ -185,7 +160,7 @@ float i2c_ltc2497(int address, int channelLTC)
   if (write(lv_i2c, block, length) != length) // write() returns the number of bytes actually written, if it doesn't match then an error occurred (e.g. no response from the device)
   {
     /* ERROR HANDLING: i2c transaction failed */
-    perror("Failed to write to the i2c bus.");
+    printf("Failed to write to the i2c bus.\n");
     return -1;
   }
 
@@ -196,7 +171,7 @@ float i2c_ltc2497(int address, int channelLTC)
   if (read(lv_i2c, block, length) != length) // read() returns the number of bytes actually read, if it doesn't match then an error occurred (e.g. no response from the device)
   {
     // ERROR HANDLING: i2c transaction failed
-    perror("Failed to read from the i2c bus.");
+    printf("Failed to read from the i2c bus.\n");
     return -1;
   }
 
@@ -207,83 +182,118 @@ float i2c_ltc2497(int address, int channelLTC)
 
 
 
-int powerOn(uint8_t channel) {
-  if (write_gpio_value(lv_global_enable, HIGH) == -1) {
-    perror("poweron error 0");
-    return -1;
-  }
+void powerOn(uint8_t channel) {
+
+  write_gpio_value(lv_global_enable, HIGH);
   
   if (channel == 6) {
     for (int i=0; i<6; i++) {
-      if (MCP_pinWrite(lvpgoodMCP, powerChMap[i], HIGH) == -1) {
-        perror("poweron error 1");
-        return -1;
-      }
+      MCP_pinWrite(lvpgoodMCP, powerChMap[i], HIGH);
     }
   } else {
-    if (MCP_pinWrite(lvpgoodMCP, powerChMap[channel], HIGH) == -1) {
-      perror("poweron error 2");
-      return -1;
-    }
+    MCP_pinWrite(lvpgoodMCP, powerChMap[channel], HIGH);
+    
+
   }
 
-  return 0;
 }
 
-int powerOff(uint8_t channel) {
+void powerOff(uint8_t channel) {
   if (channel == 6) {
-    if (write_gpio_value(lv_global_enable, LOW) == -1) {
-      perror("poweroff error 0");
-      return -1;
-    }
+    write_gpio_value(lv_global_enable, LOW);
     
     for (int i=0; i<6; i++) {
-      if (MCP_pinWrite(lvpgoodMCP, powerChMap[i], LOW) == -1) {
-        perror("poweroff error 1");
-        return -1;
-      }
+      MCP_pinWrite(lvpgoodMCP, powerChMap[i], LOW);
     }
   } else {
-    if (MCP_pinWrite(lvpgoodMCP, powerChMap[channel], LOW) == -1) {
-      perror("poweroff error 2");
-      return -1;
-    }
+    MCP_pinWrite(lvpgoodMCP, powerChMap[channel], LOW);
   }
-
-  return 0;
 }
 
-int hv_initialization(){
-  if (MCP_pinMode(hvMCP, 4, OUTPUT) == -1) {
-    return -1;
-  } else if (MCP_pinMode(hvMCP, 4, LOW) == -1) {
-    return -1;
-  } else if (MCP_pinMode(hvMCP, 2, OUTPUT) == -1) {
-    return -1;
-  } else if (MCP_pinWrite(hvMCP, 2, LOW) == -1) {
-    return -1;
-  } else if (DAC8164_setup (&dac[0], hvMCP, 6, 7, 0, -1, -1) == -1) {
-    return -1;
-  } else if (DAC8164_setup (&dac[1], hvMCP, 3, 7, 0, -1, -1) == -1) {
-    return -1;
-  } else if (DAC8164_setup (&dac[2], hvMCP, 5, 7, 0, -1, -1) == -1) {
-    return -1;
-  }
+void hv_initialization(){
+  MCP_pinMode(hvMCP, 4, OUTPUT);
+  MCP_pinMode(hvMCP, 4, LOW);
 
-  return 0;
+  MCP_pinMode(hvMCP, 2, OUTPUT);
+  MCP_pinWrite(hvMCP, 2, LOW);
+
+  DAC8164_setup (&dac[0], hvMCP, 6, 7, 0, -1, -1);
+  DAC8164_setup (&dac[1], hvMCP, 3, 7, 0, -1, -1);
+  DAC8164_setup (&dac[2], hvMCP, 5, 7, 0, -1, -1);
+
 }
 
 void set_hv(int channel, float value)
 {
   int idac = (int)(channel / 4);
-  float alphas[12] = {0.9, 0.9, 0.885, 0.9, 0.9012, 0.9034, 0.9009, 0.9027, 0.8977, 0.9012, 0.9015, 1.};
 
-  uint32_t digvalue = ((int)(alphas[channel] * 16383. * (value / 1631.3))) & 0x3FFF;
+  float alpha = 1.;
+  if (channel == 0)
+    alpha = 0.90;
+  if (channel == 1)
+    alpha = 0.90;
+  if (channel == 2)
+    alpha = 0.885;
+  if (channel == 3)
+    alpha = 0.90;
+  if (channel == 4)
+    alpha = 0.9012;
+  if (channel == 5)
+    alpha = 0.9034;
+  if (channel == 6)
+    alpha = 0.9009;
+  if (channel == 7)
+    alpha = 0.9027;
+  if (channel == 8)
+    alpha = 0.8977;
+  if (channel == 9)
+    alpha = 0.9012;
+  if (channel == 10)
+    alpha = 0.9015;
+  if (channel == 11)
+    alpha = 1.; // BURNED BOARD - FIX ME!!
+
+  uint32_t digvalue = ((int)(alpha * 16383. * (value / 1631.3))) & 0x3FFF;
 
   DAC8164_writeChannel(&dac[idac], channel, digvalue);
 }
 
 
+// variables to manage command queue
+# define SIZE 100
+
+
+command incoming_commands[SIZE];
+int command_array[SIZE];
+int Rear = -1;
+int Front = 0;
+
+command add_command;
+
+void enqueue(command array[SIZE], command insert_item) {
+    if (Rear == SIZE - 1)
+       printf("Overflow \n");
+    else
+    {      
+        Rear = Rear + 1;
+        array[Rear] = insert_item;
+    }
+} 
+ 
+void dequeue(command array[SIZE]) {
+    if (Front == - 1 || Front > Rear) {
+        printf("Underflow \n");
+        return ;
+    } else {
+      for (int i=0; i<SIZE-1; i++) {
+        array[i] = array[i+1];
+      }
+    }
+    Rear -= 1;
+}
+
+
+// assorted command functions
 
 // get_vhv
 void get_vhv(uint8_t channel, int client_addr) {
@@ -615,7 +625,8 @@ void *hv_request() {
 
 // acquire and execute commands in loop
 void *hv_execution() {
-  while (1) {
+  while (1)
+  {
     command *check_command = &incoming_commands[Front];
     char current_command = check_command->command_name;
     char current_type = check_command->command_type;
@@ -730,13 +741,16 @@ void *handle_client(void *args) {
 }
 
 // ----- Code to handle socket stuff ----- //
-void *live_status(void *args) {
+void *live_status(void *args)
+{
   char buffer[9];
   char flush_buffer[1];
 
-  while (1) {
+  while (1)
+  {
 
-    for (int ichannel = 0; ichannel < 6; ichannel++) {
+    for (int ichannel = 0; ichannel < 6; ichannel++)
+    {
       // acquire lock
       pthread_mutex_lock(&lock);
 
@@ -870,9 +884,6 @@ void *acquire_data(void *arguments)
     if (mkfifo(V_PIPE_PATH, 0666) == -1)
     {
       perror("Failed to create named pipe");
-
-      // ensure that pipe isn't used - would result in failure
-      use_pipe = 0;
     }
   }
 
@@ -880,9 +891,6 @@ void *acquire_data(void *arguments)
   if (vfd == -1)
   {
     perror("Error opening pipe");
-
-    // ensure that pipe isn't used - would result in failure
-    use_pipe = 0;
   }
 
   while (1)
@@ -1102,13 +1110,8 @@ void *acquire_data(void *arguments)
         for (int channel = 0; channel < 6; channel++)
         {
           fprintf(fp_V, "%f ", voltages_0[channel]);
-
-          // only write to pipe if connection was properly established earlier
-          if (use_pipe == 1) {
-            int length = snprintf(buffer, sizeof(buffer), "%f ", voltages_0[channel]);
-            write(vfd, buffer, length); // Write to the pipe
-          }
-
+          int length = snprintf(buffer, sizeof(buffer), "%f ", voltages_0[channel]);
+          write(vfd, buffer, length); // Write to the pipe
         }
       }
       else
@@ -1122,8 +1125,8 @@ void *acquire_data(void *arguments)
       fprintf(fp_V, "%f\n", (float)seconds);
 
 
-      // only write to pipe if connection was properly established earlier
-      if (pico == 0 && use_pipe == 1) {
+      if (pico == 0)
+      {
         char buffer[1024]; // A buffer to format and write data
         int length = snprintf(buffer, sizeof(buffer), "\n");
         write(vfd, buffer, length); // Write to the pipe
@@ -1156,8 +1159,6 @@ void *save_txt(void *arguments)
     if (mkfifo(PIPE_PATH, 0666) == -1)
     {
       perror("Failed to create named pipe");
-
-      use_pipe = 0; // ensure that pipe isn't used if failed
     }
   }
 
@@ -1165,8 +1166,6 @@ void *save_txt(void *arguments)
   if (fd == -1)
   {
     perror("Error opening pipe");
-
-    use_pipe = 0; // ensure that pipe isn't used if failed
   }
 
   if (pico == 0)
@@ -1217,7 +1216,7 @@ void *save_txt(void *arguments)
             last_output[channel] = filtered_value;
 
             // Decimation by 5: Only write every 5th sample
-            if (time_index % DECIMATION_FACTOR == 0 && use_pipe == 1)
+            if (time_index % DECIMATION_FACTOR == 0)
             {
               int length = snprintf(buffer, sizeof(buffer), "%f ", filtered_value);
               fprintf(fp_I, "%f ", filtered_value);
@@ -1225,7 +1224,7 @@ void *save_txt(void *arguments)
             }
           }
 
-          if (time_index % DECIMATION_FACTOR == 0 && use_pipe == 1)
+          if (time_index % DECIMATION_FACTOR == 0)
           {
             int length = snprintf(buffer, sizeof(buffer), "\n");
             fprintf(fp_I, "\n");
@@ -1252,24 +1251,19 @@ void *save_txt(void *arguments)
   fclose(fp_I);
 }
 
+
+
 int lv_initialization() {
-  if (export_gpio(lv_global_enable) == -1) {
-    return -1;
-  } else if (set_gpio_direction_out(lv_global_enable) == -1) {
-    return -1;
-  } else if (write_gpio_value(lv_global_enable, LOW) == -1) {
-    return -1;
-  }
+  export_gpio(lv_global_enable);
+  set_gpio_direction_out(lv_global_enable);
+  write_gpio_value(lv_global_enable, LOW);
 
   for (int i=0; i<6; i++) {
-    if (MCP_pinMode(lvpgoodMCP, powerChMap[i], OUTPUT) == -1) {
-      return -1;
-    }
+    MCP_pinMode(lvpgoodMCP, powerChMap[i], OUTPUT);
 
-    if (MCP_pinWrite(lvpgoodMCP, powerChMap[i],0) == -1) {
-      return -1;
-    }
+    MCP_pinWrite(lvpgoodMCP, powerChMap[i],0);
   }
+
 
   int file;
   int i;
@@ -1281,19 +1275,24 @@ int lv_initialization() {
   lv_i2cbus = lookup_i2c_bus("3");
   sprintf(lv_i2cname, "/dev/i2c-%d", 3);
   lv_i2c = open_i2c_dev(lv_i2cbus, lv_i2cname, sizeof(lv_i2cname), 0);
-
-  if (lv_i2c < 0) { // return -1 in case of not acquiring file
-    return -1;
-  }
-
-  return 0;
 }
+
+
+
+
 
 
 
 int main( int argc, char **argv ) {
   hvMCP=(MCP*)malloc(sizeof(struct MCP*));
   lvpgoodMCP=(MCP*)malloc(sizeof(struct MCP*));
+
+
+
+  char *test_var = load_config("CServer_Path");
+  printf("CServer Path: %s\n",test_var);
+
+
 
   /**
    * @brief setup SPI comm
@@ -1351,28 +1350,20 @@ int main( int argc, char **argv ) {
     }
 
   
-  if (MCP_setup(hvMCP,2) == -1) {
-    return -1;
-  } else if (MCP_setup(lvpgoodMCP,1) == -1) {
-    return -1;
-  }
+  MCP_setup(hvMCP,2);
+  MCP_setup(lvpgoodMCP,1);
   
 
-  if (hv_initialization() == -1) {
-    return -1;
-  } else if (lv_initialization() == -1) {
-    return -1;
-  }
+  hv_initialization();
+  lv_initialization();
 
 
   FILE *file = fopen(LIVE_STATUS_FILENAME, "w");
   fclose(file);
 
-  for (int i = 0; i < 6; i++) {
-    // writes 1
-    if (write_fixed_location(LIVE_STATUS_FILENAME, 2 * i, 0) == -1) {
-      return -1;
-    }
+  for (int i = 0; i < 6; i++)
+  {
+    write_fixed_location(LIVE_STATUS_FILENAME, 2 * i, 0); // writes 1
   }
 
   // ----- initialize pico 0 communications, etc ----- //
@@ -1427,6 +1418,14 @@ int main( int argc, char **argv ) {
   {
     sleep(100);
   }
+
+  // pthread_cancel(acquisition_thread_0);
+  // pthread_cancel(save_thread_0);
+
+  // pthread_cancel(acquisition_thread_1);
+  // pthread_cancel(save_thread_1);
+
+  // pthread_cancel(socket_creation_thread);
 
   return 0;
 }

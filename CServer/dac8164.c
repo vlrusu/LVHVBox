@@ -15,7 +15,7 @@
 #define DAC8164DELAY 2
 
 
-int DAC8164_setup(DAC8164 *self, MCP *MCP, uint8_t sync, int sclk, uint8_t sdi, int enable_pin, uint8_t ldac_pin)
+void DAC8164_setup(DAC8164 *self, MCP *MCP, uint8_t sync, int sclk, uint8_t sdi, int enable_pin, uint8_t ldac_pin)
 {
   self->_MCP = MCP;
   self->_sync_pin = sync;
@@ -25,19 +25,28 @@ int DAC8164_setup(DAC8164 *self, MCP *MCP, uint8_t sync, int sclk, uint8_t sdi, 
   self->_ldac_pin = ldac_pin;
 
 
+
+  
+  printf("before sync\n");
+
   MCP_pinMode(self->_MCP, self->_sync_pin, OUTPUT);
   MCP_pinWrite(self->_MCP, self->_sync_pin, HIGH);
+
+  printf("sync done: %u\n", self->_sync_pin);
 
   MCP_pinMode(self->_MCP, self->_sclk_pin, OUTPUT);
   MCP_pinWrite(self->_MCP, self->_sclk_pin, LOW);
 
+  printf("sclk done\n");
+
   MCP_pinMode(self->_MCP, self->_sdi_pin, OUTPUT);
   MCP_pinWrite(self->_MCP, self->_sdi_pin, LOW);
 
+  printf("sdi done\n");
   
 
 
-  return 0;
+
 }
 
 

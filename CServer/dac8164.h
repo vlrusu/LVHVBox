@@ -61,7 +61,7 @@ typedef struct {
 } DAC8164;
 
 void DAC8164_write(DAC8164 *self, uint32_t data);
-int DAC8164_setup(DAC8164 *self, MCP *MCP, uint8_t sync, int sclk, uint8_t sdi, int enable_pin, uint8_t ldac_pin);
+void DAC8164_setup(DAC8164 *self, MCP *MCP, uint8_t sync, int sclk, uint8_t sdi, int enable_pin, uint8_t ldac_pin);
 void DAC8164_setReference(DAC8164 *self, uint16_t reference);
 void DAC8164_writeChannel(DAC8164 *self, uint8_t channel, uint16_t value);
 void DAC8164_setChannelPower(DAC8164 *self, uint8_t channel, uint16_t power);
