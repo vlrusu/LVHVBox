@@ -139,10 +139,33 @@ uint8_t use_pipe = 1; // when server tries to open pipe, will be set to 0 upon f
 // variables to manage command queue
 command incoming_commands[COMMAND_LENGTH];
 int command_array[COMMAND_LENGTH];
-int rear = -1;
-int front = 0;
+int Rear = -1;
+int Front = 0;
 
 command add_command;
+
+
+void enqueue(command array[COMMAND_LENGTH], command insert_item) {
+    if (Rear == COMMAND_LENGTH - 1)
+       printf("Overflow \n");
+    else
+    {      
+        Rear = Rear + 1;
+        array[Rear] = insert_item;
+    }
+} 
+ 
+void dequeue(command array[COMMAND_LENGTH]) {
+    if (Front == - 1 || Front > Rear) {
+        printf("Underflow \n");
+        return ;
+    } else {
+      for (int i=0; i<COMMAND_LENGTH-1; i++) {
+        array[i] = array[i+1];
+      }
+    }
+    Rear -= 1;
+}
 
 
 
@@ -162,7 +185,7 @@ float i2c_ltc2497(int address, int channelLTC)
   if (write(lv_i2c, block, length) != length) // write() returns the number of bytes actually written, if it doesn't match then an error occurred (e.g. no response from the device)
   {
     /* ERROR HANDLING: i2c transaction failed */
-    perror("Failed to write to the i2c bus.")
+    perror("Failed to write to the i2c bus.");
     return -1;
   }
 
@@ -173,7 +196,7 @@ float i2c_ltc2497(int address, int channelLTC)
   if (read(lv_i2c, block, length) != length) // read() returns the number of bytes actually read, if it doesn't match then an error occurred (e.g. no response from the device)
   {
     // ERROR HANDLING: i2c transaction failed
-    perror("Failed to read from the i2c bus.")
+    perror("Failed to read from the i2c bus.");
     return -1;
   }
 
@@ -184,22 +207,22 @@ float i2c_ltc2497(int address, int channelLTC)
 
 
 
-void powerOn(uint8_t channel) {
+int powerOn(uint8_t channel) {
   if (write_gpio_value(lv_global_enable, HIGH) == -1) {
-    perror("poweron: lv global enable failure");
+    perror("poweron error 0");
     return -1;
   }
   
   if (channel == 6) {
     for (int i=0; i<6; i++) {
       if (MCP_pinWrite(lvpgoodMCP, powerChMap[i], HIGH) == -1) {
-        perror("poweron error channel %i", i);
+        perror("poweron error 1");
         return -1;
       }
     }
   } else {
     if (MCP_pinWrite(lvpgoodMCP, powerChMap[channel], HIGH) == -1) {
-      perror("poweron error channel %u", channel);
+      perror("poweron error 2");
       return -1;
     }
   }
@@ -207,30 +230,30 @@ void powerOn(uint8_t channel) {
   return 0;
 }
 
-void powerOff(uint8_t channel) {
+int powerOff(uint8_t channel) {
   if (channel == 6) {
     if (write_gpio_value(lv_global_enable, LOW) == -1) {
-      perror("poweroff: lv global enable failure");
+      perror("poweroff error 0");
       return -1;
     }
     
     for (int i=0; i<6; i++) {
       if (MCP_pinWrite(lvpgoodMCP, powerChMap[i], LOW) == -1) {
-        perror("poweroff error channel %i",i);
+        perror("poweroff error 1");
         return -1;
       }
     }
   } else {
     if (MCP_pinWrite(lvpgoodMCP, powerChMap[channel], LOW) == -1) {
-      perror("poweroff error channel %u",channel);
+      perror("poweroff error 2");
       return -1;
     }
   }
 
-  return 0
+  return 0;
 }
 
-void hv_initialization(){
+int hv_initialization(){
   if (MCP_pinMode(hvMCP, 4, OUTPUT) == -1) {
     return -1;
   } else if (MCP_pinMode(hvMCP, 4, LOW) == -1) {
@@ -563,7 +586,7 @@ void readMonI6(uint8_t channel, int client_addr)
 
 void *hv_request() {
   while (1) {
-    command *check_command = &incoming_commands[front];
+    command *check_command = &incoming_commands[Front];
     char current_command = check_command->command_name;
     char current_type = check_command->command_type;
     uint8_t char_parameter = (uint8_t)check_command->char_parameter;
@@ -576,12 +599,12 @@ void *hv_request() {
       // select proper hv function
       if (current_command == 'a') { // get_vhv
         pthread_mutex_lock(&lock);
-        dequeue(incoming_commands, front, rear);
+        dequeue(incoming_commands);
         pthread_mutex_unlock(&lock);
         get_vhv(char_parameter, client_addr);
       } else if (current_command == 'b') { // get_ihv
         pthread_mutex_lock(&lock);
-        dequeue(incoming_commands, front, rear);
+        dequeue(incoming_commands);
         pthread_mutex_unlock(&lock);
         get_ihv(char_parameter, client_addr);
       }
@@ -593,7 +616,7 @@ void *hv_request() {
 // acquire and execute commands in loop
 void *hv_execution() {
   while (1) {
-    command *check_command = &incoming_commands[front];
+    command *check_command = &incoming_commands[Front];
     char current_command = check_command->command_name;
     char current_type = check_command->command_type;
     uint8_t char_parameter = (uint8_t)check_command->char_parameter;
@@ -698,7 +721,7 @@ void *handle_client(void *args) {
       add_command.client_addr = inner_socket;
 
       // add command to queue
-      enqueue(incoming_commands, add_command, rear);
+      enqueue(incoming_commands, add_command);
 
       // release lock
       pthread_mutex_unlock(&lock);
@@ -864,7 +887,7 @@ void *acquire_data(void *arguments)
 
   while (1)
   {
-    command *check_command = &incoming_commands[front];
+    command *check_command = &incoming_commands[Front];
     char current_command = check_command->command_name;
     char current_type = check_command->command_type;
     uint8_t char_parameter = (uint8_t)check_command->char_parameter;

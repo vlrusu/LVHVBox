@@ -25,19 +25,26 @@
 #define OPCODER (0b01000001) // Opcode for MCP23S17 with LSB (bit0) set to read (1), address OR'd in later, bits 1-3
 
 
-void MCP_setup(MCP* mcp, uint8_t address)
+int MCP_setup(MCP* mcp, uint8_t address)
 {
   mcp->_address = address;
 
-  MCP_byteWrite(mcp, IOCON, IOCON_INIT);
+  if (MCP_byteWrite(mcp, IOCON, IOCON_INIT) == -1) {
+    return  -1;
+  }
 
   mcp->_modeCache = 0xFF;   // Default I/O mode is all input, 0xFFFF
   mcp->_outputCache = 0x00; // Default output state is all off, 0x0000
   mcp->_pullupCache = 0x00; // Default pull-up state is all off, 0x0000
   mcp->_invertCache = 0x00; // Default input inversion state is not inverted, 0x0000
 
-  MCP_byteWrite(mcp, IODIR, mcp->_modeCache);
-  MCP_byteWrite(mcp, IOCON, IOCON_INIT);
+  if (MCP_byteWrite(mcp, IODIR, mcp->_modeCache) == -1) {
+    return -1;
+  } else if (MCP_byteWrite(mcp, IOCON, IOCON_INIT) == -1) {
+    return -1;
+  }
+
+  return 0;
 };
 
 int MCP_byteWrite(MCP *mcp, uint8_t reg, uint8_t value)
@@ -90,7 +97,7 @@ uint8_t MCP_byteRead(MCP *mcp, uint8_t reg)
 
   // do the SPI transaction
   if ((ioctl(spiFds, SPI_IOC_MESSAGE(1), &spi) < 0)) {
-    perror("mcp23s08_read_reg: Error during SPI transaction.")
+    perror("mcp23s08_read_reg: Error during SPI transaction.");
     return -1;
   }
 
@@ -105,7 +112,7 @@ int MCP_pinMode(MCP *mcp, uint8_t pin, uint8_t mode)
 { // Accept the pin # and I/O mode
 
   if (pin > 16) {
-    perror("MCP_pinMode: Pin out of bounds.")
+    perror("MCP_pinMode: Pin out of bounds.");
     return -1;
   }
   if (mode == MCP_INPUT)

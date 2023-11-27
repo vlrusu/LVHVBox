@@ -54,7 +54,7 @@ int export_gpio(uint8_t pin) {
   
     if (dr == NULL)  // opendir returns NULL if couldn't open directory 
     { 
-        perror("Could not open directory to export gpio \u", pin);
+        perror("Could not open directory to export gpio");
         return -1; 
     } 
   
@@ -77,7 +77,6 @@ int export_gpio(uint8_t pin) {
         
         if (write(fd_export, pin_string, strlen(pin_string)) == -1) {
             perror("Failed to export GPIO pin");
-            perror("failed pin: %s\n",pin_string);
             close(fd_export);
             return -1;
         }
