@@ -1,1 +1,3 @@
-CServer_Path:CServer;
+CServer_Path:CServer
+Command_Log_File:../../Logs/command_log.log
+Error_Log_File:../../Logs/error_log.log

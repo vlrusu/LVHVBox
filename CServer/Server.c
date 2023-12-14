@@ -22,6 +22,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 
+
 #include <signal.h> 
 
 #include <mcp23s08.h>
@@ -145,6 +146,8 @@ int Front = 0;
 command add_command;
 
 
+
+
 void enqueue(command array[COMMAND_LENGTH], command insert_item) {
     if (Rear == COMMAND_LENGTH - 1)
        printf("Overflow \n");
@@ -208,6 +211,8 @@ float i2c_ltc2497(int address, int channelLTC)
 
 
 int powerOn(uint8_t channel) {
+  char *command_log = load_config("Command_Log_File");
+
   if (write_gpio_value(lv_global_enable, HIGH) == -1) {
     perror("poweron error 0");
     return -1;
@@ -219,18 +224,31 @@ int powerOn(uint8_t channel) {
         perror("poweron error 1");
         return -1;
       }
+
+
+      // log powerOn command
+      char log_message[12];
+      snprintf(log_message, 12, "powerOn: %i", i);
+      write_log(command_log, log_message, 1);
     }
   } else {
     if (MCP_pinWrite(lvpgoodMCP, powerChMap[channel], HIGH) == -1) {
       perror("poweron error 2");
       return -1;
     }
+
+    // log powerOn command
+    char log_message[12];
+    snprintf(log_message, 12, "powerOn: %i", channel);
+    write_log(command_log, log_message, 1);
   }
 
   return 0;
 }
 
 int powerOff(uint8_t channel) {
+  char *command_log = load_config("Command_Log_File");
+
   if (channel == 6) {
     if (write_gpio_value(lv_global_enable, LOW) == -1) {
       perror("poweroff error 0");
@@ -242,12 +260,22 @@ int powerOff(uint8_t channel) {
         perror("poweroff error 1");
         return -1;
       }
+
+      // log powerOff command
+      char log_message[13];
+      snprintf(log_message, 12, "powerOff: %i", i);
+      write_log(command_log, log_message, 1);
     }
   } else {
     if (MCP_pinWrite(lvpgoodMCP, powerChMap[channel], LOW) == -1) {
       perror("poweroff error 2");
       return -1;
     }
+
+    // log powerOff command
+    char log_message[13];
+    snprintf(log_message, 12, "powerOff: %i", channel);
+    write_log(command_log, log_message, 1);
   }
 
   return 0;
@@ -315,8 +343,8 @@ void get_ihv(uint8_t channel, int client_addr)
 
 // rampHV
 void ramp_hv(uint8_t channel, float voltage) {
-  printf("In ramp \n");
-  printf("desired voltage: %f \n", voltage);
+  char *command_log = load_config("Command_Log_File");
+
   int idac = (int)(channel / 4);
   float increment = voltage / NSTEPS;
   float current_value = 0;
@@ -327,10 +355,17 @@ void ramp_hv(uint8_t channel, float voltage) {
 
     set_hv(channel, current_value);
   }
+
+  // log ramp_hv command
+  char log_message[12];
+  snprintf(log_message, 12, "ramp_hv: %u", channel);
+  write_log(command_log, log_message, 0);
 }
 
 
 void down_hv(uint8_t channel) {
+  char *command_log = load_config("Command_Log_File");
+
   float current_voltage;
   if (channel < 6)
   {
@@ -353,11 +388,19 @@ void down_hv(uint8_t channel) {
 
   set_hv(channel,0);
 
+
+  // log down_hv command
+  char log_message[12];
+  snprintf(log_message, 12, "down_hv: %u", channel);
+  write_log(command_log, log_message, 0);
+
 }
 
 // trip
 void trip(uint8_t channel, int client_addr)
 {
+  char *command_log = load_config("Command_Log_File");
+
   uint8_t send_val = 103 + (channel % 6);
 
   if (channel < 6)
@@ -368,11 +411,18 @@ void trip(uint8_t channel, int client_addr)
   {
     libusb_bulk_transfer(device_handle_1, 0x02, &send_val, 1, 0, 0);
   }
+
+  // log trip command
+  char log_message[12];
+  snprintf(log_message, 12, "tripped: %u", channel);
+  write_log(command_log, log_message, 0);
 }
 
 // reset_trip
 void reset_trip(uint8_t channel, int client_addr)
 {
+  char *command_log = load_config("Command_Log_File");
+
   uint8_t send_val = 109 + (channel % 6);
 
   if (channel < 6)
@@ -383,11 +433,18 @@ void reset_trip(uint8_t channel, int client_addr)
   {
     libusb_bulk_transfer(device_handle_1, 0x02, &send_val, sizeof(send_val), 0, 0);
   }
+
+  // log reset_trip command
+  char log_message[15];
+  snprintf(log_message, 15, "reset_trip: %u", channel);
+  write_log(command_log, log_message, 0);
 }
 
 // disable_trip
 void disable_trip(uint8_t channel, int client_addr)
 {
+  char *command_log = load_config("Command_Log_File");
+
   uint8_t send_val = 115 + (channel % 6);
 
   if (channel < 6)
@@ -398,11 +455,18 @@ void disable_trip(uint8_t channel, int client_addr)
   {
     libusb_bulk_transfer(device_handle_1, 0x02, &send_val, 1, 0, 0);
   }
+
+  // log disable_trip command
+  char log_message[17];
+  snprintf(log_message, 17, "disable_trip: %u", channel);
+  write_log(command_log, log_message, 0);
 }
 
 // enable_trip
 void enable_trip(uint8_t channel, int client_addr)
 {
+  char *command_log = load_config("Command_Log_File");
+
   uint8_t send_val = 121 + (channel % 6);
 
   if (channel < 6)
@@ -413,11 +477,18 @@ void enable_trip(uint8_t channel, int client_addr)
   {
     libusb_bulk_transfer(device_handle_1, 0x02, &send_val, 1, 0, 0);
   }
+
+  // log enable_trip command
+  char log_message[16];
+  snprintf(log_message, 16, "enable_trip: %u", channel);
+  write_log(command_log, log_message, 0);
 }
 
 // enable_ped
 void enable_ped(uint8_t channel, int client_addr)
 {
+  char *command_log = load_config("Command_Log_File");
+
   uint8_t send_val = 34;
 
   if (channel < 6)
@@ -428,11 +499,18 @@ void enable_ped(uint8_t channel, int client_addr)
   {
     libusb_bulk_transfer(device_handle_1, 0x02, &send_val, 1, 0, 0);
   }
+
+  // log enable_ped command
+  char log_message[15];
+  snprintf(log_message, 15, "enable_ped: %u", channel);
+  write_log(command_log, log_message, 0);
 }
 
 // disable_ped
 void disable_ped(uint8_t channel, int client_addr)
 {
+  char *command_log = load_config("Command_Log_File");
+  
   uint8_t send_val = 35;
 
   if (channel < 6)
@@ -443,6 +521,11 @@ void disable_ped(uint8_t channel, int client_addr)
   {
     libusb_bulk_transfer(device_handle_1, 0x02, &send_val, 1, 0, 0);
   }
+
+  // log disable_ped command
+  char log_message[16];
+  snprintf(log_message, 16, "disable_ped: %u", channel);
+  write_log(command_log, log_message, 0);
 }
 
 
@@ -481,6 +564,8 @@ void trip_status(uint8_t channel, int client_addr)
 // set_trip
 void set_trip(uint8_t channel, float value, int client_addr)
 {
+  char *command_log = load_config("Command_Log_File");
+
   uint8_t send_val[3];
   send_val[0] = 76 + (channel % 6);
 
@@ -504,6 +589,11 @@ void set_trip(uint8_t channel, float value, int client_addr)
   {
     libusb_bulk_transfer(device_handle_1, 0x02, &send_val[0], sizeof(send_val), 0, 0);
   }
+
+  // log set_trip command
+  char log_message[13];
+  snprintf(log_message, 13, "set_trip: %u", channel);
+  write_log(command_log, log_message, 0);
 }
 
 // readMonV48
@@ -668,7 +758,12 @@ void *lv_execution() {
       } else if (current_command == 'j') { // readMonI6
         readMonI6(char_parameter, client_addr);
       } else if (current_command == 'e') { // powerOn
-        powerOn(char_parameter);
+        int errval = powerOn(char_parameter);
+
+        if (errval == -1) {
+          error_log("LV powerOn Error");
+        }
+
       } else if (current_command == 'f') { // powerOff
         powerOff(char_parameter);
       }
@@ -706,7 +801,6 @@ void *handle_client(void *args) {
 
     if (return_val == 9)
     {
-      printf("Received Command: %s \n", buffer);
 
       // acquire lock
       pthread_mutex_lock(&lock);
@@ -717,7 +811,6 @@ void *handle_client(void *args) {
       add_command.command_type = buffer[1];
       add_command.char_parameter = buffer[2] - 97;
       add_command.float_parameter = atof(&buffer[3]);
-      printf("float parameter: %f \n", add_command.float_parameter);
       add_command.client_addr = inner_socket;
 
       // add command to queue
@@ -805,7 +898,6 @@ void *create_connections()
       perror("accept");
       exit(EXIT_FAILURE);
     }
-    printf("inside\n");
 
     pthread_t client_thread;
     pthread_create(&client_thread, NULL, handle_client, &new_socket);
@@ -821,14 +913,6 @@ void *acquire_data(void *arguments)
   uint8_t pico = common->pico;
 
 
-  // Initialize libusb
-  int result = libusb_init( NULL );
-  if ( result < 0 )
-  {
-      printf( "Error initializing libusb: %s\n", libusb_error_name( result ) );
-      exit( -1 );
-  }
-
   // Set debugging output to max level
 	libusb_set_option( NULL, LIBUSB_OPTION_LOG_LEVEL, LIBUSB_LOG_LEVEL_WARNING );
 
@@ -836,16 +920,17 @@ void *acquire_data(void *arguments)
   if (pico == 0)
   {
     device_handle_0 = libusb_open_device_with_vid_pid(NULL, VENDOR_ID_0, PRODUCT_ID);
+
     libusb_set_auto_detach_kernel_driver(device_handle_0, 1);
     // Claim interface 0 on the device
-    result = libusb_claim_interface(device_handle_0, 1);
+    libusb_claim_interface(device_handle_0, 1);
   }
   else
   {
     device_handle_1 = libusb_open_device_with_vid_pid(NULL, VENDOR_ID_1, PRODUCT_ID);
     libusb_set_auto_detach_kernel_driver(device_handle_1, 1);
     // Claim interface 0 on the device
-    result = libusb_claim_interface(device_handle_1, 1);
+    libusb_claim_interface(device_handle_1, 1);
   }
 
   uint16_t inner_loop = 1;
@@ -1295,6 +1380,10 @@ int main( int argc, char **argv ) {
   hvMCP=(MCP*)malloc(sizeof(struct MCP*));
   lvpgoodMCP=(MCP*)malloc(sizeof(struct MCP*));
 
+  //char *test = load_config("test");
+  //printf("test: %s\n",test);
+
+
   /**
    * @brief setup SPI comm
    * 
@@ -1379,6 +1468,19 @@ int main( int argc, char **argv ) {
   arg_struct args_0;
   args_0.array_indicator = 0;
   args_0.pico = 0;
+
+  // check that pico 0 is available
+  libusb_init(NULL);
+  device_handle_0 = libusb_open_device_with_vid_pid(NULL, VENDOR_ID_0, PRODUCT_ID);
+  if (device_handle_0 == 0) {
+    printf("Please connect pico 0\n");
+    error_log("Pico 0 not connected");
+
+    return -1;
+  }
+
+
+
 
   // create data acquisition thread
   pthread_t acquisition_thread_0;
