@@ -7,7 +7,7 @@ import pyqtgraph as pg
 pipe_path = "/tmp/data_pipe"
 v_pipe_path = "/tmp/vdata_pipe"  # Second pipe
 
-SPIKE_THRESHOLD = 8.
+SPIKE_THRESHOLD = 20.
 
 # Create the named pipes if they don't exist
 for path in [pipe_path, v_pipe_path]:
@@ -71,6 +71,12 @@ class App(QtWidgets.QMainWindow):
         # Set up some sample histogram data (you can replace this with your actual data)
         self.histogram = pg.BarGraphItem(x=np.arange(72)-0.5, height=self.spikesPerHour, width=1, brush='b')
         self.histogramWidget.addItem(self.histogram)
+        # Set custom x-axis labels
+        x=np.arange(72,step=10)
+        reversed_x = -1*x[::-1]
+        custom_labels = [(i, '{}'.format(j)) for i, j in zip(x, reversed_x)]
+        
+        self.histogramWidget.getAxis('bottom').setTicks([custom_labels])
         
         
 #        self.secondaryCurve = self.secondaryPlotWidget.plot()
@@ -78,13 +84,13 @@ class App(QtWidgets.QMainWindow):
         # Set up a timer to update this plot once a minute
         self.secondaryTimer = QtCore.QTimer(self)
         self.secondaryTimer.timeout.connect(self.update_hourly_count)
-        self.secondaryTimer.start(20 * 1000)  # Every 60,000 ms or 1 minute
+        self.secondaryTimer.start(20 * 1000)  # Every 20,000 ms or 20s
 
 
         # Set up a timer to update to reset the spike plot
         self.thirdTimer = QtCore.QTimer(self)
         self.thirdTimer.timeout.connect(self.reset_hourly_count)
-        self.thirdTimer.start(40 * 1000)  # Every 60,000 ms or 1 minute
+        self.thirdTimer.start(300 * 1000)  # Every 300,000 ms or 5 minute
         
         
         central_widget = QtWidgets.QWidget()
