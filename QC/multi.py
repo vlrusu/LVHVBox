@@ -3,16 +3,23 @@ import os
 import numpy as np
 from pyqtgraph.Qt import QtGui, QtCore, QtWidgets
 import pyqtgraph as pg
+import multiprocessing as mp
 
 pipe_path = "/tmp/data_pipe"
 v_pipe_path = "/tmp/vdata_pipe"  # Second pipe
 
 SPIKE_THRESHOLD = 20.
 
+plot_channels = [0, 1, 2, 3, 4, 5]
+
+
 # Create the named pipes if they don't exist
-for path in [pipe_path, v_pipe_path]:
-    if not os.path.exists(path):
-        os.mkfifo(path)
+for channel in plot_channels:
+    for path in [pipe_path + str(channel), v_pipe_path + str(channel)]:
+        if not os.path.exists(path):
+            os.mkfifo(path)
+
+
 
 class DataReceiver(QtCore.QObject):
     newData = QtCore.pyqtSignal(list)
@@ -124,8 +131,6 @@ class App(QtWidgets.QMainWindow):
 
 
     def update_hourly_count(self):
-
-
         print(self.currentHourSpikes)
         self.spikesPerHour[-1] = self.spikesPerHour[-1] + self.currentHourSpikes
         self.histogram.setOpts(height=self.spikesPerHour)
@@ -181,53 +186,45 @@ class App(QtWidgets.QMainWindow):
     def update_label(self, value):
         """Update the label with the data from the second pipe."""
 #        print(value[self.channel])
-        self.label.setText(value[self.channel])
-#        self.label.setPos(self.plotWidget.viewRange()[0][1], self.plotWidget.viewRange()[1][0])
+
+        if len(value) == 6:
+
+            self.label.setText(value[self.channel])
+    #        self.label.setPos(self.plotWidget.viewRange()[0][1], self.plotWidget.viewRange()[1][0])
 
 
 
-
-        
-
-if __name__ == "__main__":
+def start_one(channel):
     app = QtWidgets.QApplication(sys.argv)
 
-    mainWindow1 = App(0)
+    mainWindow1 = App(channel)
     mainWindow1.show()
 
-    mainWindow2 = App(2)
-    mainWindow2.show()
 
-    mainWindow3 = App(1)
-    mainWindow3.show()
-
-    #mainWindow4 = App(3)
-    #mainWindow4.show()
-
-    receiver = DataReceiver(pipe_path)
+    print(pipe_path + str(channel))
+    receiver = DataReceiver(pipe_path + str(channel))
     thread = QtCore.QThread()
     receiver.moveToThread(thread)
 
 
    # For second pipe
-    receiver2 = DataReceiver(v_pipe_path)
+    receiver2 = DataReceiver(v_pipe_path + str(channel))
     thread2 = QtCore.QThread()
     receiver2.moveToThread(thread2)
     
     receiver2.newData.connect(mainWindow1.update_label)
-    receiver2.newData.connect(mainWindow2.update_label)
-    receiver2.newData.connect(mainWindow3.update_label)
-    #receiver2.newData.connect(mainWindow3.update_label)
+
     thread2.started.connect(receiver2.run)
     thread2.start()
     
     receiver.newData.connect(mainWindow1.update_plot)
-    receiver.newData.connect(mainWindow2.update_plot)
-    receiver.newData.connect(mainWindow3.update_plot)
-    #receiver.newData.connect(mainWindow3.update_plot)
 
     thread.started.connect(receiver.run)
     thread.start()
 
     if (sys.flags.interactive != 1) or not hasattr(QtCore, 'PYQT_VERSION'):
         sys.exit(app.exec_())
+
+if __name__ == "__main__":
+    pool = mp.Pool(processes=len(plot_channels))
+    pool.map(start_one, plot_channels)

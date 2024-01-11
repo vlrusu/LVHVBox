@@ -95,11 +95,6 @@ uint8_t powerChMap[6] = {5, 6, 7, 2, 3, 4};
 uint8_t lv_mcp_reset = 3;
 uint8_t lv_global_enable = 18;
 
-
-
-#define full_current_history_length 8000
-
-
 typedef struct
 {
   float all_currents[6][HISTORY_LENGTH];
@@ -336,8 +331,6 @@ void get_vhv(uint8_t channel, int client_addr) {
   int float_channel = (int)channel;
 
   write(client_addr, &return_val, sizeof(&return_val));
-
-
 }
 
 // get_ihv
@@ -352,77 +345,6 @@ void get_ihv(uint8_t channel, int client_addr)
 
   write(client_addr, &return_val, sizeof(&return_val));
 }
-
-// returns 10 value from full speed current buffer
-void current_burst(uint8_t channel, int client_addr) {
-  printf("beginning current burst\n");
-  printf("channel: %u\n", channel);
-  struct libusb_device_handle *device_handle;
-
-
-  if (channel < 6) {
-    device_handle = device_handle_0;
-  } else {
-    device_handle = device_handle_1;
-  }
-
-
-  uint8_t get_buffer = 89 + channel;
-  printf("get_buffer: %u\n", get_buffer);
-
-  
-  char *current_input_data;
-  current_input_data = (char *)malloc(40);
-
-  float current_array[10];
-
-  libusb_bulk_transfer(device_handle, 0x02, &get_buffer, 1, 0, 0);
-  libusb_bulk_transfer(device_handle, 0x82, current_input_data, 40, 0, 0);
-  
-
-  for (int i=0; i<10; i++) {
-    current_array[i] = *(float *)&current_input_data[4*i];
-    printf("current element: %f\n",current_array[i]);
-  }
-
-  int size = sizeof(current_array);
-  //printf("size: %i\n",size);
-
-  write(client_addr, &current_array, sizeof(current_array));
-
-
-
-}
-
-void start_buffer(uint8_t channel, int client_addr) {
-  uint8_t start_buffer = 87;
-
-  struct libusb_device_handle *device_handle;
-
-  if (channel < 6) {
-    device_handle = device_handle_0;
-  } else {
-    device_handle = device_handle_1;
-  }
-
-  libusb_bulk_transfer(device_handle, 0x02, &start_buffer, 1, 0, 0);
-}
-
-
-void stop_buffer(uint8_t channel, int client_addr) {
-  uint8_t stop_buffer = 88;
-
-  struct libusb_device_handle *device_handle;
-
-  if (channel < 6) {
-    device_handle = device_handle_0;
-  } else {
-    device_handle = device_handle_1;
-  }
-
-  libusb_bulk_transfer(device_handle, 0x02, &stop_buffer, 1, 0, 0);
-}
-
 
 // rampHV
 void ramp_hv(uint8_t channel, float voltage) {
@@ -447,7 +369,6 @@ void ramp_hv(uint8_t channel, float voltage) {
 
 
 void down_hv(uint8_t channel) {
-  
   char *command_log = load_config("Command_Log_File");
 
   float current_voltage;
@@ -784,22 +705,6 @@ void *hv_request() {
         pthread_mutex_unlock(&lock);
         get_ihv(char_parameter, client_addr);
       }
-      else if (current_command == '(') {
-        pthread_mutex_lock(&lock);
-        dequeue(incoming_commands);
-        pthread_mutex_unlock(&lock);
-        current_burst(char_parameter, client_addr);
-      } else if (current_command == ')') {
-        pthread_mutex_lock(&lock);
-        dequeue(incoming_commands);
-        pthread_mutex_unlock(&lock);
-        start_buffer(char_parameter, client_addr);
-      } else if (current_command == '*') {
-        pthread_mutex_lock(&lock);
-        dequeue(incoming_commands);
-        pthread_mutex_unlock(&lock);
-        stop_buffer(char_parameter, client_addr);
-      }
     }
     sleep(0.1);
   }
@@ -808,7 +713,6 @@ void *hv_request() {
 // acquire and execute commands in loop
 void *hv_execution() {
   while (1) {
-    
     
 
     command *check_command = &incoming_commands[Front];
@@ -819,8 +723,6 @@ void *hv_execution() {
     int client_addr = check_command->client_addr;
 
     // check if command is hv type, else do nothing
-
-
     if (current_type == 'a') {
       // select proper hv function
       if (current_command == 'c') { // ramp_hv
@@ -830,6 +732,7 @@ void *hv_execution() {
         ramp_hv(char_parameter, float_parameter);
 
       } else if (current_command == 'd') { // down_hv
+
         pthread_mutex_lock(&lock);
         dequeue(incoming_commands);
         pthread_mutex_unlock(&lock);
@@ -1197,13 +1100,6 @@ void *acquire_data(void *arguments)
         {
           libusb_bulk_transfer(device_handle_0, 0x02, &current_char, 1, 0, 0);
           libusb_bulk_transfer(device_handle_0, 0x82, input_data, 48, 0, 0);
-
-
-
-
-          
-          
-
         }
         else
         {
@@ -1232,40 +1128,6 @@ void *acquire_data(void *arguments)
           time_index += 2;
         }
       }
-
-
-
-
-      /*
-      printf("before\n");
-      uint8_t stop_buffer = 97;
-      uint8_t get_buffer = 98;
-
-      
-      char *current_input_data;
-      current_input_data = (char *)malloc(40);
-
-      libusb_bulk_transfer(device_handle_0, 0x02, &stop_buffer, 1, 0, 0);
-      libusb_bulk_transfer(device_handle_0, 0x02, &get_buffer, 1, 0, 0);
-      libusb_bulk_transfer(device_handle_0, 0x82, current_input_data, 40, 0, 0);
-
-
-      uint32_t composite_0 = current_input_data[0] << 24;
-      uint32_t composite_1 = current_input_data[1] << 16;
-      uint32_t composite_2 = current_input_data[2] << 8;
-      uint32_t composite_3 = current_input_data[3] << 0;
-
-      float joined = (float) (composite_0 + composite_1 + composite_2 + composite_3)/pow(2,13);
-     
-
-      printf("after: %f\n", joined);\*/
-      
-     
-
-
-
-
-
 
       if (pico == 0)
       {
@@ -1549,7 +1411,6 @@ int lv_initialization() {
     return -1;
   }
 
-  /*
   for (int i=0; i<6; i++) {
     if (MCP_pinMode(lvpgoodMCP, powerChMap[i], OUTPUT) == -1) {
       return -1;
@@ -1559,7 +1420,6 @@ int lv_initialization() {
       return -1;
     }
   }
-  */
 
   int file;
   int i;

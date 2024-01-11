@@ -6,6 +6,11 @@ import os
 import atexit
 import threading
 import struct
+import time
+
+
+current_buffer_len = 8000 # must be divisible by 10
+full_current_chunk = 10
 
 # list order is:
 #   -command name
@@ -14,10 +19,13 @@ import struct
 #   -num float args
 #   -read bytes
 #   -allow 0 input vars
-#   -return value type: int 0 float 1 none 2
+#   -return value type: int 0 float 1 none 2 special 3
 
 valid_commands = {"get_vhv": ["a","a",1,0,4,0,1],
                 "get_ihv": ["b","a",1,0,4,0,1],
+                "current_burst": ["(", "a", 1, 0, 100, 0, 3],
+                "current_start": [")", "a", 1, 0, 0, 0, 2],
+                "current_stop": ["*", "a", 1, 0, 0, 0, 2],
                 "ramp_hv": ["c","a",1,1,0,0,2],
                 "down_hv": ["d","a",1,0,0,0,2],
                 "trip": ["k","c",1,0,0,0,2],
@@ -105,6 +113,31 @@ def process_input(input):
     except:
         return 0
 
+def handle_current_burst():
+    num_cycles = int(current_buffer_len/10)
+    full_currents = []
+
+    for cycle in range(num_cycles):
+        sock.send(bytes(command_string,"utf-8"))
+        temp = sock.recv(4*full_current_chunk)
+
+        for i in range(full_current_chunk):
+            byte_loop = []
+            for j in range(4):
+                byte_loop.append(temp[4*i+j])
+            print("current index: " + str(byte_loop))
+            full_currents.append(process_float(byte_loop))
+        
+    print(full_currents)
+    print("length of full currents: " + str(len(full_currents)))
+
+    # write into new file
+    filename = "full_currents_" + str(int(time.time())) + ".txt"
+    f = open(filename, "w")
+    for i in full_currents:
+        f.write(str(i) + "\n")
+    f.close()
+
 
 
 
@@ -137,6 +170,7 @@ if __name__=="__main__":
 
             if valid_commands[processed_input[0]][2] == 1:
                 command_string += chr(processed_input[1]+97)
+    
             else:
                 command_string += 'a'
 
@@ -157,21 +191,40 @@ if __name__=="__main__":
             command_string += ''.join(chr(0) for i in range(required_filler))
 
 
-            sock.send(bytes(command_string,"utf-8"))
+            
 
-            # if applicable, read return value
+
             return_val_type = valid_commands[processed_input[0]][6]
-            if valid_commands[processed_input[0]][4] > 0:
+ 
+      
+            if return_val_type == 3:
+                # if return value requires special considerations
+                print(command_string)
+                if command_string[0:2] == """(a""":
+                    handle_current_burst()
+            elif return_val_type == 1:
+                sock.send(bytes(command_string,"utf-8"))
+    
+                
+
                 temp = sock.recv(1024)
 
-                if return_val_type == 1:
-                    # if return value is float
-                    return_val = process_float(temp)
-                    print(return_val)
-                elif return_val_type == 0:
-                    # if return value is int
-                    return_val = int(temp[0])
-                    print(return_val)
+                # if return value is float
+                return_val = process_float(temp)
+                print(return_val)
+            elif return_val_type == 0:
+                sock.send(bytes(command_string,"utf-8"))
+                
+
+                temp = sock.recv(1024)
+
+                # if return value is int
+                return_val = int(temp[0])
+                print(return_val)
+            else:
+                sock.send(bytes(command_string,"utf-8"))
+
+            
 
                 
              
