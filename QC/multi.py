@@ -10,7 +10,7 @@ v_pipe_path = "/tmp/vdata_pipe"  # Second pipe
 
 SPIKE_THRESHOLD = 20.
 
-plot_channels = [0, 1, 2, 3, 4, 5]
+plot_channels = [0, 1, 2]
 
 
 # Create the named pipes if they don't exist

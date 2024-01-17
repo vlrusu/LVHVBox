@@ -142,7 +142,7 @@ char v_pipe_path_base[15] = "/tmp/vdata_pipe";
 #define DECIMATION_FACTOR 20
 uint8_t use_pipe = 1; // when server tries to open pipe, will be set to 0 upon fail - will then assume pipe is not to be used
 
-int num_pipes = 6;
+int num_pipes = 3;
 
 
 // variables to manage command queue
