@@ -26,6 +26,7 @@ valid_commands = {"get_vhv": ["a","a",1,0,4,0,1],
                 "current_burst": ["(", "a", 1, 0, 100, 0, 3],
                 "current_start": [")", "a", 1, 0, 0, 0, 2],
                 "current_stop": ["*", "a", 1, 0, 0, 0, 2],
+                "current_buffer_run": ["+", "a", 1, 0, 4, 0, 0],
                 "ramp_hv": ["c","a",1,1,0,0,2],
                 "down_hv": ["d","a",1,0,0,0,2],
                 "trip": ["k","c",1,0,0,0,2],
@@ -40,8 +41,8 @@ valid_commands = {"get_vhv": ["a","a",1,0,4,0,1],
                 "readMonI48": ["h","b",1,0,4,0,1],
                 "readMonV6": ["i","b",1,0,4,0,1],
                 "readMonI6": ["j","b",1,0,4,0,1],
-                "enable_ped": ['%',"c",1,0,0,0,0],
-                "disable_ped": ["&", "c",1,0,0,0,0]
+                "enable_ped": ['%',"c",1,0,0,0,2],
+                "disable_ped": ["&", "c",1,0,0,0,2]
 }
 
 
@@ -114,12 +115,16 @@ def process_input(input):
         return 0
 
 def handle_current_burst():
-    num_cycles = int(current_buffer_len/10)
+    num_cycles = int(current_buffer_len/full_current_chunk)
     full_currents = []
 
     for cycle in range(num_cycles):
+        print("cycle: " + str(cycle))
+        #time.sleep(0.2) # put into config.txt later
         sock.send(bytes(command_string,"utf-8"))
-        temp = sock.recv(4*full_current_chunk)
+        temp = sock.recv(64)
+
+        print("length of full currents: " + str(len(temp)))
 
         for i in range(full_current_chunk):
             byte_loop = []

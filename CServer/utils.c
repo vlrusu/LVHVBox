@@ -34,23 +34,7 @@ char* extract_value(char* input_string) {
     }
   }
   start_char += 0;
-  
-  /*
-  char* output_string = malloc(strlen(input_string) - start_char-2);
-  strncpy(output_string, &input_string[start_char+1], strlen(input_string)-start_char-2);
 
-  printf("length: %i\n", strlen(input_string) - start_char);
-
-  printf("return string: %s\n",output_string);
-  */
-
-
-  /*
-  char* output_string = malloc(50);
-  for (int i=0; i<strlen(input_string)-start_char - 2; i++) {
-    output_string[i] = input_string[1 + i + start_char];
-  }
-  */
  char* output_string = malloc(CONFIG_READ_LENGTH);
  strcpy(output_string, &input_string[start_char+1]);
 
@@ -108,11 +92,17 @@ char* load_config(char* constant_name) {
     
     fgets(current_line, CONFIG_READ_LENGTH, ptr);
 
-    tentative_value = extract_value(current_line);
-    tentative_name = extract_name(current_line);
-    
-    if (strcmp(tentative_name, constant_name) == 0) {
-      correct_line = 1;
+    if (current_line[0] != '\n') {
+      if (current_line[0] != '/' && current_line[1] != '/') {
+
+        tentative_value = extract_value(current_line);
+        tentative_name = extract_name(current_line);
+        
+        if (strcmp(tentative_name, constant_name) == 0) {
+          correct_line = 1;
+        }
+
+      }
     }
   }
   

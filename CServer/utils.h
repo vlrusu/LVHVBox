@@ -17,7 +17,7 @@ typedef struct
   int client_addr;
 } command;
 
-# define COMMAND_LENGTH 8000
+# define COMMAND_LENGTH 10000
 
 int msleep(long msec);
 int write_fixed_location(const char *filename, long position, int value);

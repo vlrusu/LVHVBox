@@ -53,8 +53,6 @@
 #include <sys/stat.h>
 #include <errno.h>
 
-#define LVPINBASE 1000 // LV mcp pin base
-#define HVPINBASE 2000 // HV mcp pin base
 
 // ----- libusb constants and variables ----- //
 #define HISTORY_LENGTH 100
@@ -178,6 +176,7 @@ void dequeue(command array[COMMAND_LENGTH]) {
       }
     }
     Rear -= 1;
+    printf("Rear: %i\n", Rear);
 }
 
 
@@ -353,10 +352,44 @@ void get_ihv(uint8_t channel, int client_addr)
   write(client_addr, &return_val, sizeof(&return_val));
 }
 
+// get_buffer_status
+void get_buffer_status(uint8_t channel, int client_addr) {
+  uint8_t send_val = 95;
+
+  printf("In get buffer status\n");
+
+  char *input_data;
+  input_data = (char *)malloc(1);
+
+  if (channel < 6)
+  {
+    libusb_bulk_transfer(device_handle_0, 0x02, &send_val, 1, 0, 0);
+    libusb_bulk_transfer(device_handle_0, 0x82, input_data, sizeof(input_data), 0, 0);
+  }
+  else
+  {
+    libusb_bulk_transfer(device_handle_1, 0x02, &send_val, 1, 0, 0);
+    libusb_bulk_transfer(device_handle_1, 0x82, input_data, sizeof(input_data), 0, 0);
+  }
+
+  int return_val = 1;
+
+  if ((*input_data & 1 << (channel)) == 0)
+  {
+    return_val = 0;
+  }
+
+  if (client_addr != -9999)
+    write(client_addr, &return_val, sizeof(&return_val));
+  else
+    write_fixed_location(LIVE_STATUS_FILENAME, 2 * channel, return_val); // writes at fixed location
+
+}
+
 // returns 10 value from full speed current buffer
 void current_burst(uint8_t channel, int client_addr) {
-  printf("beginning current burst\n");
-  printf("channel: %u\n", channel);
+  //printf("beginning current burst\n");
+  //printf("channel: %u\n", channel);
   struct libusb_device_handle *device_handle;
 
 
@@ -368,27 +401,32 @@ void current_burst(uint8_t channel, int client_addr) {
 
 
   uint8_t get_buffer = 89 + channel;
-  printf("get_buffer: %u\n", get_buffer);
+  //printf("get_buffer: %u\n", get_buffer);
 
   
   char *current_input_data;
-  current_input_data = (char *)malloc(40);
+  current_input_data = (char *)malloc(64);
 
-  float current_array[10];
+  float current_array[16];
 
-  libusb_bulk_transfer(device_handle, 0x02, &get_buffer, 1, 0, 0);
-  libusb_bulk_transfer(device_handle, 0x82, current_input_data, 40, 0, 0);
+  libusb_bulk_transfer(device_handle, 0x02, &get_buffer, 1, 0, 50);
+
+  libusb_bulk_transfer(device_handle, 0x82, current_input_data, 64, 0, 500);
+
   
 
   for (int i=0; i<10; i++) {
     current_array[i] = *(float *)&current_input_data[4*i];
-    printf("current element: %f\n",current_array[i]);
+ 
+    //printf("current element: %f\n",current_array[i]);
   }
 
   int size = sizeof(current_array);
   //printf("size: %i\n",size);
 
+
   write(client_addr, &current_array, sizeof(current_array));
+
 
 
 
@@ -509,13 +547,16 @@ void reset_trip(uint8_t channel, int client_addr)
 
   uint8_t send_val = 109 + (channel % 6);
 
+
   if (channel < 6)
   {
-    libusb_bulk_transfer(device_handle_0, 0x02, &send_val, sizeof(send_val), 0, 0);
+    printf("reset trip channel %u\n",channel);
+    libusb_bulk_transfer(device_handle_0, 0x02, &send_val, 1, 0, 0);
   }
   else
   {
-    libusb_bulk_transfer(device_handle_1, 0x02, &send_val, sizeof(send_val), 0, 0);
+    printf("reset all trips\n");
+    libusb_bulk_transfer(device_handle_1, 0x02, &send_val, 1, 0, 0);
   }
 
   // log reset_trip command
@@ -571,9 +612,11 @@ void enable_trip(uint8_t channel, int client_addr)
 // enable_ped
 void enable_ped(uint8_t channel, int client_addr)
 {
+
+  printf("in enable ped\n");
   char *command_log = load_config("Command_Log_File");
 
-  uint8_t send_val = 34;
+  uint8_t send_val = 37;
 
   if (channel < 6)
   {
@@ -593,9 +636,11 @@ void enable_ped(uint8_t channel, int client_addr)
 // disable_ped
 void disable_ped(uint8_t channel, int client_addr)
 {
+  printf("in disable_ped\n");
+
   char *command_log = load_config("Command_Log_File");
   
-  uint8_t send_val = 35;
+  uint8_t send_val = 38;
 
   if (channel < 6)
   {
@@ -799,16 +844,20 @@ void *hv_request() {
         dequeue(incoming_commands);
         pthread_mutex_unlock(&lock);
         stop_buffer(char_parameter, client_addr);
+      } else if (current_command == '+') {
+        pthread_mutex_lock(&lock);
+        dequeue(incoming_commands);
+        pthread_mutex_unlock(&lock);
+        get_buffer_status(char_parameter, client_addr);
       }
     }
-    sleep(0.1);
+    sleep(0.5);
   }
 }
 
 // acquire and execute commands in loop
 void *hv_execution() {
   while (1) {
-    
     
 
     command *check_command = &incoming_commands[Front];
@@ -837,7 +886,7 @@ void *hv_execution() {
       }
     }
 
-    sleep(0.1);
+    sleep(0.5);
   }
 }
 
@@ -879,7 +928,7 @@ void *lv_execution() {
       pthread_mutex_unlock(&lock);
     }
 
-    sleep(1);
+    sleep(0.5);
   }
 }
 
@@ -1393,6 +1442,7 @@ void *acquire_data(void *arguments)
       fprintf(fp_V, "%f\n", (float)seconds);
 
 
+      
       // only write to pipe if connection was properly established earlier
       if (pico == 0 && use_pipe == 1) {
         char buffer[1024]; // A buffer to format and write data
@@ -1401,6 +1451,7 @@ void *acquire_data(void *arguments)
           write(*vfd, buffer, length); // Write to the pipe
         }
       }
+      
 
       fclose(fp_V);
     }
@@ -1493,6 +1544,7 @@ void *save_txt(void *arguments)
         char buffer[1024]; // A buffer to format and write data
         time_t seconds;
 
+        
         for (int pipe_id=0; pipe_id<num_pipes; pipe_id++) {
           for (uint32_t time_index = 0; time_index < HISTORY_LENGTH; time_index++)
           {
@@ -1520,6 +1572,7 @@ void *save_txt(void *arguments)
             }
           }
         }
+        
 
         /*
 
@@ -1549,7 +1602,6 @@ int lv_initialization() {
     return -1;
   }
 
-  /*
   for (int i=0; i<6; i++) {
     if (MCP_pinMode(lvpgoodMCP, powerChMap[i], OUTPUT) == -1) {
       return -1;
@@ -1559,7 +1611,6 @@ int lv_initialization() {
       return -1;
     }
   }
-  */
 
   int file;
   int i;

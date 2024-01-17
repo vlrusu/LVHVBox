@@ -19,9 +19,7 @@ pico_sdk_init()
 
 # Add executable. Default name is the project name, version 0.1
 
-include (CTest)
 add_executable(SmartSwitch SmartSwitch.c usb_descriptors.c msc_disk.c)
-add_test(example_test SmartSwitch)
 
 
 
