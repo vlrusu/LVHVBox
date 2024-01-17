@@ -10,7 +10,10 @@ import matplotlib.pyplot as plt
 
 # Open file and read data into numpy array
 
-data = np.loadtxt('full_currents_1673976787.txt')
+data = np.loadtxt('full_currents_1673977887.txt')
+
+
+
 
  
 

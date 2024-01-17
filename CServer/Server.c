@@ -1283,39 +1283,6 @@ void *acquire_data(void *arguments)
       }
 
 
-
-
-      /*
-      printf("before\n");
-      uint8_t stop_buffer = 97;
-      uint8_t get_buffer = 98;
-
-      
-      char *current_input_data;
-      current_input_data = (char *)malloc(40);
-
-      libusb_bulk_transfer(device_handle_0, 0x02, &stop_buffer, 1, 0, 0);
-      libusb_bulk_transfer(device_handle_0, 0x02, &get_buffer, 1, 0, 0);
-      libusb_bulk_transfer(device_handle_0, 0x82, current_input_data, 40, 0, 0);
-
-
-      uint32_t composite_0 = current_input_data[0] << 24;
-      uint32_t composite_1 = current_input_data[1] << 16;
-      uint32_t composite_2 = current_input_data[2] << 8;
-      uint32_t composite_3 = current_input_data[3] << 0;
-
-      float joined = (float) (composite_0 + composite_1 + composite_2 + composite_3)/pow(2,13);
-     
-
-      printf("after: %f\n", joined);\*/
-      
-     
-
-
-
-
-
-
       if (pico == 0)
       {
         for (uint8_t i = 0; i < 6; i++)
@@ -1352,25 +1319,6 @@ void *acquire_data(void *arguments)
 
 
 
-
-
-
-        /*
-        char full_current_char = 115;
-        char current_stop_char = 97;
-        char *full_current_data;
-        full_current_data = (char *)malloc(60);
-
-        
-
-
-        libusb_bulk_transfer(device_handle_0, 0x02, &current_stop_char, 1, 0, 0);
-
-        
-        libusb_bulk_transfer(device_handle_0, 0x02, &full_current_char, 1, 0, 0);
-
-        libusb_bulk_transfer(device_handle_0, 0x82, full_current_data, 60, 0, 0);
-        */
 
 
 
@@ -1448,7 +1396,7 @@ void *acquire_data(void *arguments)
         char buffer[1024]; // A buffer to format and write data
         int length = snprintf(buffer, sizeof(buffer), "\n");
         for (int pipe_id=0; pipe_id<num_pipes; pipe_id++) {
-          write(*vfd, buffer, length); // Write to the pipe
+          write(vfd[pipe_id], buffer, length); // Write to the pipe
         }
       }
       
