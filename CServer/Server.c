@@ -148,7 +148,7 @@ int num_pipes = 3;
 // variables to manage command queue
 command incoming_commands[COMMAND_LENGTH];
 int command_array[COMMAND_LENGTH];
-int Rear = -1;
+int Rear = 0;
 int Front = 0;
 
 command add_command;
@@ -157,26 +157,33 @@ command add_command;
 
 
 void enqueue(command array[COMMAND_LENGTH], command insert_item) {
-    if (Rear == COMMAND_LENGTH - 1)
+    if (Rear >= COMMAND_LENGTH - 1) {
        printf("Overflow \n");
-    else
+       Rear = 0;
+       Front = 0;
+       return;
+    } else
     {      
-        Rear = Rear + 1;
+        printf("command name: %u\n",insert_item.command_name);
         array[Rear] = insert_item;
+        Rear = Rear + 1;
     }
 } 
  
 void dequeue(command array[COMMAND_LENGTH]) {
-    if (Front == - 1 || Front > Rear) {
+    if (Front < 0 || Front > Rear) {
         printf("Underflow \n");
+        Rear = 0;
+        Front = 0;
         return ;
     } else {
       for (int i=0; i<COMMAND_LENGTH-1; i++) {
         array[i] = array[i+1];
       }
     }
-    Rear -= 1;
+    
     printf("Rear: %i\n", Rear);
+    Rear -= 1;
 }
 
 
@@ -411,7 +418,8 @@ void current_burst(uint8_t channel, int client_addr) {
 
   libusb_bulk_transfer(device_handle, 0x02, &get_buffer, 1, 0, 50);
 
-  libusb_bulk_transfer(device_handle, 0x82, current_input_data, 64, 0, 500);
+  int return_val = libusb_bulk_transfer(device_handle, 0x82, current_input_data, 64, 0, 500);
+
 
   
 
@@ -420,10 +428,6 @@ void current_burst(uint8_t channel, int client_addr) {
  
     //printf("current element: %f\n",current_array[i]);
   }
-
-  int size = sizeof(current_array);
-  //printf("size: %i\n",size);
-
 
   write(client_addr, &current_array, sizeof(current_array));
 
@@ -967,6 +971,7 @@ void *handle_client(void *args) {
       add_command.char_parameter = buffer[2] - 97;
       add_command.float_parameter = atof(&buffer[3]);
       add_command.client_addr = inner_socket;
+
 
       // add command to queue
       enqueue(incoming_commands, add_command);
