@@ -1,7 +1,32 @@
 #include "utils.h"
+#include <string.h>
 
 const char* CONFIG_PATH = "../../config.txt";
 const int CONFIG_READ_LENGTH = 200;
+
+uint32_t remainder_32(uint32_t n, uint32_t d) {
+    // n is dividend, d is divisor
+    // store the result in q: q = n / d
+    uint32_t q = 0;
+
+    // as long as the divisor fits into the remainder there is something to do
+    while (n >= d) {
+        uint32_t i = 0, d_t = d;
+        // determine to which power of two the divisor still fits the dividend
+        //
+        // i.e.: we intend to subtract the divisor multiplied by powers of two
+        // which in turn gives us a one in the binary representation 
+        // of the result
+        while (n >= (d_t << 1) && ++i)
+            d_t <<= 1;
+        // set the corresponding bit in the result
+        q |= 1 << i;
+        // subtract the multiple of the divisor to be left with the remainder
+        n -= d_t;
+        // repeat until the divisor does not fit into the remainder anymore
+    }
+    return n;
+}
 
 int msleep(long msec)
 {
@@ -138,8 +163,11 @@ int write_fixed_location(const char *filename, long position, int value) {
 }
 
 int error_log(const char *data) {
+  /*
   char *error_log = load_config("Error_Log_File");
   printf("Error log: %s\n",error_log);
+  */
+  char error_log[24] = "../../Logs/error_log.log";
 
   FILE *fp = fopen(error_log, "a");
   if (fp == NULL) {
@@ -162,22 +190,44 @@ int error_log(const char *data) {
   return 0;
 }
 
-int write_log(char *filename, const char *data, int datatype) {
-  FILE *fp = fopen(filename, "a");
+int write_log(char* filename, const char *data, int datatype, int client_addr) {
+  /*
+  printf("sizeof filename: %i\n", sizeof(filename));
+
+  int current_index = 0;
+  while (filename[current_index] != '\n') {
+    current_index += 1;
+  }
+  
+
+  char file_string[current_index+1];
+  for (int i=0; i<26; i++) {
+    file_string[i] = filename[i];
+  }
+  printf("Final index: %i\n", current_index);
+  */
+
+
+  char file_string[26] = "../../Logs/command_log.log";
+  FILE *fp = fopen(file_string, "a");
   if (fp == NULL) {
-    printf("Error logging datatype %i\n", datatype);
+    printf("Error logging datatype %i", datatype);
     return -1;
   }
 
-  if (fprintf(fp, data) < 0) {
+  if (fprintf(fp, "%lu ", (unsigned long)time(NULL)) < 0) {
     printf("Error writing logfile, datatype %i\n", datatype);
     fclose(fp);
     return -1;
-  } else if (fprintf(fp, " %lu", (unsigned long)time(NULL)) < 0) {
+  } else if (fprintf(fp, data) < 0) {
     printf("Error writing logfile, datatype %i\n", datatype);
     fclose(fp);
     return -1;
-  } else if (fprintf(fp, " %i\n", datatype) < 0) {
+  } else if (fprintf(fp, " %i", datatype) < 0) {
+    printf("Error writing logfile, datatype %i\n", datatype);
+    fclose(fp);
+    return -1;
+  } else if (fprintf(fp, " %i\n", client_addr) < 0) {
     printf("Error writing logfile, datatype %i\n", datatype);
     fclose(fp);
     return -1;

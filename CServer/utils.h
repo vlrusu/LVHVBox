@@ -21,8 +21,10 @@ typedef struct
 
 int msleep(long msec);
 int write_fixed_location(const char *filename, long position, int value);
-int write_log(char *filename, const char *data, int datatype);
+int write_log(char filename[], const char *data, int datatype, int client_addr);
 int error_log(const char *data);
+
+uint32_t remainder_32(uint32_t n, uint32_t d);
 
 char* load_config(char* constant_name);
 char* extract_value(char* input_string);
