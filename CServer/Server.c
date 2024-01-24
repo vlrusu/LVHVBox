@@ -397,92 +397,9 @@ void get_buffer_status(uint8_t channel, int client_addr) {
 
 }
 
-void send_command_history(uint8_t char_parameter, int client_addr) {
-  // determine how many history items need to be sent
-
-
-  FILE *file = fopen("../../Logs/command_log.log", "r");
-  if (file == NULL) {
-    printf("Error opening file.\n");
-    return;
-  }
-  char line[64];
-  char *command_time;
-  int num_commands = 0;
-  int int_command_time;
-  while (fgets(line, sizeof(line), file)) {
-    // extract timestamp
-    memcpy(command_time, &line[0], 10);
-    
-    int_command_time = atoi(command_time);
-
-    if (int_command_time >= start_time) {
-      num_commands += 1;
-    }
-  }
-  fclose(file);
-  msleep(5);
-
-  
-  // put all commands for this instance of server into an array
-  char *send_commands[num_commands];
-
-
-  
-  int current_valid_index = 0;
-  FILE *file_2 = fopen("../../Logs/command_log.log", "r");
-  if (file_2 == NULL) {
-    printf("Error opening file.\n");
-    return;
-  }
-  
-  while (fgets(line, sizeof(line), file_2)) {
-    // extract timestamp
-    memcpy(command_time, &line[0], 10);
-    
-    int_command_time = atoi(command_time);
-
-
-    if (int_command_time >= start_time) {
-      send_commands[current_valid_index] = strdup(line);
-      //memcpy(send_commands[current_valid_index], &line[0], 10);
-      current_valid_index += 1;
-    }
-    
-    
-  }
-  
-  fclose(file_2);
-  
-  
-
-
-
-  /*
-  for (int i=0; i<num_commands; i++) {
-    printf("%s", send_commands[i]);
-  }
-  */
-
- 
- printf("before\n");
- printf("char parameter: %u\n", char_parameter);
- printf("after\n");
-
- if (num_commands > char_parameter) {
-  write(client_addr, send_commands[char_parameter], 64);
- } else {
-  write(client_addr, send_commands[0], sizeof(send_commands[0]));
- }
-  
-
-  return;
-}
 
 // returns 10 value from full speed current buffer
 void current_burst(uint8_t channel, int client_addr) {
-  //printf("beginning current burst\n");
-  //printf("channel: %u\n", channel);
   struct libusb_device_handle *device_handle;
 
 
@@ -495,7 +412,6 @@ void current_burst(uint8_t channel, int client_addr) {
 
   uint8_t get_buffer = 89 + channel;
   uint8_t move_full_position = 96;
-  //printf("get_buffer: %u\n", get_buffer);
 
   
   char *current_input_data;
@@ -512,95 +428,11 @@ void current_burst(uint8_t channel, int client_addr) {
 
     int return_val = libusb_bulk_transfer(device_handle, 0x82, current_input_data, 64, 0, 500);
 
-
-
-
-
-
-
-
-
-
-
     uint16_t temp_int;
     for (int i=0; i<10; i++) {
       temp_int = current_input_data[i*2];
       current_array[i] = temp_int*adc_to_uA;
-      printf("current float value: %f\n", current_array[i]);
-      
     }
-
-
-
-
-    /*
-    // get expected crc values
-    uint32_t expected_crc[10];
-    uint16_t expected_0;
-    uint16_t expected_1;
-    for (int i=0; i<5; i++) {
-      expected_0 = current_input_data[40+4*i];
-      expected_1 = current_input_data[42+4*i];
-
-      printf("expected: %u\n", expected_0);
-      printf("expected: %u\n", expected_1);
-
-
-      expected_crc[2*i] = (uint32_t)expected_0;
-      expected_crc[2*i+1] = (uint32_t)expected_1;
-
-    }
-    printf("\n\n\n");
-
-  
-    uint32_t crc_div = 11;
-    for (int i=0; i<10; i++) {
-      current_array[i] = *(float *)&current_input_data[4*i];
-      printf("current float value: %f\n", current_array[i]);
-      
-      //printf("current index: %i\n",i);
-
-
-      current_crc = remainder_32((uint32_t)current_input_data[4*i], crc_div);
-      printf("current_crc: %u\n\n", current_crc);
-
-      // get expected crc value
-      if (expected_crc[i] != current_crc) {
-        //printf("expected_crc: %u\n", expected_crc[i]);
-        
-        
-
-        valid_data = 0;
-        //printf("INVALID DATA\n");
-      }
-      
-      
-    }
-    printf("\n\n\n\n\n\n\n\n");
-    */
-
-
-
-
-
-    /*
-    float expected = 0;
-    for (int i=0; i<11; i++) {
-      current_array[i] = *(float *)&current_input_data[4*i];
-
-      if (i<10) {
-        expected += current_array[i];
-      }
-
-    }
-    expected /= 10;
-    if (current_array[10] == expected) {
-      libusb_bulk_transfer(device_handle, 0x02, &move_full_position, 1, 0, 50);
-      valid_data = 1;
-    } else {
-      printf("INVALID\n");
-    }
-    */
   
 
   }
@@ -983,32 +815,6 @@ void readMonI6(uint8_t channel, int client_addr)
 
   write(client_addr, &ret, sizeof(&ret));
 }
-
-void *misc_execution() {
-  while (1) {
-    command *check_command = &incoming_commands[Front];
-    char current_command = check_command->command_name;
-    char current_type = check_command->command_type;
-    uint8_t char_parameter = (uint8_t)check_command->char_parameter;
-    float float_parameter = check_command->float_parameter;
-    int client_addr = check_command->client_addr;
-
-    // check if command is hv type, else do nothing
-    if (current_type == 'd')
-    {
-      // select proper hv function
-      if (current_command == 39) { // get_history
-        pthread_mutex_lock(&lock);
-        dequeue(incoming_commands);
-        pthread_mutex_unlock(&lock);
-        send_command_history(char_parameter, client_addr);
-      }
-    }
-    sleep(0.5);
-  }
-}
-
-
 
 void *hv_request() {
   while (1) {
@@ -1940,9 +1746,6 @@ int main( int argc, char **argv ) {
   pthread_t lv_command_thread;
   pthread_create(&lv_command_thread, NULL, lv_execution, NULL);
 
-  // create lv command execution thread
-  pthread_t misc_command_thread;
-  pthread_create(&misc_command_thread, NULL, misc_execution, NULL);
 
 
   while (1)

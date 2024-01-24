@@ -6,7 +6,7 @@ import numpy as np
 
 if __name__=="__main__":
     #filename = "full_currents_1728949092.txt"
-    filename = "full_currents_1705047485.txt"
+    filename = "full_currents_1705694221.txt"
 
     f = open(filename, "r")
     lines = f.readlines()

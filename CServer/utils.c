@@ -4,29 +4,6 @@
 const char* CONFIG_PATH = "../../config.txt";
 const int CONFIG_READ_LENGTH = 200;
 
-uint32_t remainder_32(uint32_t n, uint32_t d) {
-    // n is dividend, d is divisor
-    // store the result in q: q = n / d
-    uint32_t q = 0;
-
-    // as long as the divisor fits into the remainder there is something to do
-    while (n >= d) {
-        uint32_t i = 0, d_t = d;
-        // determine to which power of two the divisor still fits the dividend
-        //
-        // i.e.: we intend to subtract the divisor multiplied by powers of two
-        // which in turn gives us a one in the binary representation 
-        // of the result
-        while (n >= (d_t << 1) && ++i)
-            d_t <<= 1;
-        // set the corresponding bit in the result
-        q |= 1 << i;
-        // subtract the multiple of the divisor to be left with the remainder
-        n -= d_t;
-        // repeat until the divisor does not fit into the remainder anymore
-    }
-    return n;
-}
 
 int msleep(long msec)
 {

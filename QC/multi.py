@@ -13,6 +13,8 @@ SPIKE_THRESHOLD = 20.
 plot_channels = [0, 1, 2]
 
 
+
+
 # Create the named pipes if they don't exist
 for channel in plot_channels:
     for path in [pipe_path + str(channel), v_pipe_path + str(channel)]:
@@ -63,6 +65,8 @@ class App(QtWidgets.QMainWindow):
         
         layout.addLayout(top_layout)
 
+        self.xlabels = [i/235.84E3*2000 for i in range(10000)]
+
 
         
         self.plotWidget = pg.PlotWidget()
@@ -110,6 +114,7 @@ class App(QtWidgets.QMainWindow):
 
 
         self.data = np.array([])
+        
         self.curve = self.plotWidget.plot()
         
         # To check whether the plot should update or pause
@@ -178,7 +183,7 @@ class App(QtWidgets.QMainWindow):
         if thissample > SPIKE_THRESHOLD:
             self.currentHourSpikes += 1
 
-        self.curve.setData(self.data)
+        self.curve.setData(self.xlabels[0:len(self.data)], [i for i in self.data])
 
 
         

@@ -57,10 +57,7 @@ uint32_t average_current_history_length = 2000;
 uint8_t current_buffer_run = 1;
 uint16_t full_position = 0;
 
-float full_current_array[6][full_current_history_length];
-
-
-
+uint32_t full_current_array[6][full_current_history_length];
 
 void port_init() {
   uint8_t port;
@@ -105,7 +102,7 @@ void variable_init() {
 
 }
 
-void cdc_task(float channel_current_averaged[6], float channel_voltage[6], uint sm[6], uint16_t *burst_position, float trip_currents[6], uint8_t* trip_mask, uint8_t* trip_status, float average_current_history[6][average_current_history_length], uint16_t* average_store_position, float full_current_history[6][full_current_history_length], uint16_t* full_position, uint8_t* current_buffer_run)
+void cdc_task(float channel_current_averaged[6], float channel_voltage[6], uint sm[6], uint16_t *burst_position, float trip_currents[6], uint8_t* trip_mask, uint8_t* trip_status, float average_current_history[6][average_current_history_length], uint16_t* average_store_position, uint32_t full_current_history[6][full_current_history_length], uint16_t* full_position, uint8_t* current_buffer_run)
 {
   if ( tud_cdc_available() )
     {
@@ -170,37 +167,33 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6], uint 
         *current_buffer_run = 0;
 
       } else if (receive_chars[0] > 88 && receive_chars[0] < 95) { // ----- Send chunk of current buffer ----- //
-        float temp_currents[10];
+        uint16_t temp_currents[10];
+
+        uint16_t crc_val[10];
+        
+        uint32_t crc_div = 11;
         int channel = receive_chars[0] - 89;
 
         *current_buffer_run = 0;
-
-        /*
-        for (uint8_t i=0; i<10; i++) {
-          temp_current = full_current_history[channel][*full_position + i] * adc_to_uA;
-          tud_cdc_write(&temp_current,sizeof(&temp_current));
-        }
-        */
-
+        float check_val;
+       
        for (int i=0; i<10; i++) {
-        temp_currents[i] = full_current_history[channel][*full_position + i] * adc_to_uA;
+        temp_currents[i] = (uint16_t) full_current_history[channel][*full_position + i];
        }
 
-        
-
-        tud_cdc_write(temp_currents,sizeof(temp_currents));
+        tud_cdc_write(temp_currents,20);
+        tud_cdc_write(crc_val, sizeof(crc_val));
         tud_cdc_write_flush();
 
-        
-        *full_position += 10;
-        if (*full_position >= full_current_history_length) {
-          *full_position -= full_current_history_length;
-        }
-        
 
       } else if (receive_chars[0] == 95) { // Send current buffer status ----- //
           tud_cdc_write(&*current_buffer_run,sizeof(&*current_buffer_run));
           tud_cdc_write_flush(); // flushes write buffer, data will not actually be sent without this command
+      } else if (receive_chars[0] == 96) { // move full position forward 10 //
+        *full_position += 10;
+        if (*full_position >= full_current_history_length) {
+          *full_position -= full_current_history_length;
+        }
       } else if (receive_chars[0] == 72) { // Send chunk of average currents ----- //
         // check if data needs to be sent
         if (*average_store_position > 1)
@@ -240,7 +233,7 @@ float get_single_voltage(PIO pio, uint sm) // obtains a single non-averaged volt
   return voltage;
 }
 
-void get_all_averaged_currents(PIO pio_0, PIO pio_1, uint sm[], float current_array[6], float full_current_array[6][full_current_history_length], uint16_t* full_position, uint8_t* current_buffer_run) {
+void get_all_averaged_currents(PIO pio_0, PIO pio_1, uint sm[], float current_array[6], uint32_t full_current_array[6][full_current_history_length], uint16_t* full_position, uint8_t* current_buffer_run) {
  for (uint32_t channel = 0; channel < 6; channel++) // initializes each element of current array to zero
  {
   current_array[channel] = 0;
@@ -265,8 +258,8 @@ void get_all_averaged_currents(PIO pio_0, PIO pio_1, uint sm[], float current_ar
     
     if (*current_buffer_run == 1) {
       // update latest full current, along with its position in rotating buffer
-      full_current_array[channel][*full_position] = latest_current_0;
-      full_current_array[channel+3][*full_position] = latest_current_1;
+      full_current_array[channel][*full_position] = (uint32_t) latest_current_0;
+      full_current_array[channel+3][*full_position] = (uint32_t) latest_current_1;
       
     }
     
@@ -279,9 +272,6 @@ void get_all_averaged_currents(PIO pio_0, PIO pio_1, uint sm[], float current_ar
       *full_position -= full_current_history_length;
     }
   }
-  
-  
-  
 
  }
 
@@ -313,8 +303,6 @@ void get_all_averaged_currents(PIO pio_0, PIO pio_1, uint sm[], float current_ar
         
       }
   
-
-
 }
 
 //******************************************************************************
