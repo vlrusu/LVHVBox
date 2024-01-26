@@ -6,6 +6,14 @@ import os
 import atexit
 import threading
 import struct
+import time
+
+
+HISTORY_REQUEST_MAX = 100
+
+
+current_buffer_len = 8000 # must be divisible by 10
+full_current_chunk = 10
 
 # list order is:
 #   -command name
@@ -14,10 +22,14 @@ import struct
 #   -num float args
 #   -read bytes
 #   -allow 0 input vars
-#   -return value type: int 0 float 1 none 2
+#   -return value type: int 0 float 1 none 2 special 3
 
 valid_commands = {"get_vhv": ["a","a",1,0,4,0,1],
                 "get_ihv": ["b","a",1,0,4,0,1],
+                "current_burst": ["(", "a", 1, 0, 100, 0, 3],
+                "current_start": [")", "a", 1, 0, 0, 0, 2],
+                "current_stop": ["*", "a", 1, 0, 0, 0, 2],
+                "current_buffer_run": ["+", "a", 1, 0, 4, 0, 0],
                 "ramp_hv": ["c","a",1,1,0,0,2],
                 "down_hv": ["d","a",1,0,0,0,2],
                 "trip": ["k","c",1,0,0,0,2],
@@ -32,8 +44,8 @@ valid_commands = {"get_vhv": ["a","a",1,0,4,0,1],
                 "readMonI48": ["h","b",1,0,4,0,1],
                 "readMonV6": ["i","b",1,0,4,0,1],
                 "readMonI6": ["j","b",1,0,4,0,1],
-                "enable_ped": ['%',"c",1,0,0,0,0],
-                "disable_ped": ["&", "c",1,0,0,0,0]
+                "enable_ped": ['%',"c",1,0,0,0,2],
+                "disable_ped": ["&", "c",1,0,0,0,2]
 }
 
 
@@ -101,9 +113,71 @@ def process_input(input):
     try:
         arg_list = [int(arg) for arg in split_command[1::]]
         return_list = [split_command[0]] + arg_list
+
         return return_list
     except:
         return 0
+
+def handle_current_burst():
+    num_cycles = int(current_buffer_len/full_current_chunk)
+    full_currents = []
+
+    for cycle in range(num_cycles):
+        print("cycle: " + str(cycle))
+        #time.sleep(0.2) # put into config.txt later
+        sock.send(bytes(command_string,"utf-8"))
+        temp = sock.recv(64)
+
+        print("length of full currents: " + str(len(temp)))
+
+        for i in range(full_current_chunk):
+            byte_loop = []
+            for j in range(4):
+                byte_loop.append(temp[4*i+j])
+            print("current index: " + str(byte_loop))
+            full_currents.append(process_float(byte_loop))
+        
+    print(full_currents)
+    print("length of full currents: " + str(len(full_currents)))
+
+    # write into new file
+    filename = "full_currents_" + str(int(time.time())) + ".txt"
+    f = open(filename, "w")
+    for i in full_currents:
+        f.write(str(i) + "\n")
+    f.close()
+
+def handle_server_history(command_string):
+    for i in range(100):
+        temp_string = command_string[0:2] + chr(i) + command_string[3::]
+        command_string = temp_string
+        sock.send(bytes(command_string,"utf-8"))
+        temp = sock.recv(64)
+
+        if len(temp) > 8:
+
+
+            temp = str(temp)[2::]
+    
+            output_string = ""
+            for i in range(len(temp)):
+                if ord(temp[i]) != 92:
+                    output_string += temp[i]
+                else:
+                    break
+            print(output_string)
+
+
+    
+        
+
+    
+    
+    
+
+
+
+
 
 
 
@@ -115,63 +189,89 @@ if __name__=="__main__":
     port = 12000
     sock.connect((host,port))
 
+    try:
+        while True:
+            if "libedit" in readline.__doc__:
+                readline.parse_and_bind("bind ^I rl_complete")
 
-    while True:
-        # list order is:
-        #   -command name
-        #   -command type
-        #   -num char args
-        #   -num float args
-        #   -read bytes
-        
-        command_input = input("Please input command: ")
-        processed_input = process_input(command_input)
-
-        if processed_input == 0:
-            print("Check that input is valid")
-        else:
-            # create command string
-            required_filler = 7 - valid_commands[processed_input[0]][2] - 6*valid_commands[processed_input[0]][3]
-            command_string = valid_commands[processed_input[0]][0]
-            command_string += valid_commands[processed_input[0]][1]
-
-            if valid_commands[processed_input[0]][2] == 1:
-                command_string += chr(processed_input[1]+97)
-            else:
-                command_string += 'a'
-
+            # list order is:
+            #   -command name
+            #   -command type
+            #   -num char args
+            #   -num float args
+            #   -read bytes
             
-            if valid_commands[processed_input[0]][3] != 0:
-                float_val = float(processed_input[2])
+            command_input = input("Please input command: ")
+            processed_input = process_input(command_input)
 
-
-
-                len_float_string = len(str(float_val))
-                pad = 6-len_float_string
-                command_string += ''.join("0" for i in range(pad))
-
-                command_string += str(float_val)
+            if processed_input == 0:
+                print("Check that input is valid")
             else:
-                command_string += ''.join("0" for i in range(6))
+                # create command string
+                required_filler = 7 - valid_commands[processed_input[0]][2] - 6*valid_commands[processed_input[0]][3]
+                command_string = valid_commands[processed_input[0]][0]
+                command_string += valid_commands[processed_input[0]][1]
 
-            command_string += ''.join(chr(0) for i in range(required_filler))
+                if valid_commands[processed_input[0]][2] == 1:
+                    command_string += chr(processed_input[1]+97)
+        
+                else:
+                    command_string += 'a'
+
+                
+                if valid_commands[processed_input[0]][3] != 0:
+                    float_val = float(processed_input[2])
 
 
-            sock.send(bytes(command_string,"utf-8"))
 
-            # if applicable, read return value
-            return_val_type = valid_commands[processed_input[0]][6]
-            if valid_commands[processed_input[0]][4] > 0:
-                temp = sock.recv(1024)
+                    len_float_string = len(str(float_val))
+                    pad = 6-len_float_string
+                    command_string += ''.join("0" for i in range(pad))
 
-                if return_val_type == 1:
+                    command_string += str(float_val)
+                else:
+                    command_string += ''.join("0" for i in range(6))
+
+                command_string += ''.join(chr(0) for i in range(required_filler))
+
+
+                
+
+
+                return_val_type = valid_commands[processed_input[0]][6]
+    
+        
+                if return_val_type == 3:
+                    # if return value requires special considerations
+                    if command_string[0:2] == """(a""":
+                        handle_current_burst()
+                    elif command_string[0:2] == """'d""":
+                        handle_server_history(command_string)
+                elif return_val_type == 1:
+                    sock.send(bytes(command_string,"utf-8"))
+        
+                    
+
+                    temp = sock.recv(1024)
+
                     # if return value is float
                     return_val = process_float(temp)
                     print(return_val)
                 elif return_val_type == 0:
+                    sock.send(bytes(command_string,"utf-8"))
+                    
+
+                    temp = sock.recv(1024)
+
                     # if return value is int
                     return_val = int(temp[0])
                     print(return_val)
+                else:
+                    sock.send(bytes(command_string,"utf-8"))
+    finally:
+        print("Client Session Closed") 
+
+            
 
                 
              

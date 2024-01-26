@@ -138,28 +138,25 @@ typedef struct
     uint8_t _modeCache;
 } MCP;
 
-void MCP_setup(MCP *mcp, uint8_t address);
+int MCP_setup(MCP *mcp, uint8_t address);
 
 /**
  * @brief byteWrite, mostly internal use
  * 
  * @param mcp 
  */
-void MCP_byteWrite(MCP *mcp, uint8_t, uint8_t); 
-void MCP_pinMode(MCP *mcp, uint8_t, uint8_t);   
+int MCP_byteWrite(MCP *mcp, uint8_t, uint8_t); 
+int MCP_pinMode(MCP *mcp, uint8_t, uint8_t);   
 
-void MCP_pullupMode(MCP *mcp, uint8_t, uint8_t); 
+int MCP_pullupMode(MCP *mcp, uint8_t, uint8_t); 
 
-void MCP_pinWrite(MCP *mcp, uint8_t, uint8_t); 
+int MCP_pinWrite(MCP *mcp, uint8_t, uint8_t); 
 
 uint8_t MCP_pinRead(MCP *mcp, uint8_t);  
 uint8_t MCP_byteRead(MCP *mcp, uint8_t); 
 
 uint16_t MCP_pinReadAll(MCP *mcp);
 
-void MCP_maskWrite(MCP *mcp, uint16_t mask, uint8_t value);
-void MCP_maskpullupMode(MCP *mcp, uint16_t mask, uint8_t value);
-void MCP_maskpinMode(MCP *mcp, uint16_t mask, uint8_t mode);
 
 void lv_spi_pin_init();
 

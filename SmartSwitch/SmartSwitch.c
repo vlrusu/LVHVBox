@@ -25,6 +25,8 @@
 #define nAdc  6		// Number of SmartSwitches
 #define mChn  6		// Number of channels for trip processing
 
+#define pico 0
+
 struct Pins {
   uint8_t crowbarPins[mChn];
   uint8_t headerPins[nAdc];
@@ -42,17 +44,20 @@ PIO pio_1 = pio1; // pio block 1 reference
 uint8_t trip_mask = -1; // tracks which channels have trips enabled/disabled
 // all channels start out with trips enabled
 
-uint8_t trip_status = 0; // no channels start out triped
+uint8_t trip_status = 0; // no channels start out tripped
 
 uint16_t num_trigger[6] = {0, 0, 0, 0, 0, 0}; // increments/decrements based upon whether trip_currents are exceeded
-float trip_currents[6] = {180, 180, 180, 180, 180}; // tripping threshold currents
+float trip_currents[6] = {172, 172, 172, 172, 172, 172}; // tripping threshold currents
 
 const float adc_to_V  = 2.048 / pow(2, 15) * 1000;			// ADC full-scale voltage / ADC full scale reading * divider ratio
 const float adc_to_uA = (2.048 / pow(2, 15)) / (24.7 * 475) * 1.E6;
 
-uint32_t size_current_burst = 60000;
 uint32_t average_current_history_length = 2000;
+#define full_current_history_length 8000
+uint8_t current_buffer_run = 1;
+uint16_t full_position = 0;
 
+uint32_t full_current_array[6][full_current_history_length];
 
 void port_init() {
   uint8_t port;
@@ -73,6 +78,12 @@ void port_init() {
 
 // Variables
 void variable_init() {
+  for (int channel=0; channel<6; channel++) {
+    for (int index=0; index<full_current_history_length; index++) {
+      full_current_array[channel][index] = 0;
+    }
+  }
+
   // pinouts/ins same for both picos
   uint8_t crowbarPins[6] = { 2, 5, 8, 11, 14, 21};
   uint8_t headerPins[6] = { 1, 3, 6, 10, 12, 9};
@@ -91,15 +102,7 @@ void variable_init() {
 
 }
 
-void get_current_burst(PIO pio, uint sm, int16_t current_array[size_current_burst]) // gets sequential current values from PIO at full speed
-
-{
-  for (uint32_t i=0; i<size_current_burst; i++) {
-    current_array[i] = (int16_t) pio_sm_get_blocking(pio, sm);
-  }
-}
-
-void cdc_task(float channel_current_averaged[6], float channel_voltage[6], int16_t burst_current[size_current_burst], uint sm[6], uint16_t *burst_position, float trip_currents[6], uint8_t* trip_mask, uint8_t* trip_status, float average_current_history[6][average_current_history_length], uint16_t* average_store_position)
+void cdc_task(float channel_current_averaged[6], float channel_voltage[6], uint sm[6], uint16_t *burst_position, float trip_currents[6], uint8_t* trip_mask, uint8_t* trip_status, float average_current_history[6][average_current_history_length], uint16_t* average_store_position, uint32_t full_current_history[6][full_current_history_length], uint16_t* full_position, uint8_t* current_buffer_run)
 {
   if ( tud_cdc_available() )
     {
@@ -119,7 +122,7 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6], int16
       } else if (108 < receive_chars[0] && receive_chars[0] < 115) { // ----- Reset Trip ----- //
         uint8_t tripPin = all_pins.crowbarPins[receive_chars[0] - 109]; // acquire proper crowbar pin
         gpio_put(tripPin, 0); // set relevant crowbar pin low
-        *trip_status = 0; // store information that channel is no longer tripped
+        *trip_status = *trip_status & ~(1 << receive_chars[0] - 109); // store information that channel is no longer tripped
       
       } else if (114 < receive_chars[0] && receive_chars[0] < 121) { // ----- Disable Trip ----- //
         *trip_mask = *trip_mask & ~(1 << (receive_chars[0]-115)); // store that channel is no longer capable of tripping
@@ -157,28 +160,40 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6], int16
         }
         tud_cdc_write_flush(); // flushes write buffer, data will not actually be sent without this command
 
-      } else if (receive_chars[0] > 96 && receive_chars[0] < 103) { // ----- Get Current Burst ----- //
+      } else if (receive_chars[0] == 87) { // ----- start current buffer ----- //
+        *current_buffer_run = 1;
 
-        // Acquire current data
-        if (receive_chars[0] < 100) {
-          get_current_burst(pio_0, sm[receive_chars[0] - 97], burst_current);
-        } else {
-          get_current_burst(pio_1, sm[receive_chars[0] - 97], burst_current);
-        }
-        burst_position = 0;
+      } else if (receive_chars[0] == 88) { // ----- stop current buffer ----- //
+        *current_buffer_run = 0;
 
-      } else if (receive_chars[0] == 115) { // ----- Send chunk of current burst ----- //
-        float temp_current;
+      } else if (receive_chars[0] > 88 && receive_chars[0] < 95) { // ----- Send chunk of current buffer ----- //
+        uint16_t temp_currents[10];
 
-        for (uint8_t i=0; i<15; i++) {
-          temp_current = burst_current[*burst_position + i] * adc_to_uA;
-          tud_cdc_write(&temp_current,sizeof(&temp_current));
-        }
+        uint16_t crc_val[10];
+        
+        uint32_t crc_div = 11;
+        int channel = receive_chars[0] - 89;
+
+        *current_buffer_run = 0;
+        float check_val;
+       
+       for (int i=0; i<10; i++) {
+        temp_currents[i] = (uint16_t) full_current_history[channel][*full_position + i];
+       }
+
+        tud_cdc_write(temp_currents,20);
+        tud_cdc_write(crc_val, sizeof(crc_val));
         tud_cdc_write_flush();
-        if (*burst_position < size_current_burst) {
-          *burst_position += 15;
-        }
 
+
+      } else if (receive_chars[0] == 95) { // Send current buffer status ----- //
+          tud_cdc_write(&*current_buffer_run,sizeof(&*current_buffer_run));
+          tud_cdc_write_flush(); // flushes write buffer, data will not actually be sent without this command
+      } else if (receive_chars[0] == 96) { // move full position forward 10 //
+        *full_position += 10;
+        if (*full_position >= full_current_history_length) {
+          *full_position -= full_current_history_length;
+        }
       } else if (receive_chars[0] == 72) { // Send chunk of average currents ----- //
         // check if data needs to be sent
         if (*average_store_position > 1)
@@ -218,11 +233,14 @@ float get_single_voltage(PIO pio, uint sm) // obtains a single non-averaged volt
   return voltage;
 }
 
-void get_all_averaged_currents(PIO pio_0, PIO pio_1, uint sm[], float current_array[6]) {
+void get_all_averaged_currents(PIO pio_0, PIO pio_1, uint sm[], float current_array[6], uint32_t full_current_array[6][full_current_history_length], uint16_t* full_position, uint8_t* current_buffer_run) {
  for (uint32_t channel = 0; channel < 6; channel++) // initializes each element of current array to zero
  {
   current_array[channel] = 0;
  }
+
+ float latest_current_0;
+ float latest_current_1;
 
  for (uint32_t i = 0; i < 200; i++) // adds current measurements to current_array
  {
@@ -230,23 +248,49 @@ void get_all_averaged_currents(PIO pio_0, PIO pio_1, uint sm[], float current_ar
   {
     // NOTE: with an average of 200, overflow does not occur
     // However, if this average is increased later on, it may be necessary to divide earlier/increase to 32 bit integers
-    current_array[channel] += (int16_t) pio_sm_get_blocking(pio_0, sm[channel]);
-    current_array[channel+3] += (int16_t) pio_sm_get_blocking(pio_1, sm[channel+3]);
+    latest_current_0 = (int16_t) pio_sm_get_blocking(pio_0, sm[channel]);
+    latest_current_1 = (int16_t) pio_sm_get_blocking(pio_1, sm[channel+3]);
+    
+    current_array[channel] += latest_current_0;
+    current_array[channel+3] += latest_current_1;
+
+    
+    
+    if (*current_buffer_run == 1) {
+      // update latest full current, along with its position in rotating buffer
+      full_current_array[channel][*full_position] = (uint32_t) latest_current_0;
+      full_current_array[channel+3][*full_position] = (uint32_t) latest_current_1;
+      
+    }
+    
   }
+
+  
+  if (*current_buffer_run == 1) {
+    *full_position += 1;
+    if (*full_position >= full_current_history_length) {
+      *full_position -= full_current_history_length;
+    }
+  }
+
  }
 
+  
  for (uint32_t channel=0; channel<6; channel++) // divide & multiply summed current values by appropriate factors
  {
-  current_array[channel] = current_array[channel]*adc_to_uA/200 + 8.3;
+  current_array[channel] = current_array[channel]*adc_to_uA/200;
  }
-
 
 
   for (uint32_t i=0; i<6; i++) {
         // check if trip is required
+
         if ((current_array[i] > trip_currents[i]) && ((trip_mask & (1 << i)))) {
 
+
+
           if (num_trigger[i] > 20) {
+            *current_buffer_run = 0;
             gpio_put(all_pins.crowbarPins[i],1);
             trip_status = trip_status | (1 << i);
             num_trigger[i] = 0;
@@ -258,12 +302,14 @@ void get_all_averaged_currents(PIO pio_0, PIO pio_1, uint sm[], float current_ar
         }
         
       }
+  
 }
 
 //******************************************************************************
 // Standard loop function, called repeatedly
 int main(){
   #define PICO_XOSC_STARTUP_DELAY_MULTIPLIER 64
+
   
   stdio_init_all();
 
@@ -285,7 +331,6 @@ int main(){
 
   float channel_current_averaged[6] = {0, 0, 0, 0, 0, 0};
   float channel_voltage[6] = {0, 0, 0, 0, 0, 0};
-  int16_t burst_current[size_current_burst];
   uint16_t burst_position = 0;
 
 
@@ -381,7 +426,7 @@ gpio_put(all_pins.P1_0, 1); // put pedestal pin high
 
     // acquire averaged current values
     for (uint32_t i=0; i<10; i++) {
-      get_all_averaged_currents(pio_0, pio_1, sm_array, channel_current_averaged); // get average of 200 full speed current measurements
+      get_all_averaged_currents(pio_0, pio_1, sm_array, channel_current_averaged, full_current_array, &full_position, &current_buffer_run); // get average of 200 full speed current measurements
 
       // store averaged currents
       if (average_store_position < 1999) // check that current buffer size has not been exceeded
@@ -399,7 +444,7 @@ gpio_put(all_pins.P1_0, 1); // put pedestal pin high
       
   
       // cdc_task reads in commands from PI via usb and responds appropriately
-      cdc_task(channel_current_averaged, channel_voltage, burst_current, sm_array, &burst_position, trip_currents, &trip_mask, &trip_status, average_current_history, &average_store_position);
+      cdc_task(channel_current_averaged, channel_voltage, sm_array, &burst_position, trip_currents, &trip_mask, &trip_status, average_current_history, &average_store_position, full_current_array, &full_position, &current_buffer_run);
       tud_task(); // tinyUSB formality
     }
 
@@ -409,7 +454,7 @@ gpio_put(all_pins.P1_0, 1); // put pedestal pin high
     sleep_ms(1); // delay is longer than ideal, but seems to be necessary, or voltage data will be polluted
 
 
-    cdc_task(channel_current_averaged, channel_voltage, burst_current, sm_array, &burst_position, trip_currents, &trip_mask, &trip_status, average_current_history, &average_store_position);
+    cdc_task(channel_current_averaged, channel_voltage, sm_array, &burst_position, trip_currents, &trip_mask, &trip_status, average_current_history, &average_store_position, full_current_array, &full_position, &current_buffer_run);
     tud_task();
 
     // clear rx fifos, otherwise data can be polluted by previous current measurements
