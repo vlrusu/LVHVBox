@@ -1,7 +1,9 @@
 #include "utils.h"
+#include <string.h>
 
 const char* CONFIG_PATH = "../../config.txt";
 const int CONFIG_READ_LENGTH = 200;
+
 
 int msleep(long msec)
 {
@@ -34,23 +36,7 @@ char* extract_value(char* input_string) {
     }
   }
   start_char += 0;
-  
-  /*
-  char* output_string = malloc(strlen(input_string) - start_char-2);
-  strncpy(output_string, &input_string[start_char+1], strlen(input_string)-start_char-2);
 
-  printf("length: %i\n", strlen(input_string) - start_char);
-
-  printf("return string: %s\n",output_string);
-  */
-
-
-  /*
-  char* output_string = malloc(50);
-  for (int i=0; i<strlen(input_string)-start_char - 2; i++) {
-    output_string[i] = input_string[1 + i + start_char];
-  }
-  */
  char* output_string = malloc(CONFIG_READ_LENGTH);
  strcpy(output_string, &input_string[start_char+1]);
 
@@ -108,11 +94,17 @@ char* load_config(char* constant_name) {
     
     fgets(current_line, CONFIG_READ_LENGTH, ptr);
 
-    tentative_value = extract_value(current_line);
-    tentative_name = extract_name(current_line);
-    
-    if (strcmp(tentative_name, constant_name) == 0) {
-      correct_line = 1;
+    if (current_line[0] != '\n') {
+      if (current_line[0] != '/' && current_line[1] != '/') {
+
+        tentative_value = extract_value(current_line);
+        tentative_name = extract_name(current_line);
+        
+        if (strcmp(tentative_name, constant_name) == 0) {
+          correct_line = 1;
+        }
+
+      }
     }
   }
   
@@ -148,8 +140,11 @@ int write_fixed_location(const char *filename, long position, int value) {
 }
 
 int error_log(const char *data) {
+  /*
   char *error_log = load_config("Error_Log_File");
   printf("Error log: %s\n",error_log);
+  */
+  char error_log[24] = "../../Logs/error_log.log";
 
   FILE *fp = fopen(error_log, "a");
   if (fp == NULL) {
@@ -172,22 +167,44 @@ int error_log(const char *data) {
   return 0;
 }
 
-int write_log(char *filename, const char *data, int datatype) {
-  FILE *fp = fopen(filename, "a");
+int write_log(char* filename, const char *data, int datatype, int client_addr) {
+  /*
+  printf("sizeof filename: %i\n", sizeof(filename));
+
+  int current_index = 0;
+  while (filename[current_index] != '\n') {
+    current_index += 1;
+  }
+  
+
+  char file_string[current_index+1];
+  for (int i=0; i<26; i++) {
+    file_string[i] = filename[i];
+  }
+  printf("Final index: %i\n", current_index);
+  */
+
+
+  char file_string[26] = "../../Logs/command_log.log";
+  FILE *fp = fopen(file_string, "a");
   if (fp == NULL) {
-    printf("Error logging datatype %i\n", datatype);
+    printf("Error logging datatype %i", datatype);
     return -1;
   }
 
-  if (fprintf(fp, data) < 0) {
+  if (fprintf(fp, "%lu ", (unsigned long)time(NULL)) < 0) {
     printf("Error writing logfile, datatype %i\n", datatype);
     fclose(fp);
     return -1;
-  } else if (fprintf(fp, " %lu", (unsigned long)time(NULL)) < 0) {
+  } else if (fprintf(fp, data) < 0) {
     printf("Error writing logfile, datatype %i\n", datatype);
     fclose(fp);
     return -1;
-  } else if (fprintf(fp, " %i\n", datatype) < 0) {
+  } else if (fprintf(fp, " %i", datatype) < 0) {
+    printf("Error writing logfile, datatype %i\n", datatype);
+    fclose(fp);
+    return -1;
+  } else if (fprintf(fp, " %i\n", client_addr) < 0) {
     printf("Error writing logfile, datatype %i\n", datatype);
     fclose(fp);
     return -1;

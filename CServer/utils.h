@@ -17,12 +17,13 @@ typedef struct
   int client_addr;
 } command;
 
-# define COMMAND_LENGTH 100
+# define COMMAND_LENGTH 10000
 
 int msleep(long msec);
 int write_fixed_location(const char *filename, long position, int value);
-int write_log(char *filename, const char *data, int datatype);
+int write_log(char filename[], const char *data, int datatype, int client_addr);
 int error_log(const char *data);
+
 
 char* load_config(char* constant_name);
 char* extract_value(char* input_string);
