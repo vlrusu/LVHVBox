@@ -21,9 +21,9 @@ if __name__=="__main__":
 
 
     
-    with open('sw50_long_100ptcorrection.txt') as f:
+    with open('peds1000.txt') as f:
         lines = f.readlines()
-        float_vals = [float(line.split()[0]) for line in lines if float(line.split()[0]) > 143.25]
+        float_vals = [float(line.split()[2]) for line in lines if float(line.split()[1]) > 140]
         #float_vals = [float(line.split()[0]) for line in lines]
     
 

@@ -52,8 +52,10 @@ uint8_t trip_status = 0; // no channels start out tripped
 uint16_t num_trigger[6] = {0, 0, 0, 0, 0, 0}; // increments/decrements based upon whether trip_currents are exceeded
 float trip_currents[6] = {172, 172, 172, 172, 172, 172}; // tripping threshold currents
 
-const float adc_to_V  = 2.048 / pow(2, 15) * 1000;			// ADC full-scale voltage / ADC full scale reading * divider ratio
-const float adc_to_uA = (2.048 / pow(2, 15)) / (100 * 101) * 1.E6;
+const float adc_to_V  = 2.5 / pow(2, 15) * 1000;			// ADC full-scale voltage / ADC full scale reading * divider ratio
+//const float adc_to_uA = (2.048 / pow(2, 15)) / (100 * 101) * 1.E6;
+//const float adc_to_uA = (2.048 / pow(2, 15)) / (24.7 * 475) * 1.E6;
+const float adc_to_uA = (2.5 / pow(2, 15)) / (100 * 101) * 1.E6;
 
 uint32_t average_current_history_length = 2000;
 #define full_current_history_length 8000
@@ -349,7 +351,7 @@ int main(){
 
   board_init(); // tinyUSB formality
   
-  float clkdiv = 20; // set clock divider for PIO
+  float clkdiv = 22; // set clock divider for PIO
   uint32_t pio_start_mask = -1; // mask to select which state machines in each PIO block are started
 
   adc_init();
@@ -443,73 +445,12 @@ gpio_put(all_pins.P1_0, 1); // put pedestal pin high
 
   while (true) // DAQ & USB communication Loop, runs forever
   {
-    // ----- Collect averaged current measurements ----- //
-
-    gpio_put(all_pins.enablePin, 0); // set mux to current
-    sleep_ms(1); // delay is longer than ideal, but seems to be necessary, or current data will be polluted
-
-    // clear rx fifos
-    for (uint32_t i=0; i<3; i++) {
-      pio_sm_clear_fifos(pio_0, sm_array[i]);
-      pio_sm_clear_fifos(pio_1, sm_array[i+3]);
-    }
-
-    // acquire averaged current values
-    for (uint32_t i=0; i<220; i++) {
-      get_all_averaged_currents(pio_0, pio_1, sm_array, channel_current_averaged, full_current_array, &full_position, &current_buffer_run); // get average of 200 full speed current measurements
-
-      // store averaged currents
-      if (average_store_position < 1999) // check that current buffer size has not been exceeded
-      {
-        for (uint8_t i=0; i<6; i++) {
-          average_current_history[i][average_store_position] = channel_current_averaged[i];
-        }
-        average_store_position += 1; // increment pointer to current storage position
-      } else { // begin overwriting current data, starting
-        average_store_position = 0; // set pointer to beginning of current storage buffer
-        for (uint8_t i=0; i<6; i++) {
-          memset(average_current_history[i],0,sizeof(average_current_history[i]));
-        }
-      }
-      
-  
-      // cdc_task reads in commands from PI via usb and responds appropriately
-      cdc_task(channel_current_averaged, channel_voltage, sm_array, &burst_position, trip_currents, &trip_mask, &trip_status, average_current_history, &average_store_position, full_current_array, &full_position, &current_buffer_run, &slow_read);
-      tud_task(); // tinyUSB formality
-    }
-
-    // ----- Collect single voltage measurements ----- //
-
-    gpio_put(all_pins.enablePin, 1); // set mux to voltage
-    sleep_ms(1); // delay is longer than ideal, but seems to be necessary, or voltage data will be polluted
 
 
-    cdc_task(channel_current_averaged, channel_voltage, sm_array, &burst_position, trip_currents, &trip_mask, &trip_status, average_current_history, &average_store_position, full_current_array, &full_position, &current_buffer_run, &slow_read);
-    tud_task();
-
-    // clear rx fifos, otherwise data can be polluted by previous current measurements
-    for (uint32_t i=0; i<3; i++) {
-      pio_sm_clear_fifos(pio_0, sm_array[i]);
-      pio_sm_clear_fifos(pio_1, sm_array[i+3]);
-    }
-
-    for (uint32_t channel = 0; channel < 3; channel++) // read in a single voltage value for each of 6 channels
-    {
-      channel_voltage[channel] = get_single_voltage(pio_0, sm_array[channel]);
-
-      channel_voltage[channel+3] = get_single_voltage(pio_1, sm_array[channel+3]);
-    }
-
-
-
-
-
-    gpio_put(all_pins.enablePin, 0); // set mux to current
-    sleep_ms(1);
     // ----- Update pedestal subtraction value ----- //
     if (ped_on) {
       gpio_put(all_pins.P1_0, 0); // put pedestal pin low
-      sleep_ms(5);
+      sleep_ms(200);
 
       // clear rx fifos
       for (uint32_t i=0; i<3; i++) {
@@ -519,9 +460,9 @@ gpio_put(all_pins.P1_0, 1); // put pedestal pin high
 
       
       
-      uint16_t pre_ped_subtraction[6] = {0, 0, 0, 0, 0, 0};
+      uint32_t pre_ped_subtraction[6] = {0, 0, 0, 0, 0, 0};
 
-      for (int ped_count=0; ped_count<100; ped_count++) {
+      for (int ped_count=0; ped_count<5000; ped_count++) {
 
         for (int i=0; i<3; i++) {
           pre_ped_subtraction[i] += (uint16_t) pio_sm_get_blocking(pio_0, sm_array[i]);
@@ -531,14 +472,95 @@ gpio_put(all_pins.P1_0, 1); // put pedestal pin high
 
 
       for (int i=0; i<6; i++) {
-        ped_subtraction[i] = (float) pre_ped_subtraction[i]/100*adc_to_uA;
+        ped_subtraction[i] = (float) pre_ped_subtraction[i]/5000*adc_to_uA;
+      }
+
+      gpio_put(all_pins.P1_0, 1); // put pedestal pin high
+      sleep_ms(200);
+    } else {
+      for (int i=0; i<6; i++) {
+        ped_subtraction[i] = 0;
+      }
+    }
+
+
+
+
+    // ----- Collect averaged current measurements ----- //
+
+    for (int j=0; j<35; j++) {
+      gpio_put(all_pins.enablePin, 0); // set mux to current
+      sleep_ms(1); // delay is longer than ideal, but seems to be necessary, or current data will be polluted
+
+      // clear rx fifos
+      for (uint32_t i=0; i<3; i++) {
+        pio_sm_clear_fifos(pio_0, sm_array[i]);
+        pio_sm_clear_fifos(pio_1, sm_array[i+3]);
+      }
+
+      // acquire averaged current values
+      for (uint32_t i=0; i<1000; i++) {
+        get_all_averaged_currents(pio_0, pio_1, sm_array, channel_current_averaged, full_current_array, &full_position, &current_buffer_run); // get average of 200 full speed current measurements
+
+        // store averaged currents
+        if (average_store_position < 1999) // check that current buffer size has not been exceeded
+        {
+          for (uint8_t i=0; i<6; i++) {
+            average_current_history[i][average_store_position] = channel_current_averaged[i];
+          }
+          average_store_position += 1; // increment pointer to current storage position
+        } else { // begin overwriting current data, starting
+          average_store_position = 0; // set pointer to beginning of current storage buffer
+          for (uint8_t i=0; i<6; i++) {
+            memset(average_current_history[i],0,sizeof(average_current_history[i]));
+          }
+        }
+        
+    
+        // cdc_task reads in commands from PI via usb and responds appropriately
+        cdc_task(channel_current_averaged, channel_voltage, sm_array, &burst_position, trip_currents, &trip_mask, &trip_status, average_current_history, &average_store_position, full_current_array, &full_position, &current_buffer_run, &slow_read);
+        tud_task(); // tinyUSB formality
+      }
+
+      // ----- Collect single voltage measurements ----- //
+
+      gpio_put(all_pins.enablePin, 1); // set mux to voltage
+      sleep_ms(1); // delay is longer than ideal, but seems to be necessary, or voltage data will be polluted
+
+
+      cdc_task(channel_current_averaged, channel_voltage, sm_array, &burst_position, trip_currents, &trip_mask, &trip_status, average_current_history, &average_store_position, full_current_array, &full_position, &current_buffer_run, &slow_read);
+      tud_task();
+
+      // clear rx fifos, otherwise data can be polluted by previous current measurements
+      for (uint32_t i=0; i<3; i++) {
+        pio_sm_clear_fifos(pio_0, sm_array[i]);
+        pio_sm_clear_fifos(pio_1, sm_array[i+3]);
+      }
+
+      for (uint32_t channel = 0; channel < 3; channel++) // read in a single voltage value for each of 6 channels
+      {
+        channel_voltage[channel] = get_single_voltage(pio_0, sm_array[channel]);
+
+        channel_voltage[channel+3] = get_single_voltage(pio_1, sm_array[channel+3]);
       }
 
 
 
-      gpio_put(all_pins.P1_0, 1); // put pedestal pin high
+
+
+      gpio_put(all_pins.enablePin, 0); // set mux to current
       sleep_ms(1);
     }
+    
+    
+    
+    
+    
+  
+    
+    
+    
+    
 
   }
   return 0;

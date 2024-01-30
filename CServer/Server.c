@@ -143,10 +143,11 @@ char v_pipe_path_base[15] = "/tmp/vdata_pipe";
 
 
 #define ALPHA 0.1 // Choose a value between 0 and 1. Smaller values result in heavier filtering.
-#define DECIMATION_FACTOR 20
+#define DECIMATION_FACTOR 10
 uint8_t use_pipe = 1; // when server tries to open pipe, will be set to 0 upon fail - will then assume pipe is not to be used
 
 int num_pipes = 3;
+int pipe_channels[3] = {0, 4, 5};
 
 
 // variables to manage command queue
@@ -164,9 +165,9 @@ command add_command;
 
 void enqueue(command array[COMMAND_LENGTH], command insert_item) {
     if (Rear >= COMMAND_LENGTH - 1) {
-       printf("Overflow \n");
        Rear = 0;
        Front = 0;
+       error_log("Overflow Error");
        return;
     } else
     {      
@@ -177,17 +178,17 @@ void enqueue(command array[COMMAND_LENGTH], command insert_item) {
  
 void dequeue(command array[COMMAND_LENGTH]) {
     if (Front < 0 || Front > Rear) {
-        printf("Underflow \n");
         Rear = 0;
         Front = 0;
+        error_log("Underflow Error");
         return ;
     } else {
       for (int i=0; i<COMMAND_LENGTH-1; i++) {
         array[i] = array[i+1];
       }
+      Rear -= 1;
     }
     
-    Rear -= 1;
 }
 
 
@@ -402,8 +403,6 @@ void get_slow_read(uint8_t channel, int client_addr) {
 
   char *input_data;
   input_data = (char *)malloc(1);
-
-  printf("In get_slow_read!\n");
 
   if (channel < 6)
   {
@@ -1152,9 +1151,9 @@ void *acquire_data(void *arguments)
     char v_pipe_path[16];
     printf("v_test: %s\n", v_pipe_path);
     strncpy(v_pipe_path, v_pipe_path_base, 15);
-    v_pipe_path[15] = pipe_id+48;
+    v_pipe_path[15] = pipe_channels[pipe_id]+48;
 
-    if (stat(v_pipe_path, &st[pipe_id]) == -1)
+    if (stat(v_pipe_path, &st[pipe_channels[pipe_id]]) == -1)
     {
       if (mkfifo(v_pipe_path, 0666) == -1)
       {
@@ -1187,7 +1186,6 @@ void *acquire_data(void *arguments)
     // check if command is pico type, else do nothing
     if (current_type == 'c')
     {
-
       // select proper hv function
       if (current_command == 'k')
       { // trip
@@ -1472,7 +1470,7 @@ void *save_txt(void *arguments)
 
   for (int pipe_id=0; pipe_id<num_pipes; pipe_id++) {
     strncpy(pipe_path, pipe_path_base, 15);
-    pipe_path[14] = 48+pipe_id;
+    pipe_path[14] = 48+pipe_channels[pipe_id];
     if (stat(pipe_path, &st) == -1)
     {
       if (mkfifo(pipe_path, 0666) == -1)
@@ -1549,7 +1547,7 @@ void *save_txt(void *arguments)
               if (time_index % DECIMATION_FACTOR == 0 && use_pipe == 1)
               {
                 int length = snprintf(buffer, sizeof(buffer), "%f ", filtered_value);
-                fprintf(fp_I, "%f ", filtered_value);
+
                 write(fd[pipe_id], buffer, length); // Write to the pipe
               }
             }
@@ -1557,7 +1555,6 @@ void *save_txt(void *arguments)
             if (time_index % DECIMATION_FACTOR == 0 && use_pipe == 1)
             {
               int length = snprintf(buffer, sizeof(buffer), "\n");
-              fprintf(fp_I, "\n");
               write(fd[pipe_id], buffer, length); // Write the timestamp to the pipe
             }
           }

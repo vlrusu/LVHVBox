@@ -112,7 +112,7 @@ def process_input(input):
     # create output list of command and args
 
     try:
-        arg_list = [int(arg) for arg in split_command[1::]]
+        arg_list = [float(arg) for arg in split_command[1::]]
         return_list = [split_command[0]] + arg_list
 
         return return_list
@@ -214,7 +214,7 @@ if __name__=="__main__":
                 command_string += valid_commands[processed_input[0]][1]
 
                 if valid_commands[processed_input[0]][2] == 1:
-                    command_string += chr(processed_input[1]+97)
+                    command_string += chr(int(processed_input[1])+97)
         
                 else:
                     command_string += 'a'
