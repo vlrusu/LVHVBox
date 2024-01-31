@@ -25,8 +25,7 @@
 
 #include <signal.h> 
 
-#include <mcp23s08.h>
-#include <softPwm.h>
+
 #include <linux/spi/spidev.h>
 #include "dac8164.h"
 
@@ -147,11 +146,11 @@ char v_pipe_path_base[15] = "/tmp/vdata_pipe";
 
 
 #define ALPHA 0.1 // Choose a value between 0 and 1. Smaller values result in heavier filtering.
-#define DECIMATION_FACTOR 10
+#define DECIMATION_FACTOR 20
 uint8_t use_pipe = 1; // when server tries to open pipe, will be set to 0 upon fail - will then assume pipe is not to be used
 
 int num_pipes = 3;
-int pipe_channels[3] = {0, 4, 5};
+int pipe_channels[3] = {0, 1, 3};
 
 
 // variables to manage command queue
@@ -350,7 +349,7 @@ void get_vhv(uint8_t channel, int client_addr) {
 
   int float_channel = (int)channel;
 
-  write(client_addr, &return_val, sizeof(&return_val));
+  write(client_addr, &return_val, sizeof(return_val));
 
 
 }
@@ -365,7 +364,7 @@ void get_ihv(uint8_t channel, int client_addr)
     return_val = currents_1[channel - 6];
   }
 
-  write(client_addr, &return_val, sizeof(&return_val));
+  write(client_addr, &return_val, sizeof(return_val));
 }
 
 // get_buffer_status
@@ -394,11 +393,7 @@ void get_buffer_status(uint8_t channel, int client_addr) {
   {
     return_val = 0;
   }
-
-  if (client_addr != -9999)
-    write(client_addr, &return_val, sizeof(&return_val));
-  else
-    write_fixed_location(LIVE_STATUS_FILENAME, 2 * channel, return_val); // writes at fixed location
+ 
 
 }
 
@@ -425,7 +420,7 @@ void get_slow_read(uint8_t channel, int client_addr) {
   printf("slow read value of: %i\n", return_val);
 
 
-  write(client_addr, &return_val, sizeof(&return_val));
+  write(client_addr, &return_val, sizeof(return_val));
 }
 
 
@@ -725,7 +720,7 @@ void trip_status(uint8_t channel, int client_addr)
   }
 
   if (client_addr != -9999)
-    write(client_addr, &return_val, sizeof(&return_val));
+    write(client_addr, &return_val, sizeof(return_val));
   else
     write_fixed_location(LIVE_STATUS_FILENAME, 2 * channel, return_val); // writes at fixed location
 }
@@ -781,7 +776,7 @@ void readMonV48(uint8_t channel, int client_addr)
   float ret = i2c_ltc2497(address, channelLTC);
   ret = ret / (v48scale * acplscale);
 
-  write(client_addr, &ret, sizeof(&ret));
+  write(client_addr, &ret, sizeof(ret));
 }
 
 // readMonI48
@@ -800,7 +795,7 @@ void readMonI48(uint8_t channel, int client_addr)
   float ret = i2c_ltc2497(address, channelLTC);
   ret = ret / (i48scale * acplscale);
 
-  write(client_addr, &ret, sizeof(&ret));
+  write(client_addr, &ret, sizeof(ret));
 }
 
 // readMonV6
@@ -820,7 +815,7 @@ void readMonV6(uint8_t channel, int client_addr)
   ret = ret / (v6scale * acplscale);
   printf("return val: %f \n", ret);
 
-  write(client_addr, &ret, sizeof(&ret));
+  write(client_addr, &ret, sizeof(ret));
 }
 
 // readMonI6
@@ -840,7 +835,7 @@ void readMonI6(uint8_t channel, int client_addr)
   float ret = i2c_ltc2497(address, channelLTC);
   ret = ret / (i6scale * acplscale);
 
-  write(client_addr, &ret, sizeof(&ret));
+  write(client_addr, &ret, sizeof(ret));
 }
 
 void *hv_request() {
@@ -1635,9 +1630,7 @@ void *save_txt(void *arguments)
 }
 
 int lv_initialization() {
-  if (export_gpio(lv_global_enable) == -1) {
-    return -1;
-  } else if (set_gpio_direction_out(lv_global_enable) == -1) {
+  if (setup_gpio(lv_global_enable) == -1) {
     return -1;
   } else if (write_gpio_value(lv_global_enable, LOW) == -1) {
     return -1;
@@ -1718,15 +1711,11 @@ int main( int argc, char **argv ) {
   
 // Export the GPIO pins
 
-    if (export_gpio(lv_mcp_reset) == -1) {
+    if (setup_gpio(lv_mcp_reset) == -1) {
         return 1;
     }
 
 
-// Set the GPIO pin direction to "out"
-    if (set_gpio_direction_out(lv_mcp_reset) == -1) {
-        return 1;
-    }
 
 
     
@@ -1771,7 +1760,8 @@ int main( int argc, char **argv ) {
   args_0.pico = 0;
 
   // check that pico 0 is available
-  libusb_init(NULL);
+  int libusb_code = libusb_init(NULL);
+  printf("libusb code: %i\n", libusb_code);
   device_handle_0 = libusb_open_device_with_vid_pid(NULL, VENDOR_ID_0, PRODUCT_ID);
   if (device_handle_0 == 0) {
     printf("Please connect pico 0\n");

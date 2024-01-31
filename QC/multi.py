@@ -11,9 +11,9 @@ v_pipe_path = "/tmp/vdata_pipe"  # Second pipe
 
 SPIKE_THRESHOLD = 20.
 
-plot_channels = [0, 4, 5]
+plot_channels = [0, 1, 3]
 
-data_length = 10000
+data_length = 1500
 
 
 
@@ -162,13 +162,14 @@ class App(QtWidgets.QMainWindow):
         # Modify this path as needed.
         trigger_file_path = "../CServer/build/live_status.txt"
         
+        
         with open(trigger_file_path, 'r') as f:
             content = f.readline().split()
-            if content[self.channel] == "1":
-                self.plotWidget.getViewBox().setBackgroundColor('r')
+        if content[self.channel] == "1":
+            self.plotWidget.getViewBox().setBackgroundColor('r')
 #                self.curve.setPen(self.alertPen)  # Set curve color to red
-            else:
-                self.plotWidget.getViewBox().setBackgroundColor('k')                
+        else:
+            self.plotWidget.getViewBox().setBackgroundColor('k')                
 #                self.curve.setPen(self.defaultPen)  # Reset curve color to default
         
 
@@ -181,6 +182,7 @@ class App(QtWidgets.QMainWindow):
             self.pause_button.setText("Pause")
 
     def update_plot(self, value):
+        print(time.time())
         if self.paused:  # Check if paused
             return
 
@@ -228,7 +230,7 @@ def start_one(channel):
     thread = QtCore.QThread()
     receiver.moveToThread(thread)
 
-
+    
    # For second pipe
     receiver2 = DataReceiver(v_pipe_path + str(channel))
     thread2 = QtCore.QThread()
@@ -239,6 +241,7 @@ def start_one(channel):
     thread2.started.connect(receiver2.run)
     thread2.start()
     
+    
     receiver.newData.connect(mainWindow1.update_plot)
 
     thread.started.connect(receiver.run)
@@ -246,6 +249,7 @@ def start_one(channel):
 
     if (sys.flags.interactive != 1) or not hasattr(QtCore, 'PYQT_VERSION'):
         sys.exit(app.exec_())
+    
 
 if __name__ == "__main__":
     pool = mp.Pool(processes=len(plot_channels))
