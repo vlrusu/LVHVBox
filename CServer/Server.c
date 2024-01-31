@@ -25,6 +25,8 @@
 
 #include <signal.h> 
 
+#include <mcp23s08.h>
+#include <softPwm.h>
 #include <linux/spi/spidev.h>
 #include "dac8164.h"
 
@@ -94,6 +96,10 @@ uint8_t lv_global_enable = 18;
 // get time that server started
 int start_time;
 
+int current_datafile_time = 0;
+int num_storages = 0;
+int max_storages = 1250000;
+//int max_storages = 1000;
 
 #define full_current_history_length 8000
 
@@ -344,7 +350,7 @@ void get_vhv(uint8_t channel, int client_addr) {
 
   int float_channel = (int)channel;
 
-  write(client_addr, &return_val, sizeof(return_val));
+  write(client_addr, &return_val, sizeof(&return_val));
 
 
 }
@@ -359,7 +365,7 @@ void get_ihv(uint8_t channel, int client_addr)
     return_val = currents_1[channel - 6];
   }
 
-  write(client_addr, &return_val, sizeof(return_val));
+  write(client_addr, &return_val, sizeof(&return_val));
 }
 
 // get_buffer_status
@@ -390,7 +396,7 @@ void get_buffer_status(uint8_t channel, int client_addr) {
   }
 
   if (client_addr != -9999)
-    write(client_addr, &return_val, sizeof(return_val));
+    write(client_addr, &return_val, sizeof(&return_val));
   else
     write_fixed_location(LIVE_STATUS_FILENAME, 2 * channel, return_val); // writes at fixed location
 
@@ -419,7 +425,7 @@ void get_slow_read(uint8_t channel, int client_addr) {
   printf("slow read value of: %i\n", return_val);
 
 
-  write(client_addr, &return_val, sizeof(return_val));
+  write(client_addr, &return_val, sizeof(&return_val));
 }
 
 
@@ -719,7 +725,7 @@ void trip_status(uint8_t channel, int client_addr)
   }
 
   if (client_addr != -9999)
-    write(client_addr, &return_val, sizeof(return_val));
+    write(client_addr, &return_val, sizeof(&return_val));
   else
     write_fixed_location(LIVE_STATUS_FILENAME, 2 * channel, return_val); // writes at fixed location
 }
@@ -775,7 +781,7 @@ void readMonV48(uint8_t channel, int client_addr)
   float ret = i2c_ltc2497(address, channelLTC);
   ret = ret / (v48scale * acplscale);
 
-  write(client_addr, &ret, sizeof(ret));
+  write(client_addr, &ret, sizeof(&ret));
 }
 
 // readMonI48
@@ -794,7 +800,7 @@ void readMonI48(uint8_t channel, int client_addr)
   float ret = i2c_ltc2497(address, channelLTC);
   ret = ret / (i48scale * acplscale);
 
-  write(client_addr, &ret, sizeof(ret));
+  write(client_addr, &ret, sizeof(&ret));
 }
 
 // readMonV6
@@ -814,7 +820,7 @@ void readMonV6(uint8_t channel, int client_addr)
   ret = ret / (v6scale * acplscale);
   printf("return val: %f \n", ret);
 
-  write(client_addr, &ret, sizeof(ret));
+  write(client_addr, &ret, sizeof(&ret));
 }
 
 // readMonI6
@@ -834,7 +840,7 @@ void readMonI6(uint8_t channel, int client_addr)
   float ret = i2c_ltc2497(address, channelLTC);
   ret = ret / (i6scale * acplscale);
 
-  write(client_addr, &ret, sizeof(ret));
+  write(client_addr, &ret, sizeof(&ret));
 }
 
 void *hv_request() {
@@ -1446,9 +1452,6 @@ void *acquire_data(void *arguments)
 
 void *save_txt(void *arguments)
 {
-  char *filename_I;
-  char *filename_V;
-
   arg_struct *common = arguments;
 
   time_t seconds;
@@ -1461,6 +1464,7 @@ void *save_txt(void *arguments)
 
   float last_output[6] = {0}; // State for each channel's filter
   struct stat st;
+
 
   
   char pipe_path[15];
@@ -1487,28 +1491,68 @@ void *save_txt(void *arguments)
       use_pipe = 0; // ensure that pipe isn't used if failed
     }
   }
+
+  current_datafile_time = time(NULL);
+  char *filename_I = malloc(50);
+  
+
+  
+  while (1)
+  {
+    /*
+    if (pico == 0)
+    {
+      filename_I = "../Currents_0.txt";
+    }
+    else
+    {
+      filename_I = "../Currents_1.txt";
+    }
+    */
+    
+
+    /*
+    int current_datafile_time = 0;
+    int num_storages = 0;
+    int max_storages = 1250000;
+    */
+    //strcpy(output_string, &input_string[start_char+1]);
+
+    // get current filename
+
+
+  
+
+  if (num_storages >= max_storages) {
+    current_datafile_time = time(NULL);
+    num_storages = 0;
+  }
+
+  char *file_suffix = ".txt";
+  if (pico == 0) {
+    char *current_precursor = "../../Data/Currents_0_";
+    strcpy(filename_I, &current_precursor[0]);
+  } else {
+    char *current_precursor = "../../Data/Currents_1_";
+    strcpy(filename_I, &current_precursor[0]);
+  }
+  
+  char str_time[10];
+  sprintf(str_time, "%i", current_datafile_time);
+  strcat(filename_I, str_time);
+  strcat(filename_I, file_suffix);
+
   
 
 
 
 
-  if (pico == 0)
-  {
-    filename_I = "../Currents_0.txt";
-  }
-  else
-  {
-    filename_I = "../Currents_1.txt";
-  }
+    
 
-  FILE *fp_I = fopen(filename_I, "w");
-  if (fp_I == NULL)
-  {
-    printf("Error opening the current file %s", filename_I);
-  }
 
-  while (1)
-  {
+    
+
+
     uint8_t array_indicator = common->array_indicator;
 
     if (array_indicator != old_array_indicator)
@@ -1523,72 +1567,79 @@ void *save_txt(void *arguments)
         }
       }
 
+
+      FILE *fp_I = fopen(filename_I, "a");
+      if (fp_I == NULL) {
+        printf("Error opening the current file %s", filename_I);
+      }
+      num_storages += HISTORY_LENGTH;
+
+      // save data in current log
+      for (uint32_t time_index=0; time_index<HISTORY_LENGTH; time_index++) {
+        for (uint8_t channel=0; channel<6; channel++) {
+          fprintf(fp_I, "%f ", store_all_currents_internal[channel][time_index]);
+        }
+        seconds = time(NULL);
+        fprintf(fp_I, "%f\n", (float)seconds);
+      }
+
+      // close the current file
+      fclose(fp_I);
+
+
+
+
+
       // open the current file for writing
-      if (pico == 0)
-      {
 
         char buffer[1024]; // A buffer to format and write data
         time_t seconds;
 
-        
-        for (int pipe_id=0; pipe_id<num_pipes; pipe_id++) {
-          for (uint32_t time_index = 0; time_index < HISTORY_LENGTH; time_index++)
+      for (int pipe_id=0; pipe_id<num_pipes; pipe_id++) {
+        for (uint32_t time_index = 0; time_index < HISTORY_LENGTH; time_index++)
+        {
+          for (uint8_t channel = 0; channel < 6; channel++)
           {
-            for (uint8_t channel = 0; channel < 6; channel++)
-            {
-              // Apply the first-order low-pass filter
-              float input_value = store_all_currents_internal[channel][time_index];
-              float filtered_value = ALPHA * input_value + (1 - ALPHA) * last_output[channel];
-              last_output[channel] = filtered_value;
+            // Apply the first-order low-pass filter
+            float input_value = store_all_currents_internal[channel][time_index];
+            float filtered_value = ALPHA * input_value + (1 - ALPHA) * last_output[channel];
+            last_output[channel] = filtered_value;
 
-              // Decimation by 5: Only write every 5th sample
-              if (time_index % DECIMATION_FACTOR == 0 && use_pipe == 1)
-              {
-                int length = snprintf(buffer, sizeof(buffer), "%f ", filtered_value);
-
-                write(fd[pipe_id], buffer, length); // Write to the pipe
-              }
-            }
-
+            // Decimation by 5: Only write every 5th sample
             if (time_index % DECIMATION_FACTOR == 0 && use_pipe == 1)
             {
-              int length = snprintf(buffer, sizeof(buffer), "\n");
-              write(fd[pipe_id], buffer, length); // Write the timestamp to the pipe
+              int length = snprintf(buffer, sizeof(buffer), "%f ", filtered_value);
+
+              write(fd[pipe_id], buffer, length); // Write to the pipe
             }
+          }
+
+          if (time_index % DECIMATION_FACTOR == 0 && use_pipe == 1)
+          {
+            int length = snprintf(buffer, sizeof(buffer), "\n");
+            write(fd[pipe_id], buffer, length); // Write the timestamp to the pipe
           }
         }
         
 
         
 
-              for (uint32_t time_index=0; time_index<HISTORY_LENGTH; time_index++) {
-                for (uint8_t channel=0; channel<6; channel++) {
-                  fprintf(fp_I, "%f ", store_all_currents_internal[channel][time_index]);
-                }
-                seconds = time(NULL);
-                fprintf(fp_I, "%f\n", (float)seconds);
-              }
-
-              // close the current file
+        
   
         
       }
     }
+
+    
   }
-  fclose(fp_I);
 }
 
 int lv_initialization() {
-  
-  if (setup_gpio(lv_global_enable) == -1) {
+  if (export_gpio(lv_global_enable) == -1) {
     return -1;
-  } 
-  /*
-  else if (set_gpio_direction_out(lv_global_enable) == -1) {
+  } else if (set_gpio_direction_out(lv_global_enable) == -1) {
     return -1;
-  } else 
-  */
-  if (write_gpio_value(lv_global_enable, LOW) == -1) {
+  } else if (write_gpio_value(lv_global_enable, LOW) == -1) {
     return -1;
   }
 
@@ -1666,19 +1717,16 @@ int main( int argc, char **argv ) {
  */
   
 // Export the GPIO pins
-  
-    if (setup_gpio(lv_mcp_reset) == -1) {
+
+    if (export_gpio(lv_mcp_reset) == -1) {
         return 1;
     }
-    
 
 
 // Set the GPIO pin direction to "out"
-/*
     if (set_gpio_direction_out(lv_mcp_reset) == -1) {
         return 1;
     }
-    */
 
 
     

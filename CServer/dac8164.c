@@ -7,6 +7,7 @@
 
 #include "dac8164.h"
 #include "stdint.h"
+#include "mcp23s17.h"
 #include <stdio.h>
 #include "gpio.h"
 #include "MCP23S08.h"

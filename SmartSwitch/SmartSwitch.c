@@ -50,12 +50,15 @@ uint8_t slow_read = 0;
 uint8_t trip_status = 0; // no channels start out tripped
 
 uint16_t num_trigger[6] = {0, 0, 0, 0, 0, 0}; // increments/decrements based upon whether trip_currents are exceeded
-float trip_currents[6] = {172, 172, 172, 172, 172, 172}; // tripping threshold currents
+float trip_currents[6] = {10, 10, 10, 10, 10, 10}; // tripping threshold currents
 
 const float adc_to_V  = 2.5 / pow(2, 15) * 1000;			// ADC full-scale voltage / ADC full scale reading * divider ratio
-//const float adc_to_uA = (2.048 / pow(2, 15)) / (100 * 101) * 1.E6;
-//const float adc_to_uA = (2.048 / pow(2, 15)) / (24.7 * 475) * 1.E6;
 const float adc_to_uA = (2.5 / pow(2, 15)) / (100 * 101) * 1.E6;
+
+
+//const float adc_to_V  = 2.048 / pow(2, 15) * 1000;
+//const float adc_to_uA = (2.048 / pow(2, 15)) / (24.7 * 475) * 1.E6;
+
 
 uint32_t average_current_history_length = 2000;
 #define full_current_history_length 8000

@@ -72,6 +72,8 @@ class App(QtWidgets.QMainWindow):
 
         
         self.plotWidget = pg.PlotWidget()
+        self.plotWidget.setLabel("bottom", "Time (S)")
+        self.plotWidget.setLabel("left", "Current (uA)")
         layout.addWidget(self.plotWidget)
 
         self.spikesPerHour = np.zeros(72)
