@@ -4,13 +4,16 @@ import numpy as np
 from pyqtgraph.Qt import QtGui, QtCore, QtWidgets
 import pyqtgraph as pg
 import multiprocessing as mp
+import time
 
 pipe_path = "/tmp/data_pipe"
 v_pipe_path = "/tmp/vdata_pipe"  # Second pipe
 
 SPIKE_THRESHOLD = 20.
 
-plot_channels = [0, 1, 2]
+plot_channels = [0, 4, 5]
+
+data_length = 10000
 
 
 
@@ -64,8 +67,7 @@ class App(QtWidgets.QMainWindow):
         top_layout.addWidget(self.label)
         
         layout.addLayout(top_layout)
-
-        self.xlabels = [i/235.84E3*2000 for i in range(10000)]
+        
 
 
         
@@ -114,6 +116,9 @@ class App(QtWidgets.QMainWindow):
 
 
         self.data = np.array([])
+        self.xlabels = np.array([])
+        self.times = np.array([])
+
         
         self.curve = self.plotWidget.plot()
         
@@ -178,12 +183,22 @@ class App(QtWidgets.QMainWindow):
             return
 
         thissample = float(value[self.channel])
-        self.data = np.append(self.data, thissample)[-10000:]
+        self.data = np.append(self.data, thissample)[-data_length:]
+
+
+        self.times = np.append(self.times, time.time())[-data_length:]
+        self.xlabels = self.times - self.times[0]
+        
+
+
 
         if thissample > SPIKE_THRESHOLD:
             self.currentHourSpikes += 1
 
-        self.curve.setData(self.xlabels[0:len(self.data)], [i for i in self.data])
+        
+        self.curve.setData(self.xlabels, self.data)
+
+       
 
 
         

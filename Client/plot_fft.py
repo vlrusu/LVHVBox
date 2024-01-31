@@ -10,21 +10,29 @@ import matplotlib.pyplot as plt
 
 # Open file and read data into numpy array
 
-data = np.loadtxt('full_currents_1705691130.txt')
-data = np.array([i for i in data if i>120])
-print(len(data))
+filename = "sw18_noped.txt"
+    #filename = "full_currents_1705610740.txt"
+
+f = open(filename, "r")
+lines = f.readlines()
+f.close()
+
+data = [float(i) for i in lines]
+
+data = np.array([i for i in data if i<200 and i>25])
+
+
+
 
 
 '''
-freq = 235.85E3
-
-data_array = [np.sin(2*np.pi*freq*i/235.85E3) for i in range(8000)]
-print(data_array)
-data = np.array(data_array)
+with open('sw50_ped_long_1.txt') as f:
+    lines = f.readlines()
+    #data = [float(line.split()[0]) for line in lines if float(line.split()[0]) > 20]
+    data = [float(line.split()[0]) for line in lines]
+    data = [i for i in data if i<1000 and i>0]
+data = np.array(data)
 '''
-
-
-
 
 
 
@@ -32,7 +40,12 @@ data = np.array(data_array)
 
 # Separate time column from signal column
 
-time = [(1./235.85E3) * i for i in range(len(data))]
+#time = [(1./794.6) * i for i in range(len(data))]
+time = [(1./163400) * i for i in range(len(data))]
+
+plt.scatter(time,data)
+plt.show()
+
 
 #time = (1./109.7E3) * data[:, 0]
 
@@ -77,6 +90,7 @@ freq = fftfreq(len(signal), d=time[1]-time[0])
 
 plt.plot(freq, abs(fft_signal)**2)
 plt.xlim((-100,120000))
+#plt.xlim((-10,300))
 
 plt.xlabel('Frequency (Hz)')
 

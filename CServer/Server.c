@@ -25,8 +25,6 @@
 
 #include <signal.h> 
 
-#include <mcp23s08.h>
-#include <softPwm.h>
 #include <linux/spi/spidev.h>
 #include "dac8164.h"
 
@@ -143,10 +141,11 @@ char v_pipe_path_base[15] = "/tmp/vdata_pipe";
 
 
 #define ALPHA 0.1 // Choose a value between 0 and 1. Smaller values result in heavier filtering.
-#define DECIMATION_FACTOR 20
+#define DECIMATION_FACTOR 10
 uint8_t use_pipe = 1; // when server tries to open pipe, will be set to 0 upon fail - will then assume pipe is not to be used
 
 int num_pipes = 3;
+int pipe_channels[3] = {0, 4, 5};
 
 
 // variables to manage command queue
@@ -164,9 +163,9 @@ command add_command;
 
 void enqueue(command array[COMMAND_LENGTH], command insert_item) {
     if (Rear >= COMMAND_LENGTH - 1) {
-       printf("Overflow \n");
        Rear = 0;
        Front = 0;
+       error_log("Overflow Error");
        return;
     } else
     {      
@@ -177,17 +176,17 @@ void enqueue(command array[COMMAND_LENGTH], command insert_item) {
  
 void dequeue(command array[COMMAND_LENGTH]) {
     if (Front < 0 || Front > Rear) {
-        printf("Underflow \n");
         Rear = 0;
         Front = 0;
+        error_log("Underflow Error");
         return ;
     } else {
       for (int i=0; i<COMMAND_LENGTH-1; i++) {
         array[i] = array[i+1];
       }
+      Rear -= 1;
     }
     
-    Rear -= 1;
 }
 
 
@@ -345,7 +344,7 @@ void get_vhv(uint8_t channel, int client_addr) {
 
   int float_channel = (int)channel;
 
-  write(client_addr, &return_val, sizeof(&return_val));
+  write(client_addr, &return_val, sizeof(return_val));
 
 
 }
@@ -360,7 +359,7 @@ void get_ihv(uint8_t channel, int client_addr)
     return_val = currents_1[channel - 6];
   }
 
-  write(client_addr, &return_val, sizeof(&return_val));
+  write(client_addr, &return_val, sizeof(return_val));
 }
 
 // get_buffer_status
@@ -391,15 +390,43 @@ void get_buffer_status(uint8_t channel, int client_addr) {
   }
 
   if (client_addr != -9999)
-    write(client_addr, &return_val, sizeof(&return_val));
+    write(client_addr, &return_val, sizeof(return_val));
   else
     write_fixed_location(LIVE_STATUS_FILENAME, 2 * channel, return_val); // writes at fixed location
 
 }
 
+void get_slow_read(uint8_t channel, int client_addr) {
+  uint8_t send_val = 97;
+
+  char *input_data;
+  input_data = (char *)malloc(1);
+
+  if (channel < 6)
+  {
+    libusb_bulk_transfer(device_handle_0, 0x02, &send_val, 1, 0, 0);
+    libusb_bulk_transfer(device_handle_0, 0x82, input_data, sizeof(input_data), 0, 0);
+  }
+  else
+  {
+    libusb_bulk_transfer(device_handle_1, 0x02, &send_val, 1, 0, 0);
+    libusb_bulk_transfer(device_handle_1, 0x82, input_data, sizeof(input_data), 0, 0);
+  }
+
+  
+
+  int return_val = (int) *input_data;
+  printf("slow read value of: %i\n", return_val);
+
+
+  write(client_addr, &return_val, sizeof(return_val));
+}
+
 
 // returns 10 value from full speed current buffer
 void current_burst(uint8_t channel, int client_addr) {
+  //printf("beginning current burst\n");
+  //printf("channel: %u\n", channel);
   struct libusb_device_handle *device_handle;
 
 
@@ -411,32 +438,26 @@ void current_burst(uint8_t channel, int client_addr) {
 
 
   uint8_t get_buffer = 89 + channel;
-  uint8_t move_full_position = 96;
+  //printf("get_buffer: %u\n", get_buffer);
 
   
   char *current_input_data;
   current_input_data = (char *)malloc(64);
 
-  float current_array[10];
-  uint32_t current_crc;
+  float current_array[16];
 
-  int valid_data = 0;
-  while (valid_data == 0) {
-    valid_data = 1;
+  libusb_bulk_transfer(device_handle, 0x02, &get_buffer, 1, 0, 50);
 
-    libusb_bulk_transfer(device_handle, 0x02, &get_buffer, 1, 0, 50);
+  int return_val = libusb_bulk_transfer(device_handle, 0x82, current_input_data, 64, 0, 500);
 
-    int return_val = libusb_bulk_transfer(device_handle, 0x82, current_input_data, 64, 0, 500);
 
-    uint16_t temp_int;
-    for (int i=0; i<10; i++) {
-      temp_int = current_input_data[i*2];
-      current_array[i] = temp_int*adc_to_uA;
-    }
   
 
+  for (int i=0; i<10; i++) {
+    current_array[i] = *(float *)&current_input_data[4*i];
+ 
+    //printf("current element: %f\n",current_array[i]);
   }
-  libusb_bulk_transfer(device_handle, 0x02, &move_full_position, 1, 0, 50);
 
   write(client_addr, &current_array, sizeof(current_array));
 
@@ -698,7 +719,7 @@ void trip_status(uint8_t channel, int client_addr)
   }
 
   if (client_addr != -9999)
-    write(client_addr, &return_val, sizeof(&return_val));
+    write(client_addr, &return_val, sizeof(return_val));
   else
     write_fixed_location(LIVE_STATUS_FILENAME, 2 * channel, return_val); // writes at fixed location
 }
@@ -754,7 +775,7 @@ void readMonV48(uint8_t channel, int client_addr)
   float ret = i2c_ltc2497(address, channelLTC);
   ret = ret / (v48scale * acplscale);
 
-  write(client_addr, &ret, sizeof(&ret));
+  write(client_addr, &ret, sizeof(ret));
 }
 
 // readMonI48
@@ -773,7 +794,7 @@ void readMonI48(uint8_t channel, int client_addr)
   float ret = i2c_ltc2497(address, channelLTC);
   ret = ret / (i48scale * acplscale);
 
-  write(client_addr, &ret, sizeof(&ret));
+  write(client_addr, &ret, sizeof(ret));
 }
 
 // readMonV6
@@ -793,7 +814,7 @@ void readMonV6(uint8_t channel, int client_addr)
   ret = ret / (v6scale * acplscale);
   printf("return val: %f \n", ret);
 
-  write(client_addr, &ret, sizeof(&ret));
+  write(client_addr, &ret, sizeof(ret));
 }
 
 // readMonI6
@@ -813,7 +834,7 @@ void readMonI6(uint8_t channel, int client_addr)
   float ret = i2c_ltc2497(address, channelLTC);
   ret = ret / (i6scale * acplscale);
 
-  write(client_addr, &ret, sizeof(&ret));
+  write(client_addr, &ret, sizeof(ret));
 }
 
 void *hv_request() {
@@ -860,6 +881,11 @@ void *hv_request() {
         dequeue(incoming_commands);
         pthread_mutex_unlock(&lock);
         get_buffer_status(char_parameter, client_addr);
+      } else if (current_command == 'y') {
+        pthread_mutex_lock(&lock);
+        dequeue(incoming_commands);
+        pthread_mutex_unlock(&lock);
+        get_slow_read(char_parameter, client_addr);
       }
     }
     sleep(0.5);
@@ -1123,9 +1149,9 @@ void *acquire_data(void *arguments)
     char v_pipe_path[16];
     printf("v_test: %s\n", v_pipe_path);
     strncpy(v_pipe_path, v_pipe_path_base, 15);
-    v_pipe_path[15] = pipe_id+48;
+    v_pipe_path[15] = pipe_channels[pipe_id]+48;
 
-    if (stat(v_pipe_path, &st[pipe_id]) == -1)
+    if (stat(v_pipe_path, &st[pipe_channels[pipe_id]]) == -1)
     {
       if (mkfifo(v_pipe_path, 0666) == -1)
       {
@@ -1158,7 +1184,6 @@ void *acquire_data(void *arguments)
     // check if command is pico type, else do nothing
     if (current_type == 'c')
     {
-
       // select proper hv function
       if (current_command == 'k')
       { // trip
@@ -1443,7 +1468,7 @@ void *save_txt(void *arguments)
 
   for (int pipe_id=0; pipe_id<num_pipes; pipe_id++) {
     strncpy(pipe_path, pipe_path_base, 15);
-    pipe_path[14] = 48+pipe_id;
+    pipe_path[14] = 48+pipe_channels[pipe_id];
     if (stat(pipe_path, &st) == -1)
     {
       if (mkfifo(pipe_path, 0666) == -1)
@@ -1520,7 +1545,7 @@ void *save_txt(void *arguments)
               if (time_index % DECIMATION_FACTOR == 0 && use_pipe == 1)
               {
                 int length = snprintf(buffer, sizeof(buffer), "%f ", filtered_value);
-                fprintf(fp_I, "%f ", filtered_value);
+
                 write(fd[pipe_id], buffer, length); // Write to the pipe
               }
             }
@@ -1528,14 +1553,13 @@ void *save_txt(void *arguments)
             if (time_index % DECIMATION_FACTOR == 0 && use_pipe == 1)
             {
               int length = snprintf(buffer, sizeof(buffer), "\n");
-              fprintf(fp_I, "\n");
               write(fd[pipe_id], buffer, length); // Write the timestamp to the pipe
             }
           }
         }
         
 
-        /*
+        
 
               for (uint32_t time_index=0; time_index<HISTORY_LENGTH; time_index++) {
                 for (uint8_t channel=0; channel<6; channel++) {
@@ -1546,8 +1570,8 @@ void *save_txt(void *arguments)
               }
 
               // close the current file
-              fclose(fp_I);
-        */
+  
+        
       }
     }
   }
@@ -1555,11 +1579,16 @@ void *save_txt(void *arguments)
 }
 
 int lv_initialization() {
-  if (export_gpio(lv_global_enable) == -1) {
+  
+  if (setup_gpio(lv_global_enable) == -1) {
     return -1;
-  } else if (set_gpio_direction_out(lv_global_enable) == -1) {
+  } 
+  /*
+  else if (set_gpio_direction_out(lv_global_enable) == -1) {
     return -1;
-  } else if (write_gpio_value(lv_global_enable, LOW) == -1) {
+  } else 
+  */
+  if (write_gpio_value(lv_global_enable, LOW) == -1) {
     return -1;
   }
 
@@ -1637,16 +1666,19 @@ int main( int argc, char **argv ) {
  */
   
 // Export the GPIO pins
-
-    if (export_gpio(lv_mcp_reset) == -1) {
+  
+    if (setup_gpio(lv_mcp_reset) == -1) {
         return 1;
     }
+    
 
 
 // Set the GPIO pin direction to "out"
+/*
     if (set_gpio_direction_out(lv_mcp_reset) == -1) {
         return 1;
     }
+    */
 
 
     
