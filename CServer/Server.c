@@ -25,8 +25,7 @@
 
 #include <signal.h> 
 
-#include <mcp23s08.h>
-#include <softPwm.h>
+
 #include <linux/spi/spidev.h>
 #include "dac8164.h"
 
@@ -67,6 +66,11 @@ uint8_t desire_lock_1 = 0;
 struct libusb_device_handle *device_handle_0 = NULL;
 struct libusb_device_handle *device_handle_1 = NULL;
 
+pthread_t acquisition_thread_0;
+pthread_t hv_execution_thread;
+pthread_t hv_request_thread;
+
+
 // socket constant
 #define PORT 12000
 
@@ -96,6 +100,10 @@ uint8_t lv_global_enable = 18;
 // get time that server started
 int start_time;
 
+int current_datafile_time = 0;
+int num_storages = 0;
+int max_storages = 1250000;
+//int max_storages = 1000;
 
 #define full_current_history_length 8000
 
@@ -106,6 +114,7 @@ typedef struct
   float all_currents_stored[6][HISTORY_LENGTH];
   uint8_t array_indicator;
   uint8_t pico;
+  uint8_t join_thread;
 } arg_struct;
 
 const float adc_to_uA = (2.048 / pow(2, 15)) / (24.7 * 475) * 1.E6;
@@ -135,7 +144,7 @@ MCP* lvpgoodMCP;
 #define NSTEPS 200
 #define SPICS 0
 
-const char *LIVE_STATUS_FILENAME = "live_status.txt";
+const char *LIVE_STATUS_FILENAME = "../live_status.txt";
 
 char pipe_path_base[14] = "/tmp/data_pipe";
 char v_pipe_path_base[15] = "/tmp/vdata_pipe";
@@ -143,10 +152,11 @@ char v_pipe_path_base[15] = "/tmp/vdata_pipe";
 
 
 #define ALPHA 0.1 // Choose a value between 0 and 1. Smaller values result in heavier filtering.
-#define DECIMATION_FACTOR 20
+#define DECIMATION_FACTOR 10
 uint8_t use_pipe = 1; // when server tries to open pipe, will be set to 0 upon fail - will then assume pipe is not to be used
 
 int num_pipes = 3;
+int pipe_channels[3] = {0, 1, 2};
 
 
 // variables to manage command queue
@@ -164,9 +174,9 @@ command add_command;
 
 void enqueue(command array[COMMAND_LENGTH], command insert_item) {
     if (Rear >= COMMAND_LENGTH - 1) {
-       printf("Overflow \n");
        Rear = 0;
        Front = 0;
+       error_log("Overflow Error");
        return;
     } else
     {      
@@ -177,17 +187,17 @@ void enqueue(command array[COMMAND_LENGTH], command insert_item) {
  
 void dequeue(command array[COMMAND_LENGTH]) {
     if (Front < 0 || Front > Rear) {
-        printf("Underflow \n");
         Rear = 0;
         Front = 0;
+        error_log("Underflow Error");
         return ;
     } else {
       for (int i=0; i<COMMAND_LENGTH-1; i++) {
         array[i] = array[i+1];
       }
+      Rear -= 1;
     }
     
-    Rear -= 1;
 }
 
 
@@ -345,7 +355,7 @@ void get_vhv(uint8_t channel, int client_addr) {
 
   int float_channel = (int)channel;
 
-  write(client_addr, &return_val, sizeof(&return_val));
+  write(client_addr, &return_val, sizeof(return_val));
 
 
 }
@@ -360,7 +370,7 @@ void get_ihv(uint8_t channel, int client_addr)
     return_val = currents_1[channel - 6];
   }
 
-  write(client_addr, &return_val, sizeof(&return_val));
+  write(client_addr, &return_val, sizeof(return_val));
 }
 
 // get_buffer_status
@@ -389,17 +399,41 @@ void get_buffer_status(uint8_t channel, int client_addr) {
   {
     return_val = 0;
   }
+ 
 
-  if (client_addr != -9999)
-    write(client_addr, &return_val, sizeof(&return_val));
+}
+
+void get_slow_read(uint8_t channel, int client_addr) {
+  uint8_t send_val = 97;
+
+  char *input_data;
+  input_data = (char *)malloc(1);
+
+  if (channel < 6)
+  {
+    libusb_bulk_transfer(device_handle_0, 0x02, &send_val, 1, 0, 0);
+    libusb_bulk_transfer(device_handle_0, 0x82, input_data, sizeof(input_data), 0, 0);
+  }
   else
-    write_fixed_location(LIVE_STATUS_FILENAME, 2 * channel, return_val); // writes at fixed location
+  {
+    libusb_bulk_transfer(device_handle_1, 0x02, &send_val, 1, 0, 0);
+    libusb_bulk_transfer(device_handle_1, 0x82, input_data, sizeof(input_data), 0, 0);
+  }
 
+  
+
+  int return_val = (int) *input_data;
+  printf("slow read value of: %i\n", return_val);
+
+
+  write(client_addr, &return_val, sizeof(return_val));
 }
 
 
 // returns 10 value from full speed current buffer
 void current_burst(uint8_t channel, int client_addr) {
+  //printf("beginning current burst\n");
+  //printf("channel: %u\n", channel);
   struct libusb_device_handle *device_handle;
 
 
@@ -411,32 +445,26 @@ void current_burst(uint8_t channel, int client_addr) {
 
 
   uint8_t get_buffer = 89 + channel;
-  uint8_t move_full_position = 96;
+  //printf("get_buffer: %u\n", get_buffer);
 
   
   char *current_input_data;
   current_input_data = (char *)malloc(64);
 
-  float current_array[10];
-  uint32_t current_crc;
+  float current_array[16];
 
-  int valid_data = 0;
-  while (valid_data == 0) {
-    valid_data = 1;
+  libusb_bulk_transfer(device_handle, 0x02, &get_buffer, 1, 0, 50);
 
-    libusb_bulk_transfer(device_handle, 0x02, &get_buffer, 1, 0, 50);
+  int return_val = libusb_bulk_transfer(device_handle, 0x82, current_input_data, 64, 0, 500);
 
-    int return_val = libusb_bulk_transfer(device_handle, 0x82, current_input_data, 64, 0, 500);
 
-    uint16_t temp_int;
-    for (int i=0; i<10; i++) {
-      temp_int = current_input_data[i*2];
-      current_array[i] = temp_int*adc_to_uA;
-    }
   
 
+  for (int i=0; i<10; i++) {
+    current_array[i] = *(float *)&current_input_data[4*i];
+ 
+    //printf("current element: %f\n",current_array[i]);
   }
-  libusb_bulk_transfer(device_handle, 0x02, &move_full_position, 1, 0, 50);
 
   write(client_addr, &current_array, sizeof(current_array));
 
@@ -698,7 +726,7 @@ void trip_status(uint8_t channel, int client_addr)
   }
 
   if (client_addr != -9999)
-    write(client_addr, &return_val, sizeof(&return_val));
+    write(client_addr, &return_val, sizeof(return_val));
   else
     write_fixed_location(LIVE_STATUS_FILENAME, 2 * channel, return_val); // writes at fixed location
 }
@@ -754,7 +782,7 @@ void readMonV48(uint8_t channel, int client_addr)
   float ret = i2c_ltc2497(address, channelLTC);
   ret = ret / (v48scale * acplscale);
 
-  write(client_addr, &ret, sizeof(&ret));
+  write(client_addr, &ret, sizeof(ret));
 }
 
 // readMonI48
@@ -773,7 +801,7 @@ void readMonI48(uint8_t channel, int client_addr)
   float ret = i2c_ltc2497(address, channelLTC);
   ret = ret / (i48scale * acplscale);
 
-  write(client_addr, &ret, sizeof(&ret));
+  write(client_addr, &ret, sizeof(ret));
 }
 
 // readMonV6
@@ -793,7 +821,7 @@ void readMonV6(uint8_t channel, int client_addr)
   ret = ret / (v6scale * acplscale);
   printf("return val: %f \n", ret);
 
-  write(client_addr, &ret, sizeof(&ret));
+  write(client_addr, &ret, sizeof(ret));
 }
 
 // readMonI6
@@ -813,7 +841,7 @@ void readMonI6(uint8_t channel, int client_addr)
   float ret = i2c_ltc2497(address, channelLTC);
   ret = ret / (i6scale * acplscale);
 
-  write(client_addr, &ret, sizeof(&ret));
+  write(client_addr, &ret, sizeof(ret));
 }
 
 void *hv_request() {
@@ -860,6 +888,11 @@ void *hv_request() {
         dequeue(incoming_commands);
         pthread_mutex_unlock(&lock);
         get_buffer_status(char_parameter, client_addr);
+      } else if (current_command == 'y') {
+        pthread_mutex_lock(&lock);
+        dequeue(incoming_commands);
+        pthread_mutex_unlock(&lock);
+        get_slow_read(char_parameter, client_addr);
       }
     }
     sleep(0.5);
@@ -1075,10 +1108,95 @@ void *create_connections()
 // ----- Code to handle HV data acquisition & storage ----- //
 
 void *acquire_data(void *arguments)
+
 {
   arg_struct *common = arguments;
 
+
+
+
+
+  float last_output[6] = {0}; // State for each channel's filter
+
+
+  
+  char pipe_path[15];
+  int fd[num_pipes];
+  struct stat st_i;
+
+  for (int pipe_id=0; pipe_id<num_pipes; pipe_id++) {
+    strncpy(pipe_path, pipe_path_base, 15);
+    pipe_path[14] = 48+pipe_channels[pipe_id];
+    if (stat(pipe_path, &st_i) == -1)
+    {
+      if (mkfifo(pipe_path, 0666) == -1)
+      {
+        perror("Failed to create named pipe");
+
+        use_pipe = 0; // ensure that pipe isn't used if failed
+      }
+    }
+
+    fd[pipe_id] = open(pipe_path, O_WRONLY | O_NONBLOCK);
+    if (fd[pipe_id] == -1)
+    {
+      perror("Error opening pipe");
+
+      use_pipe = 0; // ensure that pipe isn't used if failed
+    }
+  }
+
+
+
+
+
+
+  // current txt storage info
+  time_t seconds;
+
   uint8_t pico = common->pico;
+
+  float store_all_currents_internal[6][HISTORY_LENGTH];
+
+  current_datafile_time = time(NULL);
+  char *filename_I = malloc(50);
+
+  char *current_precursor;
+  char *file_suffix = ".txt";
+  if (pico == 0) {
+    current_precursor = "../../Data/Currents_0_";
+    strcpy(filename_I, &current_precursor[0]);
+  } else {
+    current_precursor = "../../Data/Currents_1_";
+    strcpy(filename_I, &current_precursor[0]);
+  }
+  
+  char str_time[10];
+  sprintf(str_time, "%i", current_datafile_time);
+  strcat(filename_I, str_time);
+  strcat(filename_I, file_suffix);
+
+  FILE *fp_I = fopen(filename_I, "a");
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
 
 
   // Set debugging output to max level
@@ -1120,12 +1238,13 @@ void *acquire_data(void *arguments)
   struct stat st[num_pipes];
   int vfd[num_pipes];
   for (int pipe_id=0; pipe_id<num_pipes; pipe_id++) {
+    sleep(0.1);
     char v_pipe_path[16];
     printf("v_test: %s\n", v_pipe_path);
     strncpy(v_pipe_path, v_pipe_path_base, 15);
-    v_pipe_path[15] = pipe_id+48;
+    v_pipe_path[15] = pipe_channels[pipe_id]+48;
 
-    if (stat(v_pipe_path, &st[pipe_id]) == -1)
+    if (stat(v_pipe_path, &st[pipe_channels[pipe_id]]) == -1)
     {
       if (mkfifo(v_pipe_path, 0666) == -1)
       {
@@ -1158,7 +1277,6 @@ void *acquire_data(void *arguments)
     // check if command is pico type, else do nothing
     if (current_type == 'c')
     {
-
       // select proper hv function
       if (current_command == 'k')
       { // trip
@@ -1321,7 +1439,17 @@ void *acquire_data(void *arguments)
           memcpy(&common->all_currents_stored[channel][time], &common->all_currents[channel][time], sizeof(&common->all_currents[channel][time]));
         }
       }
-      common->array_indicator += 1;
+      if (common->array_indicator == 0) {
+        uint8_t new = 1;
+        memcpy(&common->array_indicator, &new, 1);
+        common->array_indicator = 1;
+      } else {
+        uint8_t new = 0;
+        memcpy(&common->array_indicator, &new, 1);
+      }
+
+
+
 
       // ----- Request and store one voltage value -----
 
@@ -1329,12 +1457,6 @@ void *acquire_data(void *arguments)
       {
         libusb_bulk_transfer(device_handle_0, 0x02, &voltage_char, 1, 0, 0);
         libusb_bulk_transfer(device_handle_0, 0x82, voltage_input_data, 24, 0, 0);
-
-
-
-
-
-
 
 
 
@@ -1416,13 +1538,126 @@ void *acquire_data(void *arguments)
 
       fclose(fp_V);
     }
+
+
+
+
+    // ----- Store current data in txt -----
+
+    int current_datafile_time = 0;
+    int num_storages = 0;
+    int max_storages = 1250000;
+    
+    //strcpy(output_string, &input_string[start_char+1]);
+
+    // get current filename
+
+  if (num_storages >= max_storages) {
+    current_datafile_time = time(NULL);
+    num_storages = 0;
+    fclose(fp_I);
+
+  if (pico == 0) {
+current_precursor = "../../Data/Currents_0_";
+strcpy(filename_I, &current_precursor[0]);
+  } else {
+    current_precursor = "../../Data/Currents_1_";
+    strcpy(filename_I, &current_precursor[0]);
   }
+  
+  char str_time[10];
+  sprintf(str_time, "%i", current_datafile_time);
+  strcat(filename_I, str_time);
+  strcat(filename_I, file_suffix);
+
+
+
+  FILE *fp_I = fopen(filename_I, "a");
+  if (fp_I == NULL) {
+        printf("Error opening the current file %s", filename_I);
+      }
+
+  }
+  
+  
+  
+
+      
+      
+  
+      
+
+      for (uint8_t channel = 0; channel < 6; channel++)
+      {
+        for (uint16_t time = 0; time < HISTORY_LENGTH; time++)
+        {
+          memcpy(&store_all_currents_internal[channel][time], &common->all_currents_stored[channel][time], sizeof(&common->all_currents_stored[channel][time]));
+          
+        }
+      }
+      num_storages += HISTORY_LENGTH;
+
+      // save data in current log
+      for (uint32_t time_index=0; time_index<HISTORY_LENGTH; time_index++) {
+        for (uint8_t channel=0; channel<6; channel++) {
+          fprintf(fp_I, "%f ", store_all_currents_internal[channel][time_index]);
+        }
+        seconds = time(NULL);
+        fprintf(fp_I, "%f\n", (float)seconds);
+      }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      char buffer[1024];
+      for (int pipe_id=0; pipe_id<num_pipes; pipe_id++) {
+        for (uint32_t time_index = 0; time_index < HISTORY_LENGTH; time_index++)
+        {
+    
+          for (uint8_t channel = 0; channel < 6; channel++)
+          {
+            // Apply the first-order low-pass filter
+            float input_value = store_all_currents_internal[channel][time_index];
+            float filtered_value = ALPHA * input_value + (1 - ALPHA) * last_output[channel];
+            last_output[channel] = filtered_value;
+
+            // Decimation by 5: Only write every 5th sample
+            if (time_index % DECIMATION_FACTOR == 0 && use_pipe == 1)
+            {
+              int length = snprintf(buffer, sizeof(buffer), "%f ", filtered_value);
+
+              write(fd[pipe_id], buffer, length); // Write to the pipe
+            }
+          }
+
+          if (time_index % DECIMATION_FACTOR == 0 && use_pipe == 1)
+          {
+            int length = snprintf(buffer, sizeof(buffer), "\n");
+            write(fd[pipe_id], buffer, length); // Write the timestamp to the pipe
+          }
+        }
+        
+      }
+      
+    
+  }
+
+  fclose(fp_I);
 }
 
-void *save_txt(void *arguments)
-{
-  char *filename_I;
-  char *filename_V;
+
+void *pipe_currents(void *arguments) {
 
   arg_struct *common = arguments;
 
@@ -1430,12 +1665,13 @@ void *save_txt(void *arguments)
 
   uint8_t pico = common->pico;
 
-  uint8_t old_array_indicator = 0;
+  uint8_t old_array_indicator = 1;
 
   float store_all_currents_internal[6][HISTORY_LENGTH];
 
   float last_output[6] = {0}; // State for each channel's filter
   struct stat st;
+
 
   
   char pipe_path[15];
@@ -1443,7 +1679,7 @@ void *save_txt(void *arguments)
 
   for (int pipe_id=0; pipe_id<num_pipes; pipe_id++) {
     strncpy(pipe_path, pipe_path_base, 15);
-    pipe_path[14] = 48+pipe_id;
+    pipe_path[14] = 48+pipe_channels[pipe_id];
     if (stat(pipe_path, &st) == -1)
     {
       if (mkfifo(pipe_path, 0666) == -1)
@@ -1462,102 +1698,76 @@ void *save_txt(void *arguments)
       use_pipe = 0; // ensure that pipe isn't used if failed
     }
   }
-  
 
 
-
-
-  if (pico == 0)
-  {
-    filename_I = "../Currents_0.txt";
-  }
-  else
-  {
-    filename_I = "../Currents_1.txt";
-  }
-
-  FILE *fp_I = fopen(filename_I, "w");
-  if (fp_I == NULL)
-  {
-    printf("Error opening the current file %s", filename_I);
-  }
-
+  sleep(1);
   while (1)
   {
-    uint8_t array_indicator = common->array_indicator;
+    //y_indicator: %u\n", common->array_indicator);
 
-    if (array_indicator != old_array_indicator)
-    {
-      old_array_indicator = array_indicator;
+
+
+
+      
 
       for (uint8_t channel = 0; channel < 6; channel++)
       {
         for (uint16_t time = 0; time < HISTORY_LENGTH; time++)
         {
           memcpy(&store_all_currents_internal[channel][time], &common->all_currents_stored[channel][time], sizeof(&common->all_currents_stored[channel][time]));
+          
         }
       }
+      
+      
 
       // open the current file for writing
-      if (pico == 0)
-      {
-
+      
         char buffer[1024]; // A buffer to format and write data
         time_t seconds;
 
-        
-        for (int pipe_id=0; pipe_id<num_pipes; pipe_id++) {
-          for (uint32_t time_index = 0; time_index < HISTORY_LENGTH; time_index++)
+      for (int pipe_id=0; pipe_id<num_pipes; pipe_id++) {
+        for (uint32_t time_index = 0; time_index < HISTORY_LENGTH; time_index++)
+        {
+    
+          for (uint8_t channel = 0; channel < 6; channel++)
           {
-            for (uint8_t channel = 0; channel < 6; channel++)
-            {
-              // Apply the first-order low-pass filter
-              float input_value = store_all_currents_internal[channel][time_index];
-              float filtered_value = ALPHA * input_value + (1 - ALPHA) * last_output[channel];
-              last_output[channel] = filtered_value;
+            // Apply the first-order low-pass filter
+            float input_value = store_all_currents_internal[channel][time_index];
+            float filtered_value = ALPHA * input_value + (1 - ALPHA) * last_output[channel];
+            last_output[channel] = filtered_value;
 
-              // Decimation by 5: Only write every 5th sample
-              if (time_index % DECIMATION_FACTOR == 0 && use_pipe == 1)
-              {
-                int length = snprintf(buffer, sizeof(buffer), "%f ", filtered_value);
-                fprintf(fp_I, "%f ", filtered_value);
-                write(fd[pipe_id], buffer, length); // Write to the pipe
-              }
-            }
-
+            // Decimation by 5: Only write every 5th sample
             if (time_index % DECIMATION_FACTOR == 0 && use_pipe == 1)
             {
-              int length = snprintf(buffer, sizeof(buffer), "\n");
-              fprintf(fp_I, "\n");
-              write(fd[pipe_id], buffer, length); // Write the timestamp to the pipe
+              int length = snprintf(buffer, sizeof(buffer), "%f ", filtered_value);
+
+              write(fd[pipe_id], buffer, length); // Write to the pipe
+              sleep(0.01);
             }
+          }
+
+          if (time_index % DECIMATION_FACTOR == 0 && use_pipe == 1)
+          {
+            int length = snprintf(buffer, sizeof(buffer), "\n");
+            write(fd[pipe_id], buffer, length); // Write the timestamp to the pipe
+            sleep(0.01);
           }
         }
         
-
-        /*
-
-              for (uint32_t time_index=0; time_index<HISTORY_LENGTH; time_index++) {
-                for (uint8_t channel=0; channel<6; channel++) {
-                  fprintf(fp_I, "%f ", store_all_currents_internal[channel][time_index]);
-                }
-                seconds = time(NULL);
-                fprintf(fp_I, "%f\n", (float)seconds);
-              }
-
-              // close the current file
-              fclose(fp_I);
-        */
       }
-    }
+      
+      
+    
   }
-  fclose(fp_I);
+
+
 }
 
+
+
 int lv_initialization() {
-  if (export_gpio(lv_global_enable) == -1) {
-    return -1;
-  } else if (set_gpio_direction_out(lv_global_enable) == -1) {
+  if (setup_gpio(lv_global_enable) == -1) {
     return -1;
   } else if (write_gpio_value(lv_global_enable, LOW) == -1) {
     return -1;
@@ -1593,12 +1803,36 @@ int lv_initialization() {
 
 
 
+void sigintHandler(int sig_num) {
+    /* Reset handler to catch SIGINT next time. 
+    Refer http://en.cppreference.com/w/c/program/signal */
+    signal(SIGINT, sigintHandler); 
+
+  sleep(0.1);
+    
+
+  pthread_cancel(acquisition_thread_0);
+  pthread_cancel(hv_execution_thread);
+  pthread_cancel(hv_request_thread);
+
+  sleep(1);
+  libusb_device *device_0 = libusb_get_device(device_handle_0);
+  libusb_unref_device(device_0);
+  free(device_handle_0);
+
+  
+} 
+
+
+
 int main( int argc, char **argv ) {
   hvMCP=(MCP*)malloc(sizeof(struct MCP*));
   lvpgoodMCP=(MCP*)malloc(sizeof(struct MCP*));
 
   // save time that server started
   start_time = (int) time(NULL);
+
+  signal(SIGINT, sigintHandler); 
 
 
   //char *test = load_config("test");
@@ -1638,15 +1872,11 @@ int main( int argc, char **argv ) {
   
 // Export the GPIO pins
 
-    if (export_gpio(lv_mcp_reset) == -1) {
+    if (setup_gpio(lv_mcp_reset) == -1) {
         return 1;
     }
 
 
-// Set the GPIO pin direction to "out"
-    if (set_gpio_direction_out(lv_mcp_reset) == -1) {
-        return 1;
-    }
 
 
     
@@ -1691,7 +1921,9 @@ int main( int argc, char **argv ) {
   args_0.pico = 0;
 
   // check that pico 0 is available
-  libusb_init(NULL);
+  int libusb_code = libusb_init(NULL);
+  printf("libusb code: %i\n", libusb_code);
+  
   device_handle_0 = libusb_open_device_with_vid_pid(NULL, VENDOR_ID_0, PRODUCT_ID);
   if (device_handle_0 == 0) {
     printf("Please connect pico 0\n");
@@ -1703,17 +1935,13 @@ int main( int argc, char **argv ) {
 
 
 
-  // create data acquisition thread
-  pthread_t acquisition_thread_0;
-  pthread_create(&acquisition_thread_0, NULL, acquire_data, &args_0);
-
-  // create statusing thread
-  pthread_t status_thread_0;
-  pthread_create(&status_thread_0, NULL, live_status, &args_0);
+  
 
   // create txt save thread
-  pthread_t save_thread_0;
-  pthread_create(&save_thread_0, NULL, save_txt, &args_0);
+  //pthread_t save_thread_0;
+  //pthread_create(&save_thread_0, NULL, save_txt, &args_0);
+
+  
 
   // ----- initialize pico 1 communications, etc ----- //
   /*
@@ -1729,17 +1957,21 @@ int main( int argc, char **argv ) {
   pthread_t save_thread_1;
   pthread_create(&save_thread_1, NULL, save_txt, &args_1);
   */
+  // create data acquisition thread
+  pthread_create(&acquisition_thread_0, NULL, acquire_data, &args_0);
+ 
+  // create statusing thread
+  pthread_t status_thread_0;
+  pthread_create(&status_thread_0, NULL, live_status, &args_0);
 
   // create socket initialization thread
   pthread_t socket_creation_thread;
   pthread_create(&socket_creation_thread, NULL, create_connections, NULL);
 
   // create hv execution thread
-  pthread_t hv_execution_thread;
   pthread_create(&hv_execution_thread, NULL, hv_execution, NULL);
 
   // create hv request thread
-  pthread_t hv_request_thread;
   pthread_create(&hv_request_thread, NULL, hv_request, NULL);
 
   // create lv command execution thread
@@ -1748,10 +1980,10 @@ int main( int argc, char **argv ) {
 
 
 
-  while (1)
-  {
-    sleep(100);
-  }
+
+  pause();
+
+  
 
   return 0;
 }

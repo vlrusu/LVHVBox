@@ -45,7 +45,8 @@ valid_commands = {"get_vhv": ["a","a",1,0,4,0,1],
                 "readMonV6": ["i","b",1,0,4,0,1],
                 "readMonI6": ["j","b",1,0,4,0,1],
                 "enable_ped": ['%',"c",1,0,0,0,2],
-                "disable_ped": ["&", "c",1,0,0,0,2]
+                "disable_ped": ["&", "c",1,0,0,0,2],
+                "get_slow_read": ["y", "a", 1, 0, 4, 0, 0]
 }
 
 
@@ -111,7 +112,7 @@ def process_input(input):
     # create output list of command and args
 
     try:
-        arg_list = [int(arg) for arg in split_command[1::]]
+        arg_list = [float(arg) for arg in split_command[1::]]
         return_list = [split_command[0]] + arg_list
 
         return return_list
@@ -213,7 +214,7 @@ if __name__=="__main__":
                 command_string += valid_commands[processed_input[0]][1]
 
                 if valid_commands[processed_input[0]][2] == 1:
-                    command_string += chr(processed_input[1]+97)
+                    command_string += chr(int(processed_input[1])+97)
         
                 else:
                     command_string += 'a'

@@ -4,6 +4,7 @@ import numpy as np
 from pyqtgraph.Qt import QtGui, QtCore, QtWidgets
 import pyqtgraph as pg
 import multiprocessing as mp
+import time
 
 pipe_path = "/tmp/data_pipe"
 v_pipe_path = "/tmp/vdata_pipe"  # Second pipe
@@ -11,6 +12,8 @@ v_pipe_path = "/tmp/vdata_pipe"  # Second pipe
 SPIKE_THRESHOLD = 20.
 
 plot_channels = [0, 1, 2]
+
+data_length = 10000
 
 
 
@@ -64,12 +67,13 @@ class App(QtWidgets.QMainWindow):
         top_layout.addWidget(self.label)
         
         layout.addLayout(top_layout)
-
-        self.xlabels = [i/235.84E3*2000 for i in range(10000)]
+        
 
 
         
         self.plotWidget = pg.PlotWidget()
+        self.plotWidget.setLabel("bottom", "Time (S)")
+        self.plotWidget.setLabel("left", "Current (uA)")
         layout.addWidget(self.plotWidget)
 
         self.spikesPerHour = np.zeros(72)
@@ -114,6 +118,9 @@ class App(QtWidgets.QMainWindow):
 
 
         self.data = np.array([])
+        self.xlabels = np.array([])
+        self.times = np.array([])
+
         
         self.curve = self.plotWidget.plot()
         
@@ -153,15 +160,16 @@ class App(QtWidgets.QMainWindow):
     def check_file_for_trigger(self):
         # Define the path of the file that contains the number.
         # Modify this path as needed.
-        trigger_file_path = "../CServer/build/live_status.txt"
+        trigger_file_path = "../CServer/live_status.txt"
+        
         
         with open(trigger_file_path, 'r') as f:
             content = f.readline().split()
-            if content[self.channel] == "1":
-                self.plotWidget.getViewBox().setBackgroundColor('r')
+        if content[self.channel] == "1":
+            self.plotWidget.getViewBox().setBackgroundColor('r')
 #                self.curve.setPen(self.alertPen)  # Set curve color to red
-            else:
-                self.plotWidget.getViewBox().setBackgroundColor('k')                
+        else:
+            self.plotWidget.getViewBox().setBackgroundColor('k')                
 #                self.curve.setPen(self.defaultPen)  # Reset curve color to default
         
 
@@ -174,16 +182,24 @@ class App(QtWidgets.QMainWindow):
             self.pause_button.setText("Pause")
 
     def update_plot(self, value):
+
         if self.paused:  # Check if paused
             return
 
         thissample = float(value[self.channel])
-        self.data = np.append(self.data, thissample)[-10000:]
+        self.data = np.append(self.data, thissample)[-data_length:]
 
+
+        self.times = np.append(self.times, time.time())[-data_length:]
+        self.xlabels = self.times - self.times[0]
+        
         if thissample > SPIKE_THRESHOLD:
             self.currentHourSpikes += 1
 
-        self.curve.setData(self.xlabels[0:len(self.data)], [i for i in self.data])
+    
+        self.curve.setData(self.xlabels, self.data)
+
+       
 
 
         
@@ -206,12 +222,12 @@ def start_one(channel):
     mainWindow1.show()
 
 
-    print(pipe_path + str(channel))
+
     receiver = DataReceiver(pipe_path + str(channel))
     thread = QtCore.QThread()
     receiver.moveToThread(thread)
 
-
+    
    # For second pipe
     receiver2 = DataReceiver(v_pipe_path + str(channel))
     thread2 = QtCore.QThread()
@@ -222,6 +238,7 @@ def start_one(channel):
     thread2.started.connect(receiver2.run)
     thread2.start()
     
+    
     receiver.newData.connect(mainWindow1.update_plot)
 
     thread.started.connect(receiver.run)
@@ -229,6 +246,7 @@ def start_one(channel):
 
     if (sys.flags.interactive != 1) or not hasattr(QtCore, 'PYQT_VERSION'):
         sys.exit(app.exec_())
+    
 
 if __name__ == "__main__":
     pool = mp.Pool(processes=len(plot_channels))
