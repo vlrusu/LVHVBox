@@ -144,7 +144,7 @@ int error_log(const char *data) {
   char *error_log = load_config("Error_Log_File");
   printf("Error log: %s\n",error_log);
   */
-  char error_log[24] = "../../Logs/error_log.log";
+  char *error_log = "../../Logs/error_log.log";
 
   FILE *fp = fopen(error_log, "a");
   if (fp == NULL) {
@@ -185,7 +185,7 @@ int write_log(char* filename, const char *data, int datatype, int client_addr) {
   */
 
 
-  char file_string[26] = "../../Logs/command_log.log";
+  char *file_string = "../../Logs/command_log.log";
   FILE *fp = fopen(file_string, "a");
   if (fp == NULL) {
     printf("Error logging datatype %i", datatype);

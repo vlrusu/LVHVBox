@@ -11,7 +11,7 @@ v_pipe_path = "/tmp/vdata_pipe"  # Second pipe
 
 SPIKE_THRESHOLD = 20.
 
-plot_channels = [0, 1, 2]
+plot_channels = [0, 1, 3]
 
 data_length = 10000
 
@@ -143,7 +143,6 @@ class App(QtWidgets.QMainWindow):
 
 
     def update_hourly_count(self):
-        print(self.currentHourSpikes)
         self.spikesPerHour[-1] = self.spikesPerHour[-1] + self.currentHourSpikes
         self.histogram.setOpts(height=self.spikesPerHour)
 

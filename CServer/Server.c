@@ -7,6 +7,7 @@
 #include <string.h>
 #include <inttypes.h>
 #include <math.h>
+#include <sys/msg.h>
 
 #include <pthread.h>
 
@@ -68,7 +69,6 @@ struct libusb_device_handle *device_handle_1 = NULL;
 
 pthread_t acquisition_thread_0;
 pthread_t hv_execution_thread;
-pthread_t hv_request_thread;
 
 
 // socket constant
@@ -156,7 +156,7 @@ char v_pipe_path_base[15] = "/tmp/vdata_pipe";
 uint8_t use_pipe = 1; // when server tries to open pipe, will be set to 0 upon fail - will then assume pipe is not to be used
 
 int num_pipes = 3;
-int pipe_channels[3] = {0, 1, 2};
+int pipe_channels[3] = {0, 1, 3};
 
 
 // variables to manage command queue
@@ -167,8 +167,38 @@ int Front = 0;
 
 command add_command;
 
+// initialize queue variables
+int queue_key;
+int queue_id;
+int msqid;
+
+int pico_queue_key;
+int pico_queue_id;
+int pico_msqid;
 
 
+
+
+
+command parse_queue() {
+  command return_command;
+
+  long msgtyp = 0;
+
+  msgrcv(msqid, (void *)&return_command, 56, msgtyp, MSG_NOERROR | IPC_NOWAIT);
+
+  return return_command;
+}
+
+command parse_pico_queue() {
+  command return_command;
+
+  long msgtyp = 0;
+
+  msgrcv(pico_msqid, (void *)&return_command, 56, msgtyp, MSG_NOERROR | IPC_NOWAIT);
+
+  return return_command;
+}
 
 
 
@@ -466,7 +496,10 @@ void current_burst(uint8_t channel, int client_addr) {
     //printf("current element: %f\n",current_array[i]);
   }
 
+
   write(client_addr, &current_array, sizeof(current_array));
+
+
 
 
 
@@ -741,7 +774,6 @@ void set_trip(uint8_t channel, float value, int client_addr)
 
   uint16_t send_int;
   send_int = (uint16_t)(value / 1000 * 65535);
-  printf("send int: %u \n", (unsigned int)send_int);
 
   uint8_t right_mask = -1;
 
@@ -819,7 +851,6 @@ void readMonV6(uint8_t channel, int client_addr)
 
   float ret = i2c_ltc2497(address, channelLTC);
   ret = ret / (v6scale * acplscale);
-  printf("return val: %f \n", ret);
 
   write(client_addr, &ret, sizeof(ret));
 }
@@ -844,106 +875,58 @@ void readMonI6(uint8_t channel, int client_addr)
   write(client_addr, &ret, sizeof(ret));
 }
 
-void *hv_request() {
+void *hv_execution() {
   while (1) {
-    command *check_command = &incoming_commands[Front];
-    char current_command = check_command->command_name;
-    char current_type = check_command->command_type;
-    uint8_t char_parameter = (uint8_t)check_command->char_parameter-97;
-    float float_parameter = check_command->float_parameter;
-    int client_addr = check_command->client_addr;
+    
+    
+    command check_command = parse_queue();
+    
+
+    char current_command = check_command.command_name;
+    char current_type = check_command.command_type;
+    uint8_t char_parameter = (uint8_t)check_command.char_parameter-97;
+    float float_parameter = check_command.float_parameter;
+    int client_addr = check_command.client_addr;
+
 
     // check if command is hv type, else do nothing
     if (current_type == 'a')
     {
       // select proper hv function
       if (current_command == 'a') { // get_vhv
-        pthread_mutex_lock(&lock);
-        dequeue(incoming_commands);
-        pthread_mutex_unlock(&lock);
         get_vhv(char_parameter, client_addr);
       } else if (current_command == 'b') { // get_ihv
-        pthread_mutex_lock(&lock);
-        dequeue(incoming_commands);
-        pthread_mutex_unlock(&lock);
         get_ihv(char_parameter, client_addr);
       }
       else if (current_command == '(') {
-        pthread_mutex_lock(&lock);
-        dequeue(incoming_commands);
-        pthread_mutex_unlock(&lock);
+        msleep(20);
         current_burst(char_parameter, client_addr);
       } else if (current_command == ')') {
-        pthread_mutex_lock(&lock);
-        dequeue(incoming_commands);
-        pthread_mutex_unlock(&lock);
         start_buffer(char_parameter, client_addr);
       } else if (current_command == '*') {
-        pthread_mutex_lock(&lock);
-        dequeue(incoming_commands);
-        pthread_mutex_unlock(&lock);
         stop_buffer(char_parameter, client_addr);
       } else if (current_command == '+') {
-        pthread_mutex_lock(&lock);
-        dequeue(incoming_commands);
-        pthread_mutex_unlock(&lock);
         get_buffer_status(char_parameter, client_addr);
       } else if (current_command == 'y') {
-        pthread_mutex_lock(&lock);
-        dequeue(incoming_commands);
-        pthread_mutex_unlock(&lock);
         get_slow_read(char_parameter, client_addr);
       }
     }
-    sleep(0.5);
-  }
-}
-
-// acquire and execute commands in loop
-void *hv_execution() {
-  while (1) {
-    
-
-    command *check_command = &incoming_commands[Front];
-    char current_command = check_command->command_name;
-    char current_type = check_command->command_type;
-    uint8_t char_parameter = (uint8_t)check_command->char_parameter-97;
-    float float_parameter = check_command->float_parameter;
-    int client_addr = check_command->client_addr;
-
-    // check if command is hv type, else do nothing
-
 
     if (current_type == 'a') {
       // select proper hv function
       if (current_command == 'c') { // ramp_hv
-        pthread_mutex_lock(&lock);
-        dequeue(incoming_commands);
-        pthread_mutex_unlock(&lock);
         ramp_hv(char_parameter, float_parameter, client_addr);
 
       } else if (current_command == 'd') { // down_hv
-        pthread_mutex_lock(&lock);
-        dequeue(incoming_commands);
-        pthread_mutex_unlock(&lock);
         down_hv(char_parameter, client_addr);
       }
     }
 
-    sleep(0.5);
-  }
-}
 
-// acquire and execute commands in loop
-void *lv_execution() {
-  while (1) {
-    char current_command = incoming_commands[0].command_name;
-    char current_type = incoming_commands[0].command_type;
-    uint8_t char_parameter = incoming_commands[0].char_parameter -97;
-    float float_parameter = incoming_commands[0].float_parameter;
-    int client_addr = incoming_commands[0].client_addr;
 
-    // check if command is hv type, else do nothing
+
+
+
     if (current_type == 'b')
     {
 
@@ -966,15 +949,13 @@ void *lv_execution() {
       } else if (current_command == 'f') { // powerOff
         powerOff(char_parameter, client_addr);
       }
-
-      pthread_mutex_lock(&lock);
-      dequeue(incoming_commands);
-      pthread_mutex_unlock(&lock);
     }
-
-    sleep(0.5);
+    sleep(0.1);
   }
 }
+
+
+
 
 // ----- Code to handle socket stuff ----- //
 void *handle_client(void *args) {
@@ -985,9 +966,12 @@ void *handle_client(void *args) {
   char buffer[9];
   char flush_buffer[1];
 
+  
+
 
   while (1)
   {
+  
     // read command into buffer
     int return_val = read(inner_socket, buffer, 9);
     // read(inner_socket, NULL, 1);
@@ -1002,9 +986,6 @@ void *handle_client(void *args) {
     if (return_val == 9)
     {
 
-      // acquire lock
-      pthread_mutex_lock(&lock);
-
       // create command
 
       add_command.command_name = buffer[0];
@@ -1014,11 +995,21 @@ void *handle_client(void *args) {
       add_command.client_addr = inner_socket;
 
 
-      // add command to queue
-      enqueue(incoming_commands, add_command);
 
-      // release lock
-      pthread_mutex_unlock(&lock);
+
+
+
+
+      // add command to linux kernel queue
+      if (add_command.command_type == 'c') {
+        msgsnd(pico_msqid, (void *)&add_command, sizeof(add_command), IPC_NOWAIT);
+      } else {
+        msgsnd(msqid, (void *)&add_command, sizeof(add_command), IPC_NOWAIT);
+      }
+
+
+
+
     }
   }
 }
@@ -1031,8 +1022,7 @@ void *live_status(void *args) {
   while (1) {
 
     for (int ichannel = 0; ichannel < 6; ichannel++) {
-      // acquire lock
-      pthread_mutex_lock(&lock);
+
 
       // create command
       add_command.command_name = 'o';
@@ -1042,12 +1032,11 @@ void *live_status(void *args) {
       add_command.client_addr = -9999;
 
       // add command to queue
-      enqueue(incoming_commands, add_command);
+      msgsnd(pico_msqid, (void *)&add_command, sizeof(add_command), IPC_NOWAIT);
 
-      // release lock
-      pthread_mutex_unlock(&lock);
+
     }
-    sleep(1);
+    sleep(2);
   }
 }
 
@@ -1240,11 +1229,10 @@ void *acquire_data(void *arguments)
   for (int pipe_id=0; pipe_id<num_pipes; pipe_id++) {
     sleep(0.1);
     char v_pipe_path[16];
-    printf("v_test: %s\n", v_pipe_path);
     strncpy(v_pipe_path, v_pipe_path_base, 15);
     v_pipe_path[15] = pipe_channels[pipe_id]+48;
 
-    if (stat(v_pipe_path, &st[pipe_channels[pipe_id]]) == -1)
+    if (stat(v_pipe_path, &st[pipe_id]) == -1)
     {
       if (mkfifo(v_pipe_path, 0666) == -1)
       {
@@ -1267,12 +1255,12 @@ void *acquire_data(void *arguments)
 
   while (1)
   {
-    command *check_command = &incoming_commands[Front];
-    char current_command = check_command->command_name;
-    char current_type = check_command->command_type;
-    uint8_t char_parameter = (uint8_t)check_command->char_parameter - 97;
-    float float_parameter = check_command->float_parameter;
-    int client_addr = check_command->client_addr;
+    command check_command = parse_pico_queue();
+    char current_command = check_command.command_name;
+    char current_type = check_command.command_type;
+    uint8_t char_parameter = (uint8_t)check_command.char_parameter - 97;
+    float float_parameter = check_command.float_parameter;
+    int client_addr = check_command.client_addr;
 
     // check if command is pico type, else do nothing
     if (current_type == 'c')
@@ -1280,58 +1268,34 @@ void *acquire_data(void *arguments)
       // select proper hv function
       if (current_command == 'k')
       { // trip
-        pthread_mutex_lock(&lock);
-        dequeue(incoming_commands);
-        pthread_mutex_unlock(&lock);
         trip(char_parameter, client_addr);
       }
       else if (current_command == 'l')
       { // reset trip
-        pthread_mutex_lock(&lock);
-        dequeue(incoming_commands);
-        pthread_mutex_unlock(&lock);
         reset_trip(char_parameter, client_addr);
       }
       else if (current_command == 'm')
       { // disable trip
-        pthread_mutex_lock(&lock);
-        dequeue(incoming_commands);
-        pthread_mutex_unlock(&lock);
         disable_trip(char_parameter, client_addr);
       }
       else if (current_command == 'n')
       { // enable trip
-        pthread_mutex_lock(&lock);
-        dequeue(incoming_commands);
-        pthread_mutex_unlock(&lock);
         enable_trip(char_parameter, client_addr);
       }
       else if (current_command == 'p')
       { // set trip
-        pthread_mutex_lock(&lock);
-        dequeue(incoming_commands);
-        pthread_mutex_unlock(&lock);
         set_trip(char_parameter, float_parameter, client_addr);
       }
       else if (current_command == 'o')
       { // trip status
-        pthread_mutex_lock(&lock);
-        dequeue(incoming_commands);
-        pthread_mutex_unlock(&lock);
         trip_status(char_parameter, client_addr);
       }
       else if (current_command == '%')
       { // enable ped
-        pthread_mutex_lock(&lock);
-        dequeue(incoming_commands);
-        pthread_mutex_unlock(&lock);
         enable_ped(char_parameter, client_addr);
       }
       else if (current_command == '&')
       { // disable ped
-        pthread_mutex_lock(&lock);
-        dequeue(incoming_commands);
-        pthread_mutex_unlock(&lock);
         disable_ped(char_parameter, client_addr);
       }
     }
@@ -1657,113 +1621,6 @@ strcpy(filename_I, &current_precursor[0]);
 }
 
 
-void *pipe_currents(void *arguments) {
-
-  arg_struct *common = arguments;
-
-  time_t seconds;
-
-  uint8_t pico = common->pico;
-
-  uint8_t old_array_indicator = 1;
-
-  float store_all_currents_internal[6][HISTORY_LENGTH];
-
-  float last_output[6] = {0}; // State for each channel's filter
-  struct stat st;
-
-
-  
-  char pipe_path[15];
-  int fd[num_pipes];
-
-  for (int pipe_id=0; pipe_id<num_pipes; pipe_id++) {
-    strncpy(pipe_path, pipe_path_base, 15);
-    pipe_path[14] = 48+pipe_channels[pipe_id];
-    if (stat(pipe_path, &st) == -1)
-    {
-      if (mkfifo(pipe_path, 0666) == -1)
-      {
-        perror("Failed to create named pipe");
-
-        use_pipe = 0; // ensure that pipe isn't used if failed
-      }
-    }
-
-    fd[pipe_id] = open(pipe_path, O_WRONLY | O_NONBLOCK);
-    if (fd[pipe_id] == -1)
-    {
-      perror("Error opening pipe");
-
-      use_pipe = 0; // ensure that pipe isn't used if failed
-    }
-  }
-
-
-  sleep(1);
-  while (1)
-  {
-    //y_indicator: %u\n", common->array_indicator);
-
-
-
-
-      
-
-      for (uint8_t channel = 0; channel < 6; channel++)
-      {
-        for (uint16_t time = 0; time < HISTORY_LENGTH; time++)
-        {
-          memcpy(&store_all_currents_internal[channel][time], &common->all_currents_stored[channel][time], sizeof(&common->all_currents_stored[channel][time]));
-          
-        }
-      }
-      
-      
-
-      // open the current file for writing
-      
-        char buffer[1024]; // A buffer to format and write data
-        time_t seconds;
-
-      for (int pipe_id=0; pipe_id<num_pipes; pipe_id++) {
-        for (uint32_t time_index = 0; time_index < HISTORY_LENGTH; time_index++)
-        {
-    
-          for (uint8_t channel = 0; channel < 6; channel++)
-          {
-            // Apply the first-order low-pass filter
-            float input_value = store_all_currents_internal[channel][time_index];
-            float filtered_value = ALPHA * input_value + (1 - ALPHA) * last_output[channel];
-            last_output[channel] = filtered_value;
-
-            // Decimation by 5: Only write every 5th sample
-            if (time_index % DECIMATION_FACTOR == 0 && use_pipe == 1)
-            {
-              int length = snprintf(buffer, sizeof(buffer), "%f ", filtered_value);
-
-              write(fd[pipe_id], buffer, length); // Write to the pipe
-              sleep(0.01);
-            }
-          }
-
-          if (time_index % DECIMATION_FACTOR == 0 && use_pipe == 1)
-          {
-            int length = snprintf(buffer, sizeof(buffer), "\n");
-            write(fd[pipe_id], buffer, length); // Write the timestamp to the pipe
-            sleep(0.01);
-          }
-        }
-        
-      }
-      
-      
-    
-  }
-
-
-}
-
 
 
 int lv_initialization() {
@@ -1813,7 +1670,6 @@ void sigintHandler(int sig_num) {
 
   pthread_cancel(acquisition_thread_0);
   pthread_cancel(hv_execution_thread);
-  pthread_cancel(hv_request_thread);
 
   sleep(1);
   libusb_device *device_0 = libusb_get_device(device_handle_0);
@@ -1826,6 +1682,26 @@ void sigintHandler(int sig_num) {
 
 
 int main( int argc, char **argv ) {
+  // initialize queues
+  const char *pathname = "/home/mu2e/LVHVBox/CServer/build";
+  queue_id = 0;
+  queue_key = ftok(pathname, queue_id);
+  printf("queue key: %i\n", queue_key);
+  msqid = msgget(queue_key, IPC_CREAT);
+  printf("msqid: %i\n", msqid);
+
+  pico_queue_id = 1;
+  pico_queue_key = ftok(pathname, pico_queue_id);
+  pico_msqid = msgget(pico_queue_key, IPC_CREAT);
+
+
+
+
+
+
+
+
+
   hvMCP=(MCP*)malloc(sizeof(struct MCP*));
   lvpgoodMCP=(MCP*)malloc(sizeof(struct MCP*));
 
@@ -1935,11 +1811,6 @@ int main( int argc, char **argv ) {
 
 
 
-  
-
-  // create txt save thread
-  //pthread_t save_thread_0;
-  //pthread_create(&save_thread_0, NULL, save_txt, &args_0);
 
   
 
@@ -1953,9 +1824,6 @@ int main( int argc, char **argv ) {
   pthread_t acquisition_thread_1;
   pthread_create(&acquisition_thread_1, NULL, acquire_data, &args_1);
 
-  // create txt save thread
-  pthread_t save_thread_1;
-  pthread_create(&save_thread_1, NULL, save_txt, &args_1);
   */
   // create data acquisition thread
   pthread_create(&acquisition_thread_0, NULL, acquire_data, &args_0);
@@ -1971,12 +1839,9 @@ int main( int argc, char **argv ) {
   // create hv execution thread
   pthread_create(&hv_execution_thread, NULL, hv_execution, NULL);
 
-  // create hv request thread
-  pthread_create(&hv_request_thread, NULL, hv_request, NULL);
-
   // create lv command execution thread
-  pthread_t lv_command_thread;
-  pthread_create(&lv_command_thread, NULL, lv_execution, NULL);
+  //pthread_t lv_command_thread;
+  //pthread_create(&lv_command_thread, NULL, lv_execution, NULL);
 
 
 
