@@ -328,7 +328,11 @@ void get_all_averaged_currents(PIO pio_0, PIO pio_1, uint sm[], float current_ar
   
  for (uint32_t channel=0; channel<6; channel++) // divide & multiply summed current values by appropriate factors
  {
+  if (ped_on) {
   current_array[channel] = current_array[channel]*adc_to_uA/200 - ped_subtraction[channel];
+  } else {
+    current_array[channel] = current_array[channel]*adc_to_uA/200;
+  }
   //current_array[channel] = current_array[channel]*adc_to_uA/200;
   /*
   if (current_array[channel] <1) {
@@ -472,7 +476,7 @@ gpio_put(all_pins.P1_0, 1); // put pedestal pin high
 
 
     // ----- Update pedestal subtraction value ----- //
-    if (ped_on) {
+
       gpio_put(all_pins.P1_0, 0); // put pedestal pin low
       sleep_ms(200);
 
@@ -501,11 +505,7 @@ gpio_put(all_pins.P1_0, 1); // put pedestal pin high
 
       gpio_put(all_pins.P1_0, 1); // put pedestal pin high
       sleep_ms(200);
-    } else {
-      for (int i=0; i<6; i++) {
-        ped_subtraction[i] = 0;
-      }
-    }
+
 
 
 

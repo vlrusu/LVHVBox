@@ -1,53 +1,41 @@
-import socket
-import cmd2
-import json
+import argparse
+import rlcompleter
 import readline
-import os
-import atexit
-import threading
-import struct
+import socket
 import time
-
 
 HISTORY_REQUEST_MAX = 100
 current_buffer_len = 8000 # must be divisible by 10
 full_current_chunk = 10
 
-# list order is:
-#   -command name
-#   -command type
-#   -num char args
-#   -num float args
-#   -read bytes
-#   -allow 0 input vars
-#   -return value type: int 0 float 1 none 2 special 3
-
-valid_commands = {"get_vhv": ["a","a",1,0,4,0,1],
-                "get_ihv": ["b","a",1,0,4,0,1],
-                "current_burst": ["(", "a", 1, 0, 100, 0, 3],
-                "current_start": [")", "a", 1, 0, 0, 0, 2],
-                "current_stop": ["*", "a", 1, 0, 0, 0, 2],
-                "current_buffer_run": ["+", "a", 1, 0, 4, 0, 0],
-                "ramp_hv": ["c","a",1,1,0,0,2],
-                "down_hv": ["d","a",1,0,0,0,2],
-                "trip": ["k","c",1,0,0,0,2],
-                "reset_trip": ["l","c",1,0,0,0,2],
-                "disable_trip": ["m","c",1,0,0,0,2],
-                "enable_trip": ["n","c",1,0,0,0,2],
-                "trip_status": ["o","c",1,0,4,0,0],
-                "set_trip": ["p","c",1,1,0,0,2],
-                "powerOn": ["e","b",1,0,0,1,2],
-                "powerOff": ["f","b",1,0,0,1,2],
-                "readMonV48": ["g","b",1,0,4,0,1],
-                "readMonI48": ["h","b",1,0,4,0,1],
-                "readMonV6": ["i","b",1,0,4,0,1],
-                "readMonI6": ["j","b",1,0,4,0,1],
-                "enable_ped": ['%',"c",1,0,0,0,2],
-                "disable_ped": ["&", "c",1,0,0,0,2],
-                "get_slow_read": ["y", "a", 1, 0, 4, 0, 0]
-}
+parser = argparse.ArgumentParser()
+cmds = {'get_vhv',
+    'get_ihv',
+    'current_burst',
+    'current_start',
+    'current_stop',
+    'current_buffer_run',
+    'ramp_hv',
+    'down_hv',
+    'trip',
+    'reset_trip',
+    'disable_trip',
+    'enable_trip',
+    'trip_status',
+    'set_trip',
+    'powerOn',
+    'powerOff',
+    'readMonV48',
+    'readMonI48',
+    'readMonV6',
+    'readMonI6',
+    'enable_ped',
+    'disable_ped'}
 
 
+
+if "libedit" in readline.__doc__:
+    readline.parse_and_bind("bind ^I rl_complete")
 
 def process_float(input):
     v = format(input[3], '008b') + format(input[2], '008b') + format(input[1], '008b') + format(input[0], '008b')
@@ -59,124 +47,287 @@ def process_float(input):
     
     return float_val
 
+def completer(text, state):
+    options = [x for x in cmds if x.startswith(text)]
+    try:
+        return options[state]
+    except IndexError:
+        return None
 
-def process_input(input):
-    # list order is:
-    #   -command name
-    #   -command type
-    #   -num char args
-    #   -num float args
-    #   -read bytes
+readline.set_completer(completer)        
+readline.parse_and_bind("tab: complete")
+
+parser = argparse.ArgumentParser()
+args = parser.parse_args()
+
+def create_command_string_default():
+    pass
+
+def process_command(line):
     
-    # parse input into components
-    split_command = input.split(" ")
-
-
-    # check if command is valid
-    if split_command[0] not in valid_commands.keys():
-        return 0
-
-    # check if args are numeric
-    for item in split_command[1::]:
-        try:
-            temp = float(item)
-        except:
-            return 0
-    
-    # check if there's a valid number of args
-    desired_args = valid_commands[split_command[0]][2] + valid_commands[split_command[0]][3]
-    if desired_args != len(split_command[1::]):
-        if valid_commands[split_command[0]][5] == 0:
-            return 0
-        else:
-            split_command.append(6)
-        
-    # check if channel arg is within proper range
-    if valid_commands[split_command[0]][1] in ['a','c']:
-        if int(split_command[1]) not in list(range(6)):
-            return 0
-    
-    if valid_commands[split_command[0]][1] == 'b':
-        if int(split_command[1]) not in list(range(7)):
-            return 0
-    
-    # check if float is in valid range
-    if valid_commands[split_command[0]][3] != 0:
-        if float(split_command[2]) >= 10000:
-            return 0
-    
-
-
-    # create output list of command and args
+    keys = line.split(" ")
 
     try:
-        arg_list = [float(arg) for arg in split_command[1::]]
-        return_list = [split_command[0]] + arg_list
+        if keys[0] == "get_vhv":
+            channel = int(keys[1])
+            assert 0 <= channel <= 11
 
-        return return_list
-    except:
-        return 0
+            command_string = "aa" + chr(channel+97) + "      "
 
-def handle_current_burst():
-    num_cycles = int(current_buffer_len/full_current_chunk)
-    full_currents = []
+            sock.send(bytes(command_string,"utf-8"))
+            temp = sock.recv(1024)
+            return_val = round(process_float(temp),2)
+            print("Channel " + str(channel) + " voltage: " + str(return_val) + " V")
 
-    for cycle in range(num_cycles):
-        print("cycle: " + str(cycle))
-        #time.sleep(0.2) # put into config.txt later
-        sock.send(bytes(command_string,"utf-8"))
-        temp = sock.recv(64)
+        elif keys[0] == "get_ihv":
+            channel = int(keys[1])
+            assert 0 <= channel <= 11
 
-        print("length of full currents: " + str(len(temp)))
+            command_string = "ba" + chr(channel+97) + "      "
 
-        for i in range(full_current_chunk):
-            byte_loop = []
-            for j in range(4):
-                byte_loop.append(temp[4*i+j])
-            print("current index: " + str(byte_loop))
-            full_currents.append(process_float(byte_loop))
+            sock.send(bytes(command_string,"utf-8"))
+            temp = sock.recv(1024)
+            return_val = round(process_float(temp),3)
+            print("Channel " + str(channel) + " current: " + str(return_val) + " uA")
+
+        elif keys[0] == "readMonV48":
+            channel = int(keys[1])
+            assert 0 <= channel <= 5
+
+            command_string = "gb" + chr(channel+97) + "      "
+            sock.send(bytes(command_string,"utf-8"))
+            temp = sock.recv(1024)
+            return_val = round(process_float(temp),2)
+            print("Channel " + str(channel) + " current: " + str(return_val) + " V")
         
-    print(full_currents)
-    print("length of full currents: " + str(len(full_currents)))
+        elif keys[0] == "readMonI48":
+            channel = int(keys[1])
+            assert 0 <= channel <= 5
 
-    # write into new file
-    filename = "full_currents_" + str(int(time.time())) + ".txt"
-    f = open(filename, "w")
-    for i in full_currents:
-        f.write(str(i) + "\n")
-    f.close()
-
-def handle_server_history(command_string):
-    for i in range(100):
-        temp_string = command_string[0:2] + chr(i) + command_string[3::]
-        command_string = temp_string
-        sock.send(bytes(command_string,"utf-8"))
-        temp = sock.recv(64)
-
-        if len(temp) > 8:
-
-
-            temp = str(temp)[2::]
-    
-            output_string = ""
-            for i in range(len(temp)):
-                if ord(temp[i]) != 92:
-                    output_string += temp[i]
-                else:
-                    break
-            print(output_string)
-
-
-    
+            command_string = "hb" + chr(channel+97) + "      "
+            sock.send(bytes(command_string,"utf-8"))
+            temp = sock.recv(1024)
+            return_val = round(process_float(temp),2)
+            print("Channel " + str(channel) + " current: " + str(return_val) + " A")
         
+        elif keys[0] == "readMonV6":
+            channel = int(keys[1])
+            assert 0 <= channel <= 5
 
-    
-    
-    
+            command_string = "ib" + chr(channel+97) + "      "
+            sock.send(bytes(command_string,"utf-8"))
+            temp = sock.recv(1024)
+            return_val = round(process_float(temp),2)
+            print("Channel " + str(channel) + " voltage: " + str(return_val) + " V")
+
+        elif keys[0] == "readMonI6":
+            channel = int(keys[1])
+            assert 0 <= channel <= 5
+
+            command_string = "jb" + chr(channel+97) + "      "
+            sock.send(bytes(command_string,"utf-8"))
+            temp = sock.recv(1024)
+            return_val = round(process_float(temp),2)
+            print("Channel " + str(channel) + " current: " + str(return_val) + " A")
+
+        elif keys[0] == "current_buffer_run":
+            channel = int(keys[1])
+            assert 0 <= channel <= 11
+
+            command_string = "+a" + chr(channel+97) + "         "
+            sock.send(bytes(command_string,"utf-8"))
+        
+            temp = sock.recv(1024)
+            return_val = int(temp[0])
+            print("Current buffer run: " + str(return_val))
+        
+        elif keys[0] == "trip_status":
+            channel = int(keys[1])
+            assert 0 <= channel <= 11
+
+            command_string = "oc" + chr(channel+97) + "         "
+            sock.send(bytes(command_string,"utf-8"))
+
+            temp = sock.recv(1024)
+            return_val = int(temp[0])
+            print("Trip status: " + str(return_val))
+        
+        elif keys[0] == "get_slow_read":
+            channel = int(keys[1])
+            assert 0 <= channel <= 11
+
+            command_string = "ya" + chr(channel+97) + "         "
+            sock.send(bytes(command_string,"utf-8"))
+
+            temp = sock.recv(1024)
+            return_val = int(temp[0])
+            print("Slow read: " + str(return_val))
+
+        elif keys[0] == "current_start":
+            channel = int(keys[1])
+            assert 0 <= channel <= 11
+
+            command_string = ")a" + chr(channel+97) + "          "
+            sock.send(bytes(command_string,"utf-8"))
+
+        elif keys[0] == "current_stop":
+            channel = int(keys[1])
+            assert 0 <= channel <= 11
+
+            command_string = "*a" + chr(channel+97) + "          "
+            sock.send(bytes(command_string,"utf-8"))
+
+        elif keys[0] == "down_hv":
+            channel = int(keys[1])
+            assert 0 <= channel <= 11
+
+            command_string = "da" + chr(channel+97) + "          "
+            sock.send(bytes(command_string,"utf-8"))
+        
+        elif keys[0] == "trip":
+            channel = int(keys[1])
+            assert 0 <= channel <= 11
+
+            command_string = "kc" + chr(channel+97) + "          "
+            sock.send(bytes(command_string,"utf-8"))
+        
+        elif keys[0] == "reset_trip":
+            channel = int(keys[1])
+            assert 0 <= channel <= 11
+
+            command_string = "lc" + chr(channel+97) + "          "
+            sock.send(bytes(command_string,"utf-8"))
+        
+        elif keys[0] == "disable_trip":
+            channel = int(keys[1])
+            assert 0 <= channel <= 11
+
+            command_string = "mc" + chr(channel+97) + "          "
+            sock.send(bytes(command_string,"utf-8"))
+
+        elif keys[0] == "enable_trip":
+            channel = int(keys[1])
+            assert 0 <= channel <= 11
+
+            command_string = "nc" + chr(channel+97) + "          "
+            sock.send(bytes(command_string,"utf-8"))
+        
+        elif keys[0] == "enable_ped":
+            channel = int(keys[1])
+            assert 0 <= channel <= 11
+
+            command_string = "&c" + chr(channel+97) + "          "
+            sock.send(bytes(command_string,"utf-8"))
+        
+        elif keys[0] == "disable_ped":
+            channel = int(keys[1])
+            assert 0 <= channel <= 11
+
+            command_string = "%c" + chr(channel+97) + "          "
+            sock.send(bytes(command_string,"utf-8"))
+        
+        elif keys[0] == "powerOn":
+            if len(keys) == 2:
+                channel = int(keys[1])
+                assert 0 <= channel <= 5
+            else:
+                channel = 6
+            
+            command_string = "eb" + chr(channel+97) + "          "
+            sock.send(bytes(command_string,"utf-8"))
+        
+        elif keys[0] == "powerOff":
+            if len(keys) == 2:
+                channel = int(keys[1])
+                assert 0 <= channel <= 5
+            else:
+                channel = 6
+            
+            command_string = "fb" + chr(channel+97) + "          "
+            sock.send(bytes(command_string,"utf-8"))
+
+        elif keys[0] == "enable_trip":
+            channel = int(keys[1])
+            assert 0 <= channel <= 11
+
+            command_string = "nc" + chr(channel+97) + "          "
+            sock.send(bytes(command_string,"utf-8"))
+
+        elif keys[0] == "disable_trip":
+            channel = int(keys[1])
+            assert 0 <= channel <= 11
+
+            command_string = "mc" + chr(channel+97) + "          "
+            sock.send(bytes(command_string,"utf-8"))
+
+        elif keys[0] == "set_trip":
+            channel = int(keys[1])
+            assert 0 <= channel <= 11
+
+            command_string = "pc" + chr(channel+97)
+            len_float_string = len(str(float(keys[2])))
+            pad = 6-len_float_string
+            command_string += ''.join("0" for i in range(pad))
+            command_string += str(float(keys[2]))
 
 
 
 
+            print(command_string)
+            sock.send(bytes(command_string,"utf-8"))
+        
+        elif keys[0] == "ramp_hv":
+            channel = int(keys[1])
+            assert 0 <= channel <= 11
+
+            command_string = "ca" + chr(channel+97) + str(float(keys[2]))
+            sock.send(bytes(command_string,"utf-8"))
+        
+        elif keys[0] == "current_burst":
+            channel = int(keys[1])
+            assert 0 <= channel <= 11
+
+            command_string = "(a" + chr(channel+97) + "         "
+
+            num_cycles = int(current_buffer_len/full_current_chunk)
+            full_currents = []
+
+            for cycle in range(num_cycles):
+                print("cycle: " + str(cycle))
+                #time.sleep(0.2) # put into config.txt later
+                sock.send(bytes(command_string,"utf-8"))
+                temp = sock.recv(64)
+
+                print("length of full currents: " + str(len(temp)))
+
+                for i in range(full_current_chunk):
+                    byte_loop = []
+                    for j in range(4):
+                        byte_loop.append(temp[4*i+j])
+                    print("current index: " + str(byte_loop))
+                    full_currents.append(process_float(byte_loop))
+            
+            print(full_currents)
+            print("length of full currents: " + str(len(full_currents)))
+
+            # write into new file
+            filename = "full_currents_" + str(int(time.time())) + ".txt"
+            f = open(filename, "w")
+            for i in full_currents:
+                f.write(str(i) + "\n")
+            f.close()
+
+
+
+
+
+
+
+
+        else:
+            print("Unknown command")
+    except (ValueError) as e:
+        print(("Bad Input:",e))
 
 
 
@@ -188,92 +339,12 @@ if __name__=="__main__":
     port = 12000
     sock.connect((host,port))
 
-    try:
-        while True:
-            if "libedit" in readline.__doc__:
-                readline.parse_and_bind("bind ^I rl_complete")
-
-            # list order is:
-            #   -command name
-            #   -command type
-            #   -num char args
-            #   -num float args
-            #   -read bytes
-            
-            command_input = input("Please input command: ")
-            processed_input = process_input(command_input)
-
-            if processed_input == 0:
-                print("Check that input is valid")
-            else:
-                # create command string
-                required_filler = 7 - valid_commands[processed_input[0]][2] - 6*valid_commands[processed_input[0]][3]
-                print("required_filler: " + str(required_filler))
-                command_string = valid_commands[processed_input[0]][0]
-                command_string += valid_commands[processed_input[0]][1]
-
-                if valid_commands[processed_input[0]][2] == 1:
-                    command_string += chr(int(processed_input[1])+97)
-        
-                else:
-                    command_string += 'a'
-
-                
-                if valid_commands[processed_input[0]][3] != 0:
-                    float_val = float(processed_input[2])
-
-
-
-                    len_float_string = len(str(float_val))
-                    pad = 6-len_float_string
-                    command_string += ''.join("0" for i in range(pad))
-
-                    command_string += str(float_val)
-                else:
-                    command_string += ''.join("0" for i in range(6))
-
-                command_string += ''.join(chr(0) for i in range(required_filler))
-
-
-                
-
-                print(command_string)
-                return_val_type = valid_commands[processed_input[0]][6]
-    
-        
-                if return_val_type == 3:
-                    # if return value requires special considerations
-                    if command_string[0:2] == """(a""":
-                        handle_current_burst()
-                    elif command_string[0:2] == """'d""":
-                        handle_server_history(command_string)
-                elif return_val_type == 1:
-                    sock.send(bytes(command_string,"utf-8"))
-        
-                    
-
-                    temp = sock.recv(1024)
-
-                    # if return value is float
-                    return_val = process_float(temp)
-                    print(return_val)
-                elif return_val_type == 0:
-                    sock.send(bytes(command_string,"utf-8"))
-                    
-
-                    temp = sock.recv(1024)
-
-                    # if return value is int
-                    return_val = int(temp[0])
-                    print(return_val)
-                else:
-                    sock.send(bytes(command_string,"utf-8"))
-    finally:
-        print("Client Session Closed") 
-
-            
-
-                
-             
-
-
+    while True:
+        try:
+            line = input("Input Command: ")
+            if line:
+                process_command(line)
+        except AssertionError:
+            print("Ensure that all arguments are valid")
+        except Exception as e:
+            print((type(e),e))

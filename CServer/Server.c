@@ -388,7 +388,7 @@ void get_buffer_status(uint8_t channel, int client_addr) {
     return_val = 0;
   }
  
-
+  write(client_addr, &return_val, sizeof(return_val));
 }
 
 void get_slow_read(uint8_t channel, int client_addr) {
