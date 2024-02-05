@@ -985,6 +985,7 @@ void *create_connections()
 
 int write_pipe_currents(int fd[num_pipes], float store_all_currents_internal[6][HISTORY_LENGTH]) {
       char buffer[1024];
+      int write_success = 0;
 
       for (int pipe_id=0; pipe_id<num_pipes; pipe_id++) {
         for (uint32_t time_index = 0; time_index < HISTORY_LENGTH; time_index++)
@@ -1002,15 +1003,29 @@ int write_pipe_currents(int fd[num_pipes], float store_all_currents_internal[6][
             {
               int length = snprintf(buffer, sizeof(buffer), "%f ", filtered_value);
 
-              write(fd[pipe_id], buffer, length); // Write to the pipe
+              write_success = write(fd[pipe_id], buffer, length); // Write to the pipe
+
+              if (write_success == -1) {
+                use_pipe = 0;
+                error_log("Current pipe disconnected");
+                return -1;
+              }
             }
           }
 
           if (time_index % DECIMATION_FACTOR == 0 && use_pipe == 1)
           {
             int length = snprintf(buffer, sizeof(buffer), "\n");
-            write(fd[pipe_id], buffer, length); // Write the timestamp to the pipe
+            write_success = write(fd[pipe_id], buffer, length); // Write the timestamp to the pipe
+
+            if (write_success == -1) {
+            use_pipe = 0;
+            error_log("Current pipe disconnected");
+            return -1;
+            }
           }
+
+        
         }
         
       }
@@ -1019,32 +1034,46 @@ int write_pipe_currents(int fd[num_pipes], float store_all_currents_internal[6][
 
 
 int write_pipe_voltages(int pico, int vfd[6], float voltages_0[6]) {
-    if (pico == 0)
+  int write_success = 0;
+
+  if (pico == 0)
+  {
+    char buffer[1024]; // A buffer to format and write data
+    for (int channel = 0; channel < 6; channel++)
     {
-      char buffer[1024]; // A buffer to format and write data
-      for (int channel = 0; channel < 6; channel++)
-      {
-        // only write to pipe if connection was properly established earlier
-        for (int pipe_id=0; pipe_id<num_pipes; pipe_id++) {
-          if (use_pipe == 1) {
-            int length = snprintf(buffer, sizeof(buffer), "%f ", voltages_0[channel]);
-            write(vfd[pipe_id], buffer, length); // Write to the pipe
-          }
+      // only write to pipe if connection was properly established earlier
+      for (int pipe_id=0; pipe_id<num_pipes; pipe_id++) {
+        if (use_pipe == 1) {
+          int length = snprintf(buffer, sizeof(buffer), "%f ", voltages_0[channel]);
+          write_success = write(vfd[pipe_id], buffer, length); // Write to the pipe
         }
 
+        if (write_success == -1) {
+          use_pipe = 0;
+          error_log("Voltage pipe disconnected");
+          return -1;
+        }
+      }
+
+    }
+  }
+  int seconds = time(NULL);
+
+  if (pico == 0 && use_pipe == 1) {
+    char buffer[1024]; // A buffer to format and write data
+    int length = snprintf(buffer, sizeof(buffer), "\n");
+    for (int pipe_id=0; pipe_id<num_pipes; pipe_id++) {
+      write_success = write(vfd[pipe_id], buffer, length); // Write to the pipe
+
+      if (write_success == -1) {
+        use_pipe = 0;
+        error_log("Voltage pipe disconnected");
+        return -1;
       }
     }
-    int seconds = time(NULL);
+  }
 
-    if (pico == 0 && use_pipe == 1) {
-      char buffer[1024]; // A buffer to format and write data
-      int length = snprintf(buffer, sizeof(buffer), "\n");
-      for (int pipe_id=0; pipe_id<num_pipes; pipe_id++) {
-        write(vfd[pipe_id], buffer, length); // Write to the pipe
-      }
-    }
-
-    return 0;
+  return 0;
 }
 
 
@@ -1282,18 +1311,16 @@ void *acquire_data(void *arguments)
   int pipe_initialization_success = initialize_pipes(fd, vfd);
 
 
-
-
+  // used to request data from pico
   uint16_t inner_loop = 1;
-
+  char *input_data;
+  input_data = (char *)malloc(64 * inner_loop);
+  char *voltage_input_data;
+  voltage_input_data = (char *)malloc(24);
   char current_char = 'H';
   char voltage_char = 'V';
 
-  char *input_data;
-  input_data = (char *)malloc(64 * inner_loop);
-
-  char *voltage_input_data;
-  voltage_input_data = (char *)malloc(24);
+  
 
   float floatval = 0;
   float floatval_voltage = 0;
@@ -1373,8 +1400,7 @@ void *acquire_data(void *arguments)
 
 
 
-  while (1)
-  {
+  while (1) {
 
 
     command check_command = parse_pico_queue();
@@ -1424,10 +1450,7 @@ void *acquire_data(void *arguments)
       pthread_mutex_unlock(&usb0_mutex_lock);
     }
 
-    // check if other pico command needs to be sent
 
-
-      char *filename_V;
 
       // fill up array
       for (uint16_t time_index = 0; time_index < HISTORY_LENGTH;)
@@ -1526,29 +1549,15 @@ void *acquire_data(void *arguments)
 
 
 
-      // ----- Send voltages via GUI pipes -----
-      int pipe_voltage_success = write_pipe_voltages(pico, vfd, voltages_0);
-
-
-
-
-
-  int current_write_success = write_currents(common->all_currents, pico);
-  int voltage_write_success = write_voltages(voltages_0, pico);
-  
-
-
-
-
-
-
+    // ----- Write/send voltages/currents -----
+    int pipe_voltage_success = write_pipe_voltages(pico, vfd, voltages_0);
+    int current_write_success = write_currents(common->all_currents, pico);
+    int voltage_write_success = write_voltages(voltages_0, pico);
     int pipe_current_success = write_pipe_currents(fd, common->all_currents);
 
 
 
 
-      
-    
   }
 
   fclose(fp_I);
@@ -1596,9 +1605,10 @@ int lv_initialization() {
 
 
 void sigintHandler(int sig_num) {
-    /* Reset handler to catch SIGINT next time. 
-    Refer http://en.cppreference.com/w/c/program/signal */
-    signal(SIGINT, sigintHandler); 
+  /* Reset handler to catch SIGINT next time. 
+  Refer http://en.cppreference.com/w/c/program/signal */
+  signal(SIGINT, sigintHandler);
+
 
   sleep(0.1);
     
@@ -1644,6 +1654,7 @@ int main( int argc, char **argv ) {
   start_time = (int) time(NULL);
 
   signal(SIGINT, sigintHandler); 
+  signal(SIGPIPE, SIG_IGN);
 
 
   //char *test = load_config("test");
