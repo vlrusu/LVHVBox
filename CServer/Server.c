@@ -1436,30 +1436,33 @@ void *acquire_data(void *arguments)
 
 
   if (current_num_storages >= current_max_storages) {
+  
+
     current_datafile_time = time(NULL);
     current_num_storages = 0;
     fclose(fp_I);
 
-  if (pico == 0) {
-current_precursor = "../../Data/Currents_0_";
-strcpy(filename_I, &current_precursor[0]);
+    if (pico == 0) {
+      current_precursor = "../../Data/Currents_0_";
+      strcpy(filename_I, &current_precursor[0]);
+    } else {
+      current_precursor = "../../Data/Currents_1_";
+      strcpy(filename_I, &current_precursor[0]);
+    }
+    
+    char str_time[10];
+    sprintf(str_time, "%i", current_datafile_time);
+    strcat(filename_I, str_time);
+    strcat(filename_I, file_suffix);
+
+
+    FILE *fp_I = fopen(filename_I, "a");
+    if (fp_I == NULL) {
+          printf("Error opening the current file %s", filename_I);
+        }
+
   } else {
-    current_precursor = "../../Data/Currents_1_";
-    strcpy(filename_I, &current_precursor[0]);
-  }
-  
-  char str_time[10];
-  sprintf(str_time, "%i", current_datafile_time);
-  strcat(filename_I, str_time);
-  strcat(filename_I, file_suffix);
-
-
-
-  FILE *fp_I = fopen(filename_I, "a");
-  if (fp_I == NULL) {
-        printf("Error opening the current file %s", filename_I);
-      }
-
+    current_num_storages += HISTORY_LENGTH;
   }
   
     
