@@ -89,6 +89,8 @@ int start_time;
 int current_datafile_time = 0;
 int current_num_storages = 0;
 int current_max_storages = 1250000;
+char *filename_I;
+FILE *fp_I;
 float last_current_output[6];
 
 #define full_current_history_length 8000
@@ -1141,6 +1143,70 @@ int initialize_pipes(int fd[num_pipes], int vfd[num_pipes]) {
 }
 
 
+int write_currents(float all_currents_stored[6][HISTORY_LENGTH], int pico) {
+  char *file_suffix = ".txt";
+
+  if (current_num_storages >= current_max_storages) {
+  
+    current_datafile_time = time(NULL);
+    current_num_storages = 0;
+    fclose(fp_I);
+
+    if (pico == 0) {
+      char current_precursor[23] = "../../Data/Currents_0_";
+      strcpy(filename_I, &current_precursor[0]);
+    } else {
+      char current_precursor[23] = "../../Data/Currents_1_";
+      strcpy(filename_I, &current_precursor[0]);
+    }
+    
+    char str_time[10];
+    sprintf(str_time, "%i", current_datafile_time);
+    strcat(filename_I, str_time);
+    strcat(filename_I, file_suffix);
+
+
+    fp_I = fopen(filename_I, "a");
+    if (fp_I == NULL) {
+          printf("Error opening the current file %s", filename_I);
+        }
+
+  } else {
+    current_num_storages += HISTORY_LENGTH;
+  }
+  
+    
+  // save data in current log
+  for (uint32_t time_index=0; time_index<HISTORY_LENGTH; time_index++) {
+    for (uint8_t channel=0; channel<6; channel++) {
+      fprintf(fp_I, "%f ", all_currents_stored[channel][time_index]);
+
+    }
+    int seconds = time(NULL);
+    fprintf(fp_I, "%f\n", (float)seconds);
+  }
+  
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -1210,7 +1276,7 @@ void *acquire_data(void *arguments)
   float store_all_currents_internal[6][HISTORY_LENGTH];
 
   current_datafile_time = time(NULL);
-  char *filename_I = malloc(50);
+  filename_I = malloc(50);
 
   char *current_precursor;
   char *file_suffix = ".txt";
@@ -1227,7 +1293,7 @@ void *acquire_data(void *arguments)
   strcat(filename_I, str_time);
   strcat(filename_I, file_suffix);
 
-  FILE *fp_I = fopen(filename_I, "a");
+  fp_I = fopen(filename_I, "a");
 
 
 
@@ -1434,47 +1500,12 @@ void *acquire_data(void *arguments)
 
 
 
-
-  if (current_num_storages >= current_max_storages) {
+  int current_write_success = write_currents(common->all_currents_stored, pico);
   
 
-    current_datafile_time = time(NULL);
-    current_num_storages = 0;
-    fclose(fp_I);
-
-    if (pico == 0) {
-      current_precursor = "../../Data/Currents_0_";
-      strcpy(filename_I, &current_precursor[0]);
-    } else {
-      current_precursor = "../../Data/Currents_1_";
-      strcpy(filename_I, &current_precursor[0]);
-    }
-    
-    char str_time[10];
-    sprintf(str_time, "%i", current_datafile_time);
-    strcat(filename_I, str_time);
-    strcat(filename_I, file_suffix);
 
 
-    FILE *fp_I = fopen(filename_I, "a");
-    if (fp_I == NULL) {
-          printf("Error opening the current file %s", filename_I);
-        }
 
-  } else {
-    current_num_storages += HISTORY_LENGTH;
-  }
-  
-    
-
-      // save data in current log
-      for (uint32_t time_index=0; time_index<HISTORY_LENGTH; time_index++) {
-        for (uint8_t channel=0; channel<6; channel++) {
-          fprintf(fp_I, "%f ", common->all_currents_stored[channel][time_index]);
-        }
-        seconds = time(NULL);
-        fprintf(fp_I, "%f\n", (float)seconds);
-      }
 
 
     int pipe_current_success = write_pipe_currents(fd, common->all_currents_stored);
