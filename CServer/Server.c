@@ -46,12 +46,17 @@
 #define VENDOR_ID_1 0xcaf1
 #define PRODUCT_ID 0x4003
 
-
 struct libusb_device_handle *device_handle_0 = NULL;
 struct libusb_device_handle *device_handle_1 = NULL;
 
+
+// ----- Thread-related variables -----
+
 pthread_t acquisition_thread_0;
 pthread_t command_execution_thread;
+pthread_mutex_t lock;
+pthread_mutex_t usb0_mutex_lock;
+pthread_mutex_t usb1_mutex_lock;
 
 
 // socket constant
@@ -63,10 +68,7 @@ DAC8164 dac[3]; // HV DAQ objects
 int lv_i2cbus;
 static int lv_i2c = 0;
 
-// thread locking vars
-pthread_mutex_t lock;
-pthread_mutex_t usb0_mutex_lock;
-pthread_mutex_t usb1_mutex_lock;
+
 
 // assorted values to be returned upon client request
 float voltages_0[6];
@@ -93,19 +95,25 @@ char *filename_I;
 FILE *fp_I;
 float last_current_output[6];
 
+int voltage_datafile_time = 0;
+int voltage_num_storages = 0;
+int voltage_max_storages = 1250000;
+char *filename_V;
+FILE *fp_V;
+
+
+
+
 #define full_current_history_length 8000
 
 typedef struct
 {
   float all_currents[6][HISTORY_LENGTH];
-  float all_currents_stored[6][HISTORY_LENGTH];
-  uint8_t array_indicator;
   uint8_t pico;
-  uint8_t join_thread;
 } arg_struct;
 
-// ----- Structures used in server communications with clients ----- //
 
+// ----- Structures used in server communications with clients ----- //
 
 typedef struct {
   int client_addr;
@@ -129,6 +137,9 @@ MCP* lvpgoodMCP;
 #define NSTEPS 200
 #define SPICS 0
 
+
+// ----- Variables for GUI connection -----
+
 const char *LIVE_STATUS_FILENAME = "../live_status.txt";
 char pipe_path_base[14] = "/tmp/data_pipe";
 char v_pipe_path_base[15] = "/tmp/vdata_pipe";
@@ -136,20 +147,12 @@ char v_pipe_path_base[15] = "/tmp/vdata_pipe";
 #define ALPHA 0.1 // Choose a value between 0 and 1. Smaller values result in heavier filtering.
 #define DECIMATION_FACTOR 10
 uint8_t use_pipe = 1; // when server tries to open pipe, will be set to 0 upon fail - will then assume pipe is not to be used
-
 int num_pipes = 3;
 int pipe_channels[3] = {0, 1, 3};
 
 
-// variables to manage command queue
-command incoming_commands[COMMAND_LENGTH];
-int command_array[COMMAND_LENGTH];
-int Rear = 0;
-int Front = 0;
 
-command add_command;
-
-// initialize queue variables
+// initialize command queue variables
 int queue_key;
 int queue_id;
 int msqid;
@@ -157,6 +160,16 @@ int msqid;
 int pico_queue_key;
 int pico_queue_id;
 int pico_msqid;
+
+command add_command;
+
+
+
+
+
+
+
+
 
 
 
@@ -967,22 +980,6 @@ void *create_connections()
 
 
 
-int write_voltages(char *filename_V, float voltages[6]) {
-  FILE *fp_V = fopen(filename_V, "a");
-  if (fp_V == NULL) {
-    printf("Error opening the voltage file %s", filename_V);
-  }
-  time_t seconds;
-
-  char buffer[1024]; // A buffer to format and write data
-  for (int channel = 0; channel < 6; channel++) {
-    fprintf(fp_V, "%f ", voltages_0[channel]);
-  }
-
-  seconds = time(NULL);
-  fprintf(fp_V, "%f\n", (float)seconds);
-  fclose(fp_V);
-}
 
 
 
@@ -1143,7 +1140,7 @@ int initialize_pipes(int fd[num_pipes], int vfd[num_pipes]) {
 }
 
 
-int write_currents(float all_currents_stored[6][HISTORY_LENGTH], int pico) {
+int write_currents(float all_currents[6][HISTORY_LENGTH], int pico) {
   char *file_suffix = ".txt";
 
   if (current_num_storages >= current_max_storages) {
@@ -1179,13 +1176,61 @@ int write_currents(float all_currents_stored[6][HISTORY_LENGTH], int pico) {
   // save data in current log
   for (uint32_t time_index=0; time_index<HISTORY_LENGTH; time_index++) {
     for (uint8_t channel=0; channel<6; channel++) {
-      fprintf(fp_I, "%f ", all_currents_stored[channel][time_index]);
+      fprintf(fp_I, "%f ", all_currents[channel][time_index]);
 
     }
     int seconds = time(NULL);
     fprintf(fp_I, "%f\n", (float)seconds);
   }
+
+  return 0;
   
+}
+
+
+
+
+int write_voltages(float voltages[6], int pico) {
+  char *file_suffix = ".txt";
+
+  if (voltage_num_storages >= voltage_max_storages) {
+  
+    voltage_datafile_time = time(NULL);
+    voltage_num_storages = 0;
+    fclose(fp_V);
+
+    if (pico == 0) {
+      char voltage_precursor[23] = "../../Data/Voltages_0_";
+      strcpy(filename_V, &voltage_precursor[0]);
+    } else {
+      char voltage_precursor[23] = "../../Data/Voltages_1_";
+      strcpy(filename_V, &voltage_precursor[0]);
+    }
+    
+    char str_time[10];
+    sprintf(str_time, "%i", voltage_datafile_time);
+    strcat(filename_V, str_time);
+    strcat(filename_V, file_suffix);
+
+
+    fp_V = fopen(filename_V, "a");
+    if (fp_I == NULL) {
+          printf("Error opening the current file %s", filename_V);
+        }
+
+  } else {
+    voltage_num_storages += HISTORY_LENGTH;
+  }
+  
+    
+  // save data in voltage log
+    for (uint8_t channel=0; channel<6; channel++) {
+      fprintf(fp_V, "%f ", voltages[channel]);
+    }
+    int seconds = time(NULL);
+    fprintf(fp_V, "%f\n", (float)seconds);
+
+    return 0;
 }
 
 
@@ -1273,8 +1318,6 @@ void *acquire_data(void *arguments)
 
   uint8_t pico = common->pico;
 
-  float store_all_currents_internal[6][HISTORY_LENGTH];
-
   current_datafile_time = time(NULL);
   filename_I = malloc(50);
 
@@ -1296,20 +1339,30 @@ void *acquire_data(void *arguments)
   fp_I = fopen(filename_I, "a");
 
 
+  // voltage txt storage info
+
+  voltage_datafile_time = time(NULL);
+  filename_V = malloc(50);
+
+  char *voltage_precursor;
+  if (pico == 0) {
+    voltage_precursor = "../../Data/Voltages_0_";
+    strcpy(filename_V, &voltage_precursor[0]);
+  } else {
+    voltage_precursor = "../../Data/Voltages_1_";
+    strcpy(filename_V, &voltage_precursor[0]);
+  }
+  
+  sprintf(str_time, "%i", voltage_datafile_time);
+  strcat(filename_V, str_time);
+  strcat(filename_V, file_suffix);
+
+  fp_V = fopen(filename_V, "a");
+
+
 
 
   int pico0_init_success = initialize_libusb(0); // initialize libusb connection with pico 0
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -1423,7 +1476,6 @@ void *acquire_data(void *arguments)
         {
           currents_0[i] = *common->all_currents[i];
         }
-        filename_V = "../Voltages_0.txt";
       }
       else
       {
@@ -1431,26 +1483,9 @@ void *acquire_data(void *arguments)
         {
           currents_1[i] = *common->all_currents[i];
         }
-        filename_V = "../Voltages_1.txt";
       }
 
-      // copy array to storage array
-      for (uint8_t channel = 0; channel < 6; channel++)
-      {
-        for (uint16_t time = 0; time < HISTORY_LENGTH; time++)
-        {
-          memcpy(&common->all_currents_stored[channel][time], &common->all_currents[channel][time], sizeof(&common->all_currents[channel][time]));
-        }
-      }
-      if (common->array_indicator == 0) {
-        uint8_t new = 1;
-        memcpy(&common->array_indicator, &new, 1);
-        common->array_indicator = 1;
-      } else {
-        uint8_t new = 0;
-        memcpy(&common->array_indicator, &new, 1);
-      }
-
+   
 
 
 
@@ -1490,8 +1525,6 @@ void *acquire_data(void *arguments)
 
 
 
-      // ----- Save Voltages in txt file -----
-      int voltage_write_success = write_voltages(filename_V, voltages_0);
 
       // ----- Send voltages via GUI pipes -----
       int pipe_voltage_success = write_pipe_voltages(pico, vfd, voltages_0);
@@ -1500,7 +1533,8 @@ void *acquire_data(void *arguments)
 
 
 
-  int current_write_success = write_currents(common->all_currents_stored, pico);
+  int current_write_success = write_currents(common->all_currents, pico);
+  int voltage_write_success = write_voltages(voltages_0, pico);
   
 
 
@@ -1508,7 +1542,7 @@ void *acquire_data(void *arguments)
 
 
 
-    int pipe_current_success = write_pipe_currents(fd, common->all_currents_stored);
+    int pipe_current_success = write_pipe_currents(fd, common->all_currents);
 
 
 
@@ -1518,6 +1552,7 @@ void *acquire_data(void *arguments)
   }
 
   fclose(fp_I);
+  fclose(fp_V);
 }
 
 
@@ -1693,7 +1728,6 @@ int main( int argc, char **argv ) {
 
   // ----- initialize pico 0 communications, etc ----- //
   arg_struct args_0;
-  args_0.array_indicator = 0;
   args_0.pico = 0;
 
   // check that pico 0 is available
@@ -1717,7 +1751,6 @@ int main( int argc, char **argv ) {
   // ----- initialize pico 1 communications, etc ----- //
   /*
   struct arg_struct args_1;
-  args_1.array_indicator = 0;
   args_1.pico = 1;
 
   // create data acquisition thread
