@@ -1172,11 +1172,14 @@ int initialize_pipes(int fd[num_pipes], int vfd[num_pipes]) {
 int write_currents(float all_currents[6][HISTORY_LENGTH], int pico) {
   char *file_suffix = ".txt";
 
+
   if (current_num_storages >= current_max_storages) {
   
     current_datafile_time = time(NULL);
     current_num_storages = 0;
     fclose(fp_I);
+
+
 
     if (pico == 0) {
       char current_precursor[23] = "../../Data/Currents_0_";
@@ -1201,7 +1204,7 @@ int write_currents(float all_currents[6][HISTORY_LENGTH], int pico) {
     current_num_storages += HISTORY_LENGTH;
   }
   
-    
+  
   // save data in current log
   for (uint32_t time_index=0; time_index<HISTORY_LENGTH; time_index++) {
     for (uint8_t channel=0; channel<6; channel++) {
@@ -1297,9 +1300,7 @@ int write_voltages(float voltages[6], int pico) {
 
 // ----- Code to handle HV data acquisition & storage ----- //
 
-void *acquire_data(void *arguments)
-
-{
+void *acquire_data(void *arguments) {
   arg_struct *common = arguments;
   float last_output[6]; // State for each channel's filter
 
@@ -1364,6 +1365,7 @@ void *acquire_data(void *arguments)
   strcat(filename_I, file_suffix);
 
   fp_I = fopen(filename_I, "a");
+
 
 
   // voltage txt storage info
@@ -1529,23 +1531,17 @@ void *acquire_data(void *arguments)
         pthread_mutex_unlock(&usb1_mutex_lock);
       }
 
-      if (pico == 0)
-      {
-        for (uint32_t i = 0; i < 6; i++)
-        {
+      if (pico == 0) {
+        for (uint32_t i = 0; i < 6; i++) {
           floatval_voltage = *(float *)&voltage_input_data[4 * i];
           voltages_0[i] = floatval_voltage;
         }
-      }
-      else
-      {
-        for (uint32_t i = 0; i < 6; i++)
-        {
+      } else {
+        for (uint32_t i = 0; i < 6; i++) {
           floatval_voltage = *(float *)&voltage_input_data[4 * i];
           voltages_1[i] = floatval_voltage;
         }
       }
-
 
 
 
