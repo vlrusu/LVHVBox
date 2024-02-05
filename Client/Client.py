@@ -10,8 +10,6 @@ import time
 
 
 HISTORY_REQUEST_MAX = 100
-
-
 current_buffer_len = 8000 # must be divisible by 10
 full_current_chunk = 10
 
@@ -210,6 +208,7 @@ if __name__=="__main__":
             else:
                 # create command string
                 required_filler = 7 - valid_commands[processed_input[0]][2] - 6*valid_commands[processed_input[0]][3]
+                print("required_filler: " + str(required_filler))
                 command_string = valid_commands[processed_input[0]][0]
                 command_string += valid_commands[processed_input[0]][1]
 
@@ -238,7 +237,7 @@ if __name__=="__main__":
 
                 
 
-
+                print(command_string)
                 return_val_type = valid_commands[processed_input[0]][6]
     
         

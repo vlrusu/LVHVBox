@@ -21,9 +21,9 @@ if __name__=="__main__":
 
 
     
-    with open('peds1000.txt') as f:
+    with open('51_33_30_0_1_3_longcable.txt') as f:
         lines = f.readlines()
-        float_vals = [float(line.split()[2]) for line in lines if float(line.split()[1]) > 140]
+        float_vals = [float(line.split()[3]) for line in lines if float(line.split()[1]) > 140]
         #float_vals = [float(line.split()[0]) for line in lines]
     
 
@@ -32,9 +32,10 @@ if __name__=="__main__":
 
 
 
+    plt.plot(float_vals)
+    plt.show()
 
-
-
+    float_vals = float_vals[260000:262000]
     plt.hist(float_vals,100)
 
     plt.title(np.std(float_vals))

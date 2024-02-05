@@ -835,14 +835,19 @@ void *command_execution() {
 
       // select proper lv function
       if (current_command == 'g') { // readMonV48
+        usleep(1);
         readMonV48(char_parameter, client_addr);
       } else if (current_command == 'h') { // readMonI48
+        usleep(1);
         readMonI48(char_parameter, client_addr);
       } else if (current_command == 'i') { // readMonV6
+        usleep(1);
         readMonV6(char_parameter, client_addr);
       } else if (current_command == 'j') { // readMonI6
+        usleep(1);
         readMonI6(char_parameter, client_addr);
       } else if (current_command == 'e') { // powerOn
+        usleep(1);
         int errval = powerOn(char_parameter, client_addr);
 
         if (errval == -1) {
@@ -850,7 +855,12 @@ void *command_execution() {
         }
 
       } else if (current_command == 'f') { // powerOff
-        powerOff(char_parameter, client_addr);
+        usleep(1);
+        int errval = powerOff(char_parameter, client_addr);
+
+        if (errval == -1) {
+          error_log("LV powerOff Error");
+        }
       }
     }
     sleep(0.1);
