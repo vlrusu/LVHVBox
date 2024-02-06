@@ -58,21 +58,16 @@ int use_pico1 = 1;
 pthread_t acquisition_thread_0;
 pthread_t acquisition_thread_1;
 pthread_t command_execution_thread;
-pthread_mutex_t lock;
 pthread_mutex_t usb0_mutex_lock;
 pthread_mutex_t usb1_mutex_lock;
 
-
 // socket constant
 #define PORT 12000
-
 DAC8164 dac[3]; // HV DAQ objects
 
 // variables to store LV i2c connection info
 int lv_i2cbus;
 static int lv_i2c = 0;
-
-
 
 // assorted values to be returned upon client request
 float voltages_0[6];
@@ -81,16 +76,10 @@ float voltages_1[6];
 float currents_0[6];
 float currents_1[6];
 
-
-
-
 // LV channel information
 uint8_t powerChMap[6] = {5, 6, 7, 2, 3, 4};
 uint8_t lv_mcp_reset = 3;
 uint8_t lv_global_enable = 18;
-
-// get time that server started
-int start_time;
 
 int current_datafile_time_0 = 0;
 int current_num_storages_0 = 0;
@@ -151,9 +140,7 @@ MCP* lvpgoodMCP;
 #define NSTEPS 200
 #define SPICS 0
 
-
 // ----- Variables for GUI connection -----
-
 const char *LIVE_STATUS_FILENAME = "../live_status.txt";
 char pipe_path_base[14] = "/tmp/data_pipe";
 char v_pipe_path_base[15] = "/tmp/vdata_pipe";
@@ -163,8 +150,6 @@ char v_pipe_path_base[15] = "/tmp/vdata_pipe";
 uint8_t use_pipe = 1; // when server tries to open pipe, will be set to 0 upon fail - will then assume pipe is not to be used
 int num_pipes = 3;
 int pipe_channels[3] = {0, 1, 3};
-
-
 
 // initialize command queue variables
 int queue_key;
@@ -177,40 +162,21 @@ int pico_msqid;
 
 command add_command;
 
-
-
-
-
-
-
-
-
-
-
-
-
 command parse_queue() {
   command return_command;
-
   long msgtyp = 0;
-
   msgrcv(msqid, (void *)&return_command, 56, msgtyp, MSG_NOERROR | IPC_NOWAIT);
-
   return return_command;
 }
 
 command parse_pico_queue() {
   command return_command;
-
   long msgtyp = 0;
-
   msgrcv(pico_msqid, (void *)&return_command, 56, msgtyp, MSG_NOERROR | IPC_NOWAIT);
-
   return return_command;
 }
 
-float i2c_ltc2497(int address, int channelLTC)
-{
+float i2c_ltc2497(int address, int channelLTC) {
   float max_reading = 8388608.0;
   float vref = 1.24;
 
@@ -260,7 +226,6 @@ int powerOn(uint8_t channel, int client_addr) {
         perror("poweron error 1");
         return -1;
       }
-
 
       // log powerOn command
       char log_message[12];
@@ -317,7 +282,7 @@ int powerOff(uint8_t channel, int client_addr) {
   return 0;
 }
 
-int hv_initialization(){
+int hv_initialization() {
   if (MCP_pinMode(hvMCP, 4, OUTPUT) == -1) {
     return -1;
   } else if (MCP_pinMode(hvMCP, 4, LOW) == -1) {
@@ -337,8 +302,7 @@ int hv_initialization(){
   return 0;
 }
 
-void set_hv(int channel, float value)
-{
+void set_hv(int channel, float value) {
   int idac = (int)(channel / 4);
   float alphas[12] = {0.9, 0.9, 0.885, 0.9, 0.9012, 0.9034, 0.9009, 0.9027, 0.8977, 0.9012, 0.9015, 1.};
 
@@ -362,13 +326,10 @@ void get_vhv(uint8_t channel, int client_addr) {
   int float_channel = (int)channel;
 
   write(client_addr, &return_val, sizeof(return_val));
-
-
 }
 
 // get_ihv
-void get_ihv(uint8_t channel, int client_addr)
-{
+void get_ihv(uint8_t channel, int client_addr) {
   float return_val;
   if (channel < 6) {
     return_val = currents_0[channel];
@@ -382,9 +343,6 @@ void get_ihv(uint8_t channel, int client_addr)
 // get_buffer_status
 void get_buffer_status(uint8_t channel, int client_addr) {
   uint8_t send_val = 95;
-
-  printf("In get buffer status\n");
-
   char *input_data;
   input_data = (char *)malloc(1);
 
@@ -397,7 +355,6 @@ void get_buffer_status(uint8_t channel, int client_addr) {
   }
 
   int return_val = 1;
-
   if ((*input_data & 1 << (channel)) == 0) {
     return_val = 0;
   }
@@ -432,7 +389,6 @@ void get_slow_read(uint8_t channel, int client_addr) {
 void current_burst(uint8_t channel, int client_addr) {
   struct libusb_device_handle *device_handle;
 
-
   if (channel < 6) {
     device_handle = device_handle_0;
   } else {
@@ -440,10 +396,8 @@ void current_burst(uint8_t channel, int client_addr) {
   }
 
   uint8_t get_buffer = 89 + channel;
-  
   char *current_input_data;
   current_input_data = (char *)malloc(64);
-
   float current_array[16];
 
   libusb_bulk_transfer(device_handle, 0x02, &get_buffer, 1, 0, 50);
@@ -511,7 +465,6 @@ void ramp_hv(uint8_t channel, float voltage, int client_addr) {
 
 
 void down_hv(uint8_t channel, int client_addr) {
-  
   char *command_log = load_config("Command_Log_File");
 
   float current_voltage;
@@ -536,14 +489,11 @@ void down_hv(uint8_t channel, int client_addr) {
   char log_message[12];
   snprintf(log_message, 12, "down_hv: %u", channel);
   write_log(command_log, log_message, 0, client_addr);
-
 }
 
 // trip
-void trip(uint8_t channel, int client_addr)
-{
+void trip(uint8_t channel, int client_addr) {
   char *command_log = load_config("Command_Log_File");
-
   uint8_t send_val = 103 + (channel % 6);
 
   if (channel < 6) {
@@ -563,10 +513,8 @@ void trip(uint8_t channel, int client_addr)
 }
 
 // reset_trip
-void reset_trip(uint8_t channel, int client_addr)
-{
+void reset_trip(uint8_t channel, int client_addr) {
   char *command_log = load_config("Command_Log_File");
-
   uint8_t send_val = 109 + (channel % 6);
 
 
@@ -587,10 +535,8 @@ void reset_trip(uint8_t channel, int client_addr)
 }
 
 // disable_trip
-void disable_trip(uint8_t channel, int client_addr)
-{
+void disable_trip(uint8_t channel, int client_addr) {
   char *command_log = load_config("Command_Log_File");
-
   uint8_t send_val = 115 + (channel % 6);
 
   if (channel < 6) {
@@ -610,10 +556,8 @@ void disable_trip(uint8_t channel, int client_addr)
 }
 
 // enable_trip
-void enable_trip(uint8_t channel, int client_addr)
-{
+void enable_trip(uint8_t channel, int client_addr) {
   char *command_log = load_config("Command_Log_File");
-
   uint8_t send_val = 121 + (channel % 6);
 
   if (channel < 6) {
@@ -632,13 +576,11 @@ void enable_trip(uint8_t channel, int client_addr)
   write_log(command_log, log_message, 0, client_addr);
 }
 
+
+
 // enable_ped
-void enable_ped(uint8_t channel, int client_addr)
-{
-
-  printf("in enable ped\n");
+void enable_ped(uint8_t channel, int client_addr) {
   char *command_log = load_config("Command_Log_File");
-
   uint8_t send_val = 37;
 
   if (channel < 6) {
@@ -658,10 +600,7 @@ void enable_ped(uint8_t channel, int client_addr)
 }
 
 // disable_ped
-void disable_ped(uint8_t channel, int client_addr)
-{
-  printf("in disable_ped\n");
-
+void disable_ped(uint8_t channel, int client_addr) {
   char *command_log = load_config("Command_Log_File");
   
   uint8_t send_val = 38;
@@ -684,10 +623,8 @@ void disable_ped(uint8_t channel, int client_addr)
 
 
 // trip_status
-void trip_status(uint8_t channel, int client_addr)
-{
+void trip_status(uint8_t channel, int client_addr) {
   uint8_t send_val = 33;
-
   char *input_data;
   input_data = (char *)malloc(1);
 
@@ -704,7 +641,6 @@ void trip_status(uint8_t channel, int client_addr)
   }
 
   int return_val = 1;
-
   if ((*input_data & 1 << (channel)) == 0) {
     return_val = 0;
   }
@@ -717,21 +653,15 @@ void trip_status(uint8_t channel, int client_addr)
 }
 
 // set_trip
-void set_trip(uint8_t channel, float value, int client_addr)
-{
+void set_trip(uint8_t channel, float value, int client_addr) {
   char *command_log = load_config("Command_Log_File");
-
   uint8_t send_val[3];
   send_val[0] = 76 + (channel % 6);
-
   uint16_t send_int;
   send_int = (uint16_t)(value / 1000 * 65535);
-
   uint8_t right_mask = -1;
-
   send_val[1] = send_int >> 8 & right_mask;
   send_val[2] = send_int & right_mask;
-
   uint16_t one = send_val[1] << 8;
   uint16_t two = send_val[2] + one;
 
@@ -752,8 +682,7 @@ void set_trip(uint8_t channel, float value, int client_addr)
 }
 
 // readMonV48
-void readMonV48(uint8_t channel, int client_addr)
-{
+void readMonV48(uint8_t channel, int client_addr) {
   uint8_t LTCaddress[6] = {0x26, 0x26, 0x16, 0x16, 0x14, 0x14};
   uint8_t v48map[6] = {6, 0, 6, 0, 6, 0};
 
@@ -771,8 +700,7 @@ void readMonV48(uint8_t channel, int client_addr)
 }
 
 // readMonI48
-void readMonI48(uint8_t channel, int client_addr)
-{
+void readMonI48(uint8_t channel, int client_addr) {
   uint8_t LTCaddress[6] = {0x26, 0x26, 0x16, 0x16, 0x14, 0x14};
   uint8_t i48map[6] = {7, 1, 7, 1, 7, 1};
 
@@ -790,8 +718,7 @@ void readMonI48(uint8_t channel, int client_addr)
 }
 
 // readMonV6
-void readMonV6(uint8_t channel, int client_addr)
-{
+void readMonV6(uint8_t channel, int client_addr) {
   uint8_t v6map[6] = {4, 3, 4, 3, 4, 3};
   uint8_t LTCaddress[6] = {0x26, 0x26, 0x16, 0x16, 0x14, 0x14};
 
@@ -809,8 +736,7 @@ void readMonV6(uint8_t channel, int client_addr)
 }
 
 // readMonI6
-void readMonI6(uint8_t channel, int client_addr)
-{
+void readMonI6(uint8_t channel, int client_addr) {
   uint8_t addresses[3] = {0x14, 0x16, 0x26};
   uint8_t LTCaddress[6] = {0x26, 0x26, 0x16, 0x16, 0x14, 0x14};
   uint8_t i6map[6] = {5, 2, 5, 2, 5, 2};
@@ -830,11 +756,7 @@ void readMonI6(uint8_t channel, int client_addr)
 
 void *command_execution() {
   while (1) {
-    
-    
     command check_command = parse_queue();
-    
-
     char current_command = check_command.command_name;
     char current_type = check_command.command_type;
     uint8_t char_parameter = (uint8_t)check_command.char_parameter-97;
@@ -843,8 +765,7 @@ void *command_execution() {
 
 
     // check if command is hv type, else do nothing
-    if (current_type == 'a')
-    {
+    if (current_type == 'a') {
       // select proper hv function
       if (current_command == 'a') { // get_vhv
         get_vhv(char_parameter, client_addr);
@@ -868,15 +789,13 @@ void *command_execution() {
       // select proper hv function
       if (current_command == 'c') { // ramp_hv
         ramp_hv(char_parameter, float_parameter, client_addr);
-
       } else if (current_command == 'd') { // down_hv
         down_hv(char_parameter, client_addr);
       }
     }
 
 
-    if (current_type == 'b')
-    {
+    if (current_type == 'b') {
 
       // select proper lv function
       if (current_command == 'g') { // readMonV48
@@ -898,7 +817,6 @@ void *command_execution() {
         if (errval == -1) {
           error_log("LV powerOn Error");
         }
-
       } else if (current_command == 'f') { // powerOff
         usleep(1);
         int errval = powerOff(char_parameter, client_addr);
@@ -912,32 +830,22 @@ void *command_execution() {
   }
 }
 
-
-
-
 // ----- Code to handle socket stuff ----- //
 void *handle_client(void *args) {
   client_data *client_information = args;
-
   int inner_socket = client_information->client_addr;
-
   char buffer[9];
   char flush_buffer[1];
 
-
-  while (1)
-  {
+  while (1) {
     int return_val = read(inner_socket, buffer, 9);
-
     // if return_val is -1, terminate thread
     if (return_val == 0) {
-
       printf("Thread terminated \n");
       return 0;
     }
 
-    if (return_val == 9)
-    {
+    if (return_val == 9) {
       // create command
       add_command.command_name = buffer[0];
       add_command.command_type = buffer[1];
@@ -951,7 +859,6 @@ void *handle_client(void *args) {
       } else {
         msgsnd(msqid, (void *)&add_command, sizeof(add_command), IPC_NOWAIT);
       }
-
     }
   }
 }
@@ -962,7 +869,6 @@ void *live_status(void *args) {
   char flush_buffer[1];
 
   while (1) {
-
     for (int ichannel = 0; ichannel < 6; ichannel++) {
       // create command
       add_command.command_name = 'o';
@@ -979,9 +885,7 @@ void *live_status(void *args) {
   }
 }
 
-void *create_connections()
-{
-
+void *create_connections() {
   int server_fd, new_socket, valread;
   struct sockaddr_in address;
   int opt = 1;
@@ -996,8 +900,7 @@ void *create_connections()
   // Forcefully attaching socket to the port 8080
   if (setsockopt(server_fd, SOL_SOCKET,
                  SO_REUSEADDR | SO_REUSEPORT, &opt,
-                 sizeof(opt)))
-  {
+                 sizeof(opt))) {
     perror("setsockopt");
     exit(EXIT_FAILURE);
   }
@@ -1007,22 +910,19 @@ void *create_connections()
 
   // Forcefully attaching socket to the port 8080
   if (bind(server_fd, (struct sockaddr *)&address,
-           sizeof(address)) < 0)
-  {
+           sizeof(address)) < 0) {
     perror("bind failed");
     exit(EXIT_FAILURE);
   }
-  if (listen(server_fd, 3) < 0)
-  {
+
+  if (listen(server_fd, 3) < 0) {
     perror("listen");
     exit(EXIT_FAILURE);
   }
 
-  while (1)
-  {
+  while (1) {
     if ((new_socket = accept(server_fd, (struct sockaddr *)&address,
-                             (socklen_t *)&addrlen)) < 0)
-    {
+                             (socklen_t *)&addrlen)) < 0) {
       perror("accept");
       exit(EXIT_FAILURE);
     }
@@ -1032,30 +932,21 @@ void *create_connections()
   }
 }
 
-
-
-
-
-
-
 int write_pipe_currents(int fd[num_pipes], float store_all_currents_internal[6][HISTORY_LENGTH]) {
       char buffer[1024];
       int write_success = 0;
 
       for (int pipe_id=0; pipe_id<num_pipes; pipe_id++) {
-        for (uint32_t time_index = 0; time_index < HISTORY_LENGTH; time_index++)
-        {
+        for (uint32_t time_index = 0; time_index < HISTORY_LENGTH; time_index++) {
     
-          for (uint8_t channel = 0; channel < 6; channel++)
-          {
+          for (uint8_t channel = 0; channel < 6; channel++) {
             // Apply the first-order low-pass filter
             float input_value = store_all_currents_internal[channel][time_index];
             float filtered_value = ALPHA * input_value + (1 - ALPHA) * last_current_output[channel];
             last_current_output[channel] = filtered_value;
 
             // Decimation by 5: Only write every 5th sample
-            if (time_index % DECIMATION_FACTOR == 0 && use_pipe == 1)
-            {
+            if (time_index % DECIMATION_FACTOR == 0 && use_pipe == 1) {
               int length = snprintf(buffer, sizeof(buffer), "%f ", filtered_value);
 
               write_success = write(fd[pipe_id], buffer, length); // Write to the pipe
@@ -1068,8 +959,7 @@ int write_pipe_currents(int fd[num_pipes], float store_all_currents_internal[6][
             }
           }
 
-          if (time_index % DECIMATION_FACTOR == 0 && use_pipe == 1)
-          {
+          if (time_index % DECIMATION_FACTOR == 0 && use_pipe == 1) {
             int length = snprintf(buffer, sizeof(buffer), "\n");
             write_success = write(fd[pipe_id], buffer, length); // Write the timestamp to the pipe
 
@@ -1079,10 +969,7 @@ int write_pipe_currents(int fd[num_pipes], float store_all_currents_internal[6][
             return -1;
             }
           }
-
-        
         }
-        
       }
       return 0;
 }
@@ -1091,11 +978,9 @@ int write_pipe_currents(int fd[num_pipes], float store_all_currents_internal[6][
 int write_pipe_voltages(int pico, int vfd[6], float voltages_0[6]) {
   int write_success = 0;
 
-  if (pico == 0)
-  {
+  if (pico == 0) {
     char buffer[1024]; // A buffer to format and write data
-    for (int channel = 0; channel < 6; channel++)
-    {
+    for (int channel = 0; channel < 6; channel++) {
       // only write to pipe if connection was properly established earlier
       for (int pipe_id=0; pipe_id<num_pipes; pipe_id++) {
         if (use_pipe == 1) {
@@ -1135,13 +1020,11 @@ int write_pipe_voltages(int pico, int vfd[6], float voltages_0[6]) {
 
 
 int initialize_libusb(int pico) {
-
   // Set debugging output to max level
 	libusb_set_option( NULL, LIBUSB_OPTION_LOG_LEVEL, LIBUSB_LOG_LEVEL_WARNING );
 
   // Open our ADU device that matches our vendor id and product id
-  if (pico == 0)
-  {
+  if (pico == 0) {
     device_handle_0 = libusb_open_device_with_vid_pid(NULL, VENDOR_ID_0, PRODUCT_ID);
 
     if (device_handle_0 == NULL) {
@@ -1152,11 +1035,8 @@ int initialize_libusb(int pico) {
       // Claim interface 0 on the device
       libusb_claim_interface(device_handle_0, 1);
     }
-  }
-  else
-  {
+  } else {
     device_handle_1 = libusb_open_device_with_vid_pid(NULL, VENDOR_ID_1, PRODUCT_ID);
-
     if (device_handle_1 == NULL) {
       printf("Pico 1 will not be used.\n");
       use_pico1 = 0;
@@ -1174,7 +1054,6 @@ int initialize_libusb(int pico) {
 
 
 int initialize_pipes(int fd[num_pipes], int vfd[num_pipes]) {
-
   char *pipe_path = malloc(15);
   struct stat st_i;
 
@@ -1238,110 +1117,77 @@ int initialize_pipes(int fd[num_pipes], int vfd[num_pipes]) {
 int write_currents_0(float all_currents[12][HISTORY_LENGTH]) {
   char *file_suffix = ".txt";
 
-
-
   if (current_num_storages_0 >= current_max_storages_0) {
-  
     current_datafile_time_0 = time(NULL);
     current_num_storages_0 = 0;
     fclose(fp_I_0);
 
-
-
-  
     char current_precursor[23] = "../../Data/Currents_0_";
     strcpy(filename_I_0, &current_precursor[0]);
 
-    
     char str_time[10];
     sprintf(str_time, "%i", current_datafile_time_0);
     strcat(filename_I_0, str_time);
     strcat(filename_I_0, file_suffix);
 
-
     fp_I_0 = fopen(filename_I_0, "a");
     if (fp_I_0 == NULL) {
-          printf("Error opening the current file %s", filename_I_0);
-        }
-
+      printf("Error opening the current file %s", filename_I_0);
+    }
   } else {
     current_num_storages_0 += HISTORY_LENGTH;
   }
-  
   
   // save data in current log
   for (uint32_t time_index=0; time_index<HISTORY_LENGTH; time_index++) {
     for (uint8_t channel=0; channel<6; channel++) {
       fprintf(fp_I_0, "%f ", all_currents[channel][time_index]);
-
     }
     fprintf(fp_I_0, "%f\n", (float)time(NULL));
   }
 
-
   return 0;
-  
 }
-
-
-
-
-
-
-
 
 int write_currents_1(float all_currents[12][HISTORY_LENGTH]) {
   char *file_suffix = ".txt";
 
-
   if (current_num_storages_1 >= current_max_storages_1) {
-  
     current_datafile_time_1 = time(NULL);
     current_num_storages_1 = 0;
     fclose(fp_I_1);
 
-
-
-  
     char current_precursor[23] = "../../Data/Currents_1_";
     strcpy(filename_I_1, &current_precursor[0]);
 
-    
     char str_time[10];
     sprintf(str_time, "%i", current_datafile_time_1);
     strcat(filename_I_1, str_time);
     strcat(filename_I_1, file_suffix);
 
-
     fp_I_1 = fopen(filename_I_1, "a");
     if (fp_I_1 == NULL) {
-          printf("Error opening the current file %s", filename_I_1);
-        }
-
+      printf("Error opening the current file %s", filename_I_1);
+    }
   } else {
     current_num_storages_1 += HISTORY_LENGTH;
   }
-  
   
   // save data in current log
   for (uint32_t time_index=0; time_index<HISTORY_LENGTH; time_index++) {
     for (uint8_t channel=0; channel<6; channel++) {
       fprintf(fp_I_1, "%f ", all_currents[channel+6][time_index]);
-
     }
     fprintf(fp_I_1, "%f\n", (float)time(NULL));
   }
 
-
   return 0;
-  
 }
 
 
 
 
 int write_voltages_0(float voltages[6]) {
-
   char *file_suffix = ".txt";
    
   if (voltage_num_storages_0 >= voltage_max_storages_0) {
@@ -1352,39 +1198,32 @@ int write_voltages_0(float voltages[6]) {
     char voltage_precursor[23] = "../../Data/Voltages_0_";
     strcpy(filename_V_0, &voltage_precursor[0]);
 
-
-    
     char str_time[10];
     sprintf(str_time, "%i", voltage_datafile_time_0);
     strcat(filename_V_0, str_time);
     strcat(filename_V_0, file_suffix);
 
-
     fp_V_0 = fopen(filename_V_0, "a");
     if (fp_V_0 == NULL) {
-          printf("Error opening the current file %s", filename_V_0);
-        }
-
+      printf("Error opening the current file %s", filename_V_0);
+    }
   } else {
     voltage_num_storages_0 += HISTORY_LENGTH;
   }
   
-    
   // save data in voltage log
-    for (uint8_t channel=0; channel<6; channel++) {
-      fprintf(fp_V_0, "%f ", voltages[channel]);
-    }
-    fprintf(fp_V_0, "%f\n", (float)time(NULL));
+  for (uint8_t channel=0; channel<6; channel++) {
+    fprintf(fp_V_0, "%f ", voltages[channel]);
+  }
+  fprintf(fp_V_0, "%f\n", (float)time(NULL));
 
-
-    return 0;
+  return 0;
 }
 
 
 
 
 int write_voltages_1(float voltages[6]) {
-
   char *file_suffix = ".txt";
    
   if (voltage_num_storages_1 >= voltage_max_storages_1) {
@@ -1395,13 +1234,10 @@ int write_voltages_1(float voltages[6]) {
     char voltage_precursor[23] = "../../Data/Voltages_1_";
     strcpy(filename_V_1, &voltage_precursor[0]);
 
-
-    
     char str_time[10];
     sprintf(str_time, "%i", voltage_datafile_time_1);
     strcat(filename_V_1, str_time);
     strcat(filename_V_1, file_suffix);
-
 
     fp_V_1 = fopen(filename_V_1, "a");
     if (fp_V_1 == NULL) {
@@ -1412,13 +1248,11 @@ int write_voltages_1(float voltages[6]) {
     voltage_num_storages_1 += HISTORY_LENGTH;
   }
   
-    
   // save data in voltage log
     for (uint8_t channel=0; channel<6; channel++) {
       fprintf(fp_V_1, "%f ", voltages[channel]);
     }
     fprintf(fp_V_1, "%f\n", (float)time(NULL));
-
 
     return 0;
 }
@@ -1509,8 +1343,6 @@ int request_voltages(int pico) {
   char *input_data;
   input_data = (char *)malloc(24);
 
-
-
   if (pico == 0) {
     pthread_mutex_lock(&usb0_mutex_lock);
     libusb_bulk_transfer(device_handle_0, 0x02, &voltage_char, 1, 0, 0);
@@ -1522,7 +1354,6 @@ int request_voltages(int pico) {
     libusb_bulk_transfer(device_handle_1, 0x82, input_data, 24, 0, 0);
     pthread_mutex_unlock(&usb1_mutex_lock);
   }
-
 
   if (pico == 0) {
     for (uint32_t i = 0; i < 6; i++) {
@@ -1540,12 +1371,11 @@ int request_voltages(int pico) {
 int initialize_txt(int pico) {
   time_t seconds;
 
-
-  
   char *current_precursor;
   char *file_suffix = ".txt";
   char str_time[10];
 
+  // ----- Initialize current ----- //
   if (pico == 0) {
     current_datafile_time_0 = time(NULL);
     filename_I_0 = malloc(50);
@@ -1569,16 +1399,9 @@ int initialize_txt(int pico) {
     strcat(filename_I_1, file_suffix);
 
     fp_I_1 = fopen(filename_I_1, "a");
-
   }
   
-
-
-
-  
-
-  
-
+  // ----- Initialize voltage ----- //
   char *voltage_precursor;
   if (pico == 0) {
     voltage_datafile_time_0 = time(NULL);
@@ -1603,14 +1426,7 @@ int initialize_txt(int pico) {
 
     fp_V_1 = fopen(filename_V_1, "a");
   }
-
 }
-
-
-
-
-
-
 
 
 
@@ -1623,11 +1439,7 @@ void *acquire_data(void *arguments) {
   int fd[num_pipes];
   int vfd[num_pipes];
 
-
-
-
   int pico_init_success = initialize_libusb(pico); // initialize libusb connection with pico 0
-
 
   if (pico == 0 && use_pico0 == 1) {
     int pipe_initialization_success = initialize_pipes(fd, vfd);
@@ -1636,18 +1448,13 @@ void *acquire_data(void *arguments) {
     int txt_init_success_1 = initialize_txt(1);
   }
 
-
-
-
   while (1) {
-
     command check_command = parse_pico_queue();
     char current_command = check_command.command_name;
     char current_type = check_command.command_type;
     uint8_t char_parameter = (uint8_t)check_command.char_parameter - 97;
     float float_parameter = check_command.float_parameter;
     int client_addr = check_command.client_addr;
-
 
     // check if command is pico type, else do nothing
     if (current_type == 'c')
@@ -1687,16 +1494,15 @@ void *acquire_data(void *arguments) {
       }
     }
 
+    if (pico == 0 && use_pico0 == 1) {
+      int current_success_0 = request_averaged_currents(common->all_currents, 0);
+      int voltage_success_0 = request_voltages(0);
+    }
 
-      if (pico == 0 && use_pico0 == 1) {
-        int current_success_0 = request_averaged_currents(common->all_currents, 0);
-        int voltage_success_0 = request_voltages(0);
-      }
-
-      if (pico == 1 && use_pico1 == 1) {
-        int current_success_1 = request_averaged_currents(common->all_currents, 1);
-        int voltage_success_1 = request_voltages(1);
-      }
+    if (pico == 1 && use_pico1 == 1) {
+      int current_success_1 = request_averaged_currents(common->all_currents, 1);
+      int voltage_success_1 = request_voltages(1);
+    }
 
     // ----- Write/send voltages/currents -----
     if (pico == 0 && use_pico0 == 1) {
@@ -1784,12 +1590,7 @@ void sigintHandler(int sig_num) {
 
     fclose(fp_I_1);
     fclose(fp_V_1);
-
   }
-
-
-
-  
 } 
 
 
@@ -1799,9 +1600,7 @@ int main( int argc, char **argv ) {
   const char *pathname = "/home/mu2e/LVHVBox/CServer/build";
   queue_id = 0;
   queue_key = ftok(pathname, queue_id);
-  printf("queue key: %i\n", queue_key);
   msqid = msgget(queue_key, IPC_CREAT);
-  printf("msqid: %i\n", msqid);
 
   pico_queue_id = 1;
   pico_queue_key = ftok(pathname, pico_queue_id);
@@ -1810,29 +1609,12 @@ int main( int argc, char **argv ) {
 
 
 
-
-
-
-
-
   hvMCP=(MCP*)malloc(sizeof(struct MCP*));
   lvpgoodMCP=(MCP*)malloc(sizeof(struct MCP*));
-
-  // save time that server started
-  start_time = (int) time(NULL);
 
   signal(SIGINT, sigintHandler); 
   signal(SIGPIPE, SIG_IGN);
 
-
-  //char *test = load_config("test");
-  //printf("test: %s\n",test);
-
-
-  /**
-   * @brief setup SPI comm
-   * 
-   */
 
   if ((spiFds = open (spidev, O_RDWR)) < 0){
     printf("Unable to open SPI device: %s\n",spidev);
@@ -1855,30 +1637,23 @@ int main( int argc, char **argv ) {
   }
 
 
-/**
- * @brief setup MCPs with their appropriate addresses
- * 
- */
+
   
 // Export the GPIO pins
 
-    if (setup_gpio(lv_mcp_reset) == -1) {
-        return 1;
-    }
+  if (setup_gpio(lv_mcp_reset) == -1) {
+      return 1;
+  }
 
+  // Turn off the GPIO pin (set it to 1)
+  if (write_gpio_value(lv_mcp_reset, 0) == -1) {
+      return 1;
+  }
 
-
-
-    
-    // Turn off the GPIO pin (set it to 1)
-    if (write_gpio_value(lv_mcp_reset, 0) == -1) {
-        return 1;
-    }
-
-    // Turn on the GPIO pin (set it to 1)
-    if (write_gpio_value(lv_mcp_reset, 1) == -1) {
-        return 1;
-    }
+  // Turn on the GPIO pin (set it to 1)
+  if (write_gpio_value(lv_mcp_reset, 1) == -1) {
+      return 1;
+  }
 
   
   if (MCP_setup(hvMCP,2) == -1) {
@@ -1893,7 +1668,6 @@ int main( int argc, char **argv ) {
   } else if (lv_initialization() == -1) {
     return -1;
   }
-
 
   FILE *file = fopen(LIVE_STATUS_FILENAME, "w");
   fclose(file);
@@ -1920,8 +1694,6 @@ int main( int argc, char **argv ) {
   pthread_create(&acquisition_thread_0, NULL, acquire_data, &args_0);
   pthread_create(&acquisition_thread_1, NULL, acquire_data, &args_1);
 
-  
- 
   // create statusing thread
   pthread_t status_thread_0;
   pthread_create(&status_thread_0, NULL, live_status, &args_0);
@@ -1933,11 +1705,7 @@ int main( int argc, char **argv ) {
   // create hv execution thread
   pthread_create(&command_execution_thread, NULL, command_execution, NULL);
 
-
-
   pause();
-
-  
 
   return 0;
 }
