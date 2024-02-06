@@ -280,7 +280,11 @@ def process_command(line):
             channel = int(keys[1])
             assert 0 <= channel <= 11
 
-            command_string = "ca" + chr(channel+97) + str(float(keys[2]))
+            command_string = "ca" + chr(channel+97)
+            len_float_string = len(str(float(keys[2])))
+            pad = 6-len_float_string
+            command_string += ''.join("0" for i in range(pad))
+            command_string += str(float(keys[2]))
             sock.send(bytes(command_string,"utf-8"))
         
         elif keys[0] == "current_burst":

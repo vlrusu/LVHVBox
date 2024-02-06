@@ -49,10 +49,13 @@
 struct libusb_device_handle *device_handle_0 = NULL;
 struct libusb_device_handle *device_handle_1 = NULL;
 
+int use_pico0 = 1;
+int use_pico1 = 1;
+
 
 // ----- Thread-related variables -----
 
-pthread_t acquisition_thread_0;
+pthread_t acquisition_thread;
 pthread_t command_execution_thread;
 pthread_mutex_t lock;
 pthread_mutex_t usb0_mutex_lock;
@@ -88,18 +91,28 @@ uint8_t lv_global_enable = 18;
 // get time that server started
 int start_time;
 
-int current_datafile_time = 0;
-int current_num_storages = 0;
-int current_max_storages = 1250000;
-char *filename_I;
-FILE *fp_I;
+int current_datafile_time_0 = 0;
+int current_num_storages_0 = 0;
+int current_max_storages_0 = 14E6;
+int current_datafile_time_1 = 0;
+int current_num_storages_1 = 0;
+int current_max_storages_1 = 14E6;
+char *filename_I_0;
+FILE *fp_I_0;
+char *filename_I_1;
+FILE *fp_I_1;
 float last_current_output[6];
 
-int voltage_datafile_time = 0;
-int voltage_num_storages = 0;
-int voltage_max_storages = 1250000;
-char *filename_V;
-FILE *fp_V;
+int voltage_datafile_time_0 = 0;
+int voltage_num_storages_0 = 0;
+int voltage_max_storages_0 = 14E6;
+int voltage_datafile_time_1 = 0;
+int voltage_num_storages_1 = 0;
+int voltage_max_storages_1 = 14E6;
+char *filename_V_0;
+FILE *fp_V_0;
+char *filename_V_1;
+FILE *fp_V_1;
 
 
 
@@ -108,7 +121,7 @@ FILE *fp_V;
 
 typedef struct
 {
-  float all_currents[6][HISTORY_LENGTH];
+  float all_currents[12][HISTORY_LENGTH];
   uint8_t pico;
 } arg_struct;
 
@@ -475,6 +488,7 @@ void stop_buffer(uint8_t channel, int client_addr) {
 
 // rampHV
 void ramp_hv(uint8_t channel, float voltage, int client_addr) {
+  printf("in ramp_hv\n");
   char *command_log = load_config("Command_Log_File");
 
   int idac = (int)(channel / 4);
@@ -1091,7 +1105,6 @@ int write_pipe_voltages(int pico, int vfd[6], float voltages_0[6]) {
 
 int initialize_libusb(int pico) {
 
-
   // Set debugging output to max level
 	libusb_set_option( NULL, LIBUSB_OPTION_LOG_LEVEL, LIBUSB_LOG_LEVEL_WARNING );
 
@@ -1100,17 +1113,29 @@ int initialize_libusb(int pico) {
   {
     device_handle_0 = libusb_open_device_with_vid_pid(NULL, VENDOR_ID_0, PRODUCT_ID);
 
-    libusb_set_auto_detach_kernel_driver(device_handle_0, 1);
-    // Claim interface 0 on the device
-    libusb_claim_interface(device_handle_0, 1);
+    if (device_handle_0 == NULL) {
+      printf("Pico 0 will not be used.\n");
+      use_pico0 = 0;
+    } else {
+      libusb_set_auto_detach_kernel_driver(device_handle_0, 1);
+      // Claim interface 0 on the device
+      libusb_claim_interface(device_handle_0, 1);
+    }
   }
   else
   {
     device_handle_1 = libusb_open_device_with_vid_pid(NULL, VENDOR_ID_1, PRODUCT_ID);
-    libusb_set_auto_detach_kernel_driver(device_handle_1, 1);
-    // Claim interface 0 on the device
-    libusb_claim_interface(device_handle_1, 1);
+
+    if (device_handle_1 == NULL) {
+      printf("Pico 1 will not be used.\n");
+      use_pico1 = 0;
+    } else {
+      libusb_set_auto_detach_kernel_driver(device_handle_1, 1);
+      // Claim interface 0 on the device
+      libusb_claim_interface(device_handle_1, 1);
+    }
   }
+
   return 0;
 }
 
@@ -1179,51 +1204,49 @@ int initialize_pipes(int fd[num_pipes], int vfd[num_pipes]) {
 }
 
 
-int write_currents(float all_currents[6][HISTORY_LENGTH], int pico) {
+int write_currents_0(float all_currents[12][HISTORY_LENGTH]) {
   char *file_suffix = ".txt";
 
 
-  if (current_num_storages >= current_max_storages) {
+
+  if (current_num_storages_0 >= current_max_storages_0) {
   
-    current_datafile_time = time(NULL);
-    current_num_storages = 0;
-    fclose(fp_I);
+    current_datafile_time_0 = time(NULL);
+    current_num_storages_0 = 0;
+    fclose(fp_I_0);
 
 
 
-    if (pico == 0) {
-      char current_precursor[23] = "../../Data/Currents_0_";
-      strcpy(filename_I, &current_precursor[0]);
-    } else {
-      char current_precursor[23] = "../../Data/Currents_1_";
-      strcpy(filename_I, &current_precursor[0]);
-    }
+  
+    char current_precursor[23] = "../../Data/Currents_0_";
+    strcpy(filename_I_0, &current_precursor[0]);
+
     
     char str_time[10];
-    sprintf(str_time, "%i", current_datafile_time);
-    strcat(filename_I, str_time);
-    strcat(filename_I, file_suffix);
+    sprintf(str_time, "%i", current_datafile_time_0);
+    strcat(filename_I_0, str_time);
+    strcat(filename_I_0, file_suffix);
 
 
-    fp_I = fopen(filename_I, "a");
-    if (fp_I == NULL) {
-          printf("Error opening the current file %s", filename_I);
+    fp_I_0 = fopen(filename_I_0, "a");
+    if (fp_I_0 == NULL) {
+          printf("Error opening the current file %s", filename_I_0);
         }
 
   } else {
-    current_num_storages += HISTORY_LENGTH;
+    current_num_storages_0 += HISTORY_LENGTH;
   }
   
   
   // save data in current log
   for (uint32_t time_index=0; time_index<HISTORY_LENGTH; time_index++) {
     for (uint8_t channel=0; channel<6; channel++) {
-      fprintf(fp_I, "%f ", all_currents[channel][time_index]);
+      fprintf(fp_I_0, "%f ", all_currents[channel][time_index]);
 
     }
-    int seconds = time(NULL);
-    fprintf(fp_I, "%f\n", (float)seconds);
+    fprintf(fp_I_0, "%f\n", (float)time(NULL));
   }
+
 
   return 0;
   
@@ -1232,45 +1255,139 @@ int write_currents(float all_currents[6][HISTORY_LENGTH], int pico) {
 
 
 
-int write_voltages(float voltages[6], int pico) {
+
+
+
+
+int write_currents_1(float all_currents[12][HISTORY_LENGTH]) {
   char *file_suffix = ".txt";
 
-  if (voltage_num_storages >= voltage_max_storages) {
-  
-    voltage_datafile_time = time(NULL);
-    voltage_num_storages = 0;
-    fclose(fp_V);
 
-    if (pico == 0) {
-      char voltage_precursor[23] = "../../Data/Voltages_0_";
-      strcpy(filename_V, &voltage_precursor[0]);
-    } else {
-      char voltage_precursor[23] = "../../Data/Voltages_1_";
-      strcpy(filename_V, &voltage_precursor[0]);
-    }
+  if (current_num_storages_1 >= current_max_storages_1) {
+  
+    current_datafile_time_1 = time(NULL);
+    current_num_storages_1 = 0;
+    fclose(fp_I_1);
+
+
+
+  
+    char current_precursor[23] = "../../Data/Currents_1_";
+    strcpy(filename_I_1, &current_precursor[0]);
+
     
     char str_time[10];
-    sprintf(str_time, "%i", voltage_datafile_time);
-    strcat(filename_V, str_time);
-    strcat(filename_V, file_suffix);
+    sprintf(str_time, "%i", current_datafile_time_1);
+    strcat(filename_I_1, str_time);
+    strcat(filename_I_1, file_suffix);
 
 
-    fp_V = fopen(filename_V, "a");
-    if (fp_I == NULL) {
-          printf("Error opening the current file %s", filename_V);
+    fp_I_1 = fopen(filename_I_1, "a");
+    if (fp_I_1 == NULL) {
+          printf("Error opening the current file %s", filename_I_1);
         }
 
   } else {
-    voltage_num_storages += HISTORY_LENGTH;
+    current_num_storages_1 += HISTORY_LENGTH;
+  }
+  
+  
+  // save data in current log
+  for (uint32_t time_index=0; time_index<HISTORY_LENGTH; time_index++) {
+    for (uint8_t channel=0; channel<6; channel++) {
+      fprintf(fp_I_1, "%f ", all_currents[channel+6][time_index]);
+
+    }
+    fprintf(fp_I_1, "%f\n", (float)time(NULL));
+  }
+
+
+  return 0;
+  
+}
+
+
+
+
+int write_voltages_0(float voltages[6]) {
+
+  char *file_suffix = ".txt";
+   
+  if (voltage_num_storages_0 >= voltage_max_storages_0) {
+    voltage_datafile_time_0 = time(NULL);
+    voltage_num_storages_0 = 0;
+    fclose(fp_V_0);
+
+    char voltage_precursor[23] = "../../Data/Voltages_0_";
+    strcpy(filename_V_0, &voltage_precursor[0]);
+
+
+    
+    char str_time[10];
+    sprintf(str_time, "%i", voltage_datafile_time_0);
+    strcat(filename_V_0, str_time);
+    strcat(filename_V_0, file_suffix);
+
+
+    fp_V_0 = fopen(filename_V_0, "a");
+    if (fp_V_0 == NULL) {
+          printf("Error opening the current file %s", filename_V_0);
+        }
+
+  } else {
+    voltage_num_storages_0 += HISTORY_LENGTH;
   }
   
     
   // save data in voltage log
     for (uint8_t channel=0; channel<6; channel++) {
-      fprintf(fp_V, "%f ", voltages[channel]);
+      fprintf(fp_V_0, "%f ", voltages[channel]);
     }
-    int seconds = time(NULL);
-    fprintf(fp_V, "%f\n", (float)seconds);
+    fprintf(fp_V_0, "%f\n", (float)time(NULL));
+
+
+    return 0;
+}
+
+
+
+
+int write_voltages_1(float voltages[6]) {
+
+  char *file_suffix = ".txt";
+   
+  if (voltage_num_storages_1 >= voltage_max_storages_1) {
+    voltage_datafile_time_1 = time(NULL);
+    voltage_num_storages_1 = 0;
+    fclose(fp_V_1);
+
+    char voltage_precursor[23] = "../../Data/Voltages_1_";
+    strcpy(filename_V_1, &voltage_precursor[0]);
+
+
+    
+    char str_time[10];
+    sprintf(str_time, "%i", voltage_datafile_time_1);
+    strcat(filename_V_1, str_time);
+    strcat(filename_V_1, file_suffix);
+
+
+    fp_V_1 = fopen(filename_V_1, "a");
+    if (fp_V_1 == NULL) {
+          printf("Error opening the current file %s", filename_V_1);
+        }
+
+  } else {
+    voltage_num_storages_1 += HISTORY_LENGTH;
+  }
+  
+    
+  // save data in voltage log
+    for (uint8_t channel=0; channel<6; channel++) {
+      fprintf(fp_V_1, "%f ", voltages[channel]);
+    }
+    fprintf(fp_V_1, "%f\n", (float)time(NULL));
+
 
     return 0;
 }
@@ -1280,25 +1397,183 @@ int write_voltages(float voltages[6], int pico) {
 
 
 
+int request_averaged_currents(float currents[12][HISTORY_LENGTH], int pico) {
+  float floatval;
+  char *input_data;
+  input_data = (char *)malloc(64);
+  char current_char = 'H';
+
+  // fill up array
+      for (uint16_t time_index = 0; time_index < HISTORY_LENGTH;)
+      {
+        if (pico == 0)
+        {
+          pthread_mutex_lock(&usb0_mutex_lock);
+          libusb_bulk_transfer(device_handle_0, 0x02, &current_char, 1, 0, 0);
+          libusb_bulk_transfer(device_handle_0, 0x82, input_data, 48, 0, 0);
+          pthread_mutex_unlock(&usb0_mutex_lock);
+        }
+        else
+        {
+          pthread_mutex_lock(&usb1_mutex_lock);
+          libusb_bulk_transfer(device_handle_1, 0x02, &current_char, 1, 0, 0);
+          libusb_bulk_transfer(device_handle_1, 0x82, input_data, 48, 0, 0);
+          pthread_mutex_unlock(&usb1_mutex_lock);
+        }
+
+        // check if new data from SmartSwitch
+        floatval = *(float *)&input_data[0];
+        if (floatval != -100)
+        {
+
+          for (uint32_t i = 0; i < 12; i++)
+          {
+            floatval = *(float *)&input_data[4 * i];
+            if (pico == 0) {
+              if (i < 6)
+              {
+                currents[i][time_index] = floatval;
+              }
+              else
+              {
+                currents[i-6][time_index+1] = floatval;
+              }
+            } else {
+              if (i < 6)
+              {
+                currents[i+6][time_index] = floatval;
+              }
+              else
+              {
+                currents[i][time_index+1] = floatval;
+              }
+            }
+          }
+          time_index += 2;
+        }
+      }
+
+
+      if (pico == 0)
+      {
+        for (uint8_t i = 0; i < 6; i++)
+        {
+          currents_0[i] = *(float *)&input_data[24+4*i];
+        }
+      }
+      else
+      {
+        for (uint8_t i = 0; i < 6; i++)
+        {
+          currents_1[i] = *(float *)&input_data[24+4*i];
+        }
+      }
+
+    return 0;
+}
+
+
+int request_voltages(int pico) {
+  char voltage_char = 'V';
+  char *input_data;
+  input_data = (char *)malloc(24);
 
 
 
+  if (pico == 0) {
+    pthread_mutex_lock(&usb0_mutex_lock);
+    libusb_bulk_transfer(device_handle_0, 0x02, &voltage_char, 1, 0, 0);
+    libusb_bulk_transfer(device_handle_0, 0x82, input_data, 24, 0, 0);
+    pthread_mutex_unlock(&usb0_mutex_lock);
+  } else {
+    pthread_mutex_lock(&usb1_mutex_lock);
+    libusb_bulk_transfer(device_handle_1, 0x02, &voltage_char, 1, 0, 0);
+    libusb_bulk_transfer(device_handle_1, 0x82, input_data, 24, 0, 0);
+    pthread_mutex_unlock(&usb1_mutex_lock);
+  }
+
+
+  if (pico == 0) {
+    for (uint32_t i = 0; i < 6; i++) {
+      voltages_0[i] = *(float *)&input_data[4 * i];
+    }
+  } else {
+    for (uint32_t i = 0; i < 6; i++) {
+      voltages_1[i] = *(float *)&input_data[4 * i];
+    }
+  }
+  return 0;
+}
+
+
+int initialize_txt(int pico) {
+  time_t seconds;
+
+
+  
+  char *current_precursor;
+  char *file_suffix = ".txt";
+  char str_time[10];
+
+  if (pico == 0) {
+    current_datafile_time_0 = time(NULL);
+    filename_I_0 = malloc(50);
+    current_precursor = "../../Data/Currents_0_";
+    strcpy(filename_I_0, &current_precursor[0]);
+
+    sprintf(str_time, "%i", current_datafile_time_0);
+    strcat(filename_I_0, str_time);
+    strcat(filename_I_0, file_suffix);
+
+    fp_I_0 = fopen(filename_I_0, "a");
+
+  } else {
+    current_datafile_time_1 = time(NULL);
+    filename_I_1 = malloc(50);
+    current_precursor = "../../Data/Currents_1_";
+    strcpy(filename_I_1, &current_precursor[0]);
+
+    sprintf(str_time, "%i", current_datafile_time_1);
+    strcat(filename_I_1, str_time);
+    strcat(filename_I_1, file_suffix);
+
+    fp_I_1 = fopen(filename_I_1, "a");
+
+  }
+  
 
 
 
+  
 
+  
 
+  char *voltage_precursor;
+  if (pico == 0) {
+    voltage_datafile_time_0 = time(NULL);
+    filename_V_0 = malloc(50);
+    voltage_precursor = "../../Data/Voltages_0_";
+    strcpy(filename_V_0, &voltage_precursor[0]);
 
+    sprintf(str_time, "%i", voltage_datafile_time_0);
+    strcat(filename_V_0, str_time);
+    strcat(filename_V_0, file_suffix);
 
+    fp_V_0 = fopen(filename_V_0, "a");
+  } else {
+    voltage_datafile_time_1 = time(NULL);
+    filename_V_1 = malloc(50);
+    voltage_precursor = "../../Data/Voltages_1_";
+    strcpy(filename_V_1, &voltage_precursor[0]);
 
+    sprintf(str_time, "%i", voltage_datafile_time_1);
+    strcat(filename_V_1, str_time);
+    strcat(filename_V_1, file_suffix);
 
+    fp_V_1 = fopen(filename_V_1, "a");
+  }
 
-
-
-
-
-
-
+}
 
 
 
@@ -1313,96 +1588,24 @@ int write_voltages(float voltages[6], int pico) {
 void *acquire_data(void *arguments) {
   arg_struct *common = arguments;
   float last_output[6]; // State for each channel's filter
-
-  
   int fd[num_pipes];
   int vfd[num_pipes];
 
 
-  int pipe_initialization_success = initialize_pipes(fd, vfd);
-
-
-  // used to request data from pico
-  uint16_t inner_loop = 1;
-  char *input_data;
-  input_data = (char *)malloc(64 * inner_loop);
-  char *voltage_input_data;
-  voltage_input_data = (char *)malloc(24);
-  char current_char = 'H';
-  char voltage_char = 'V';
-
-  
-
-  float floatval = 0;
-  float floatval_voltage = 0;
-
-  uint8_t allow_read = 1;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  // current txt storage info
-  time_t seconds;
-
-  uint8_t pico = common->pico;
-
-  current_datafile_time = time(NULL);
-  filename_I = malloc(50);
-
-  char *current_precursor;
-  char *file_suffix = ".txt";
-  if (pico == 0) {
-    current_precursor = "../../Data/Currents_0_";
-    strcpy(filename_I, &current_precursor[0]);
-  } else {
-    current_precursor = "../../Data/Currents_1_";
-    strcpy(filename_I, &current_precursor[0]);
-  }
-  
-  char str_time[10];
-  sprintf(str_time, "%i", current_datafile_time);
-  strcat(filename_I, str_time);
-  strcat(filename_I, file_suffix);
-
-  fp_I = fopen(filename_I, "a");
-
-
-
-  // voltage txt storage info
-
-  voltage_datafile_time = time(NULL);
-  filename_V = malloc(50);
-
-  char *voltage_precursor;
-  if (pico == 0) {
-    voltage_precursor = "../../Data/Voltages_0_";
-    strcpy(filename_V, &voltage_precursor[0]);
-  } else {
-    voltage_precursor = "../../Data/Voltages_1_";
-    strcpy(filename_V, &voltage_precursor[0]);
-  }
-  
-  sprintf(str_time, "%i", voltage_datafile_time);
-  strcat(filename_V, str_time);
-  strcat(filename_V, file_suffix);
-
-  fp_V = fopen(filename_V, "a");
-
-
-
 
   int pico0_init_success = initialize_libusb(0); // initialize libusb connection with pico 0
+  int pico1_init_success = initialize_libusb(1); // initialize libusb connection with pico 1
 
+
+
+  if (use_pico0 == 1) {
+    int pipe_initialization_success = initialize_pipes(fd, vfd);
+    int txt_init_success_0 = initialize_txt(0);
+  }
+
+  if (use_pico1 == 1) {
+    int txt_init_success_1 = initialize_txt(1);
+  }
 
 
 
@@ -1414,7 +1617,6 @@ void *acquire_data(void *arguments) {
 
   while (1) {
 
-
     command check_command = parse_pico_queue();
     char current_command = check_command.command_name;
     char current_type = check_command.command_type;
@@ -1422,10 +1624,12 @@ void *acquire_data(void *arguments) {
     float float_parameter = check_command.float_parameter;
     int client_addr = check_command.client_addr;
 
+
     // check if command is pico type, else do nothing
     if (current_type == 'c')
     {
       pthread_mutex_lock(&usb0_mutex_lock);
+      pthread_mutex_lock(&usb1_mutex_lock);
       // select proper hv function
       if (current_command == 'k')
       { // trip
@@ -1460,114 +1664,61 @@ void *acquire_data(void *arguments) {
         disable_ped(char_parameter, client_addr);
       }
       pthread_mutex_unlock(&usb0_mutex_lock);
+      pthread_mutex_unlock(&usb1_mutex_lock);
     }
 
 
 
-      // fill up array
-      for (uint16_t time_index = 0; time_index < HISTORY_LENGTH;)
-      {
-        if (pico == 0)
-        {
-          pthread_mutex_lock(&usb0_mutex_lock);
-          libusb_bulk_transfer(device_handle_0, 0x02, &current_char, 1, 0, 0);
-          libusb_bulk_transfer(device_handle_0, 0x82, input_data, 48, 0, 0);
-          pthread_mutex_unlock(&usb0_mutex_lock);
-        }
-        else
-        {
-          pthread_mutex_lock(&usb1_mutex_lock);
-          libusb_bulk_transfer(device_handle_1, 0x02, &current_char, 1, 0, 0);
-          libusb_bulk_transfer(device_handle_1, 0x82, input_data, 48, 0, 0);
-          pthread_mutex_unlock(&usb1_mutex_lock);
-        }
+      
 
-        // check if new data from SmartSwitch
-        floatval = *(float *)&input_data[0];
-        if (floatval != -100)
-        {
 
-          for (uint32_t i = 0; i < 12; i++)
-          {
-            floatval = *(float *)&input_data[4 * i];
+      
+      if (use_pico0 == 1) {
+        int current_success_0 = request_averaged_currents(common->all_currents, 0);
+      }
 
-            if (i < 6)
-            {
-              common->all_currents[i][time_index] = floatval;
-            }
-            else
-            {
-              common->all_currents[i - 6][time_index + 1] = floatval;
-            }
-          }
-          time_index += 2;
-        }
+      if (use_pico1 == 1) {
+        int current_success_1 = request_averaged_currents(common->all_currents, 1);
+      }
+
+      if (use_pico0 == 1) {
+        int voltage_success_0 = request_voltages(0);
+      }
+
+      if (use_pico1 == 1) {
+        int voltage_success_1 = request_voltages(1);
       }
 
 
-      if (pico == 0)
-      {
-        for (uint8_t i = 0; i < 6; i++)
-        {
-          currents_0[i] = *common->all_currents[i];
-        }
-      }
-      else
-      {
-        for (uint8_t i = 0; i < 6; i++)
-        {
-          currents_1[i] = *common->all_currents[i];
-        }
-      }
-
-   
 
 
-
-      // ----- Request and store one voltage value -----
-
-      if (pico == 0)
-      {
-        pthread_mutex_lock(&usb0_mutex_lock);
-        libusb_bulk_transfer(device_handle_0, 0x02, &voltage_char, 1, 0, 0);
-        libusb_bulk_transfer(device_handle_0, 0x82, voltage_input_data, 24, 0, 0);
-        pthread_mutex_unlock(&usb0_mutex_lock);
-      }
-      else
-      {
-        pthread_mutex_lock(&usb1_mutex_lock);
-        libusb_bulk_transfer(device_handle_1, 0x02, &voltage_char, 1, 0, 0);
-        libusb_bulk_transfer(device_handle_1, 0x82, voltage_input_data, 24, 0, 0);
-        pthread_mutex_unlock(&usb1_mutex_lock);
-      }
-
-      if (pico == 0) {
-        for (uint32_t i = 0; i < 6; i++) {
-          floatval_voltage = *(float *)&voltage_input_data[4 * i];
-          voltages_0[i] = floatval_voltage;
-        }
-      } else {
-        for (uint32_t i = 0; i < 6; i++) {
-          floatval_voltage = *(float *)&voltage_input_data[4 * i];
-          voltages_1[i] = floatval_voltage;
-        }
-      }
 
 
 
     // ----- Write/send voltages/currents -----
-    int pipe_voltage_success = write_pipe_voltages(pico, vfd, voltages_0);
-    int current_write_success = write_currents(common->all_currents, pico);
-    int voltage_write_success = write_voltages(voltages_0, pico);
-    int pipe_current_success = write_pipe_currents(fd, common->all_currents);
+    if (use_pico0 == 1) {
+      int pipe_voltage_success = write_pipe_voltages(0, vfd, voltages_0);
+      int pipe_current_success = write_pipe_currents(fd, common->all_currents);
+      int current_write_success = write_currents_0(common->all_currents);
+      int voltage_write_success = write_voltages_0(voltages_0);
+    }
+
+
+    
+    if (use_pico1 == 1) {
+      int current_write_success = write_currents_1(common->all_currents);
+      int voltage_write_success = write_voltages_1(voltages_1);
+    }
+    
+
+
+    
+    
 
 
 
 
   }
-
-  fclose(fp_I);
-  fclose(fp_V);
 }
 
 
@@ -1618,14 +1769,31 @@ void sigintHandler(int sig_num) {
 
   sleep(0.1);
     
-
-  pthread_cancel(acquisition_thread_0);
+  pthread_cancel(acquisition_thread);
   pthread_cancel(command_execution_thread);
 
   sleep(1);
-  libusb_device *device_0 = libusb_get_device(device_handle_0);
-  libusb_unref_device(device_0);
-  free(device_handle_0);
+
+  if (use_pico0 == 1) {
+    libusb_device *device_0 = libusb_get_device(device_handle_0);
+    libusb_unref_device(device_0);
+    free(device_handle_0);
+
+    fclose(fp_I_0);
+    fclose(fp_V_0);
+  }
+
+  if (use_pico1 == 1) {
+    libusb_device *device_1 = libusb_get_device(device_handle_1);
+    libusb_unref_device(device_1);
+    free(device_handle_1);
+
+    fclose(fp_I_1);
+    fclose(fp_V_1);
+
+  }
+
+
 
   
 } 
@@ -1749,34 +1917,13 @@ int main( int argc, char **argv ) {
 
   // check that pico 0 is available
   int libusb_code = libusb_init(NULL);
-  printf("libusb code: %i\n", libusb_code);
   
-  device_handle_0 = libusb_open_device_with_vid_pid(NULL, VENDOR_ID_0, PRODUCT_ID);
-  if (device_handle_0 == 0) {
-    printf("Please connect pico 0\n");
-    error_log("Pico 0 not connected");
-
-    return -1;
-  }
-
-
-
-
-
   
 
-  // ----- initialize pico 1 communications, etc ----- //
-  /*
-  struct arg_struct args_1;
-  args_1.pico = 1;
-
   // create data acquisition thread
-  pthread_t acquisition_thread_1;
-  pthread_create(&acquisition_thread_1, NULL, acquire_data, &args_1);
+  pthread_create(&acquisition_thread, NULL, acquire_data, &args_0);
 
-  */
-  // create data acquisition thread
-  pthread_create(&acquisition_thread_0, NULL, acquire_data, &args_0);
+  
  
   // create statusing thread
   pthread_t status_thread_0;
