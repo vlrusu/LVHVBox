@@ -55,7 +55,8 @@ int use_pico1 = 1;
 
 // ----- Thread-related variables -----
 
-pthread_t acquisition_thread;
+pthread_t acquisition_thread_0;
+pthread_t acquisition_thread_1;
 pthread_t command_execution_thread;
 pthread_mutex_t lock;
 pthread_mutex_t usb0_mutex_lock;
@@ -546,9 +547,13 @@ void trip(uint8_t channel, int client_addr)
   uint8_t send_val = 103 + (channel % 6);
 
   if (channel < 6) {
+    pthread_mutex_lock(&usb0_mutex_lock);
     libusb_bulk_transfer(device_handle_0, 0x02, &send_val, 1, 0, 0);
+    pthread_mutex_unlock(&usb0_mutex_lock);
   } else {
+    pthread_mutex_lock(&usb1_mutex_lock);
     libusb_bulk_transfer(device_handle_1, 0x02, &send_val, 1, 0, 0);
+    pthread_mutex_unlock(&usb1_mutex_lock);
   }
 
   // log trip command
@@ -566,11 +571,13 @@ void reset_trip(uint8_t channel, int client_addr)
 
 
   if (channel < 6) {
-    printf("reset trip channel %u\n",channel);
+    pthread_mutex_lock(&usb0_mutex_lock);
     libusb_bulk_transfer(device_handle_0, 0x02, &send_val, 1, 0, 0);
+    pthread_mutex_unlock(&usb0_mutex_lock);
   } else {
-    printf("reset all trips\n");
+    pthread_mutex_lock(&usb1_mutex_lock);
     libusb_bulk_transfer(device_handle_1, 0x02, &send_val, 1, 0, 0);
+    pthread_mutex_unlock(&usb1_mutex_lock);
   }
 
   // log reset_trip command
@@ -587,9 +594,13 @@ void disable_trip(uint8_t channel, int client_addr)
   uint8_t send_val = 115 + (channel % 6);
 
   if (channel < 6) {
+    pthread_mutex_lock(&usb0_mutex_lock);
     libusb_bulk_transfer(device_handle_0, 0x02, &send_val, 1, 0, 0);
+    pthread_mutex_unlock(&usb0_mutex_lock);
   } else {
+    pthread_mutex_lock(&usb1_mutex_lock);
     libusb_bulk_transfer(device_handle_1, 0x02, &send_val, 1, 0, 0);
+    pthread_mutex_unlock(&usb1_mutex_lock);
   }
 
   // log disable_trip command
@@ -606,9 +617,13 @@ void enable_trip(uint8_t channel, int client_addr)
   uint8_t send_val = 121 + (channel % 6);
 
   if (channel < 6) {
+    pthread_mutex_lock(&usb0_mutex_lock);
     libusb_bulk_transfer(device_handle_0, 0x02, &send_val, 1, 0, 0);
+    pthread_mutex_unlock(&usb0_mutex_lock);
   } else {
+    pthread_mutex_lock(&usb1_mutex_lock);
     libusb_bulk_transfer(device_handle_1, 0x02, &send_val, 1, 0, 0);
+    pthread_mutex_unlock(&usb1_mutex_lock);
   }
 
   // log enable_trip command
@@ -627,9 +642,13 @@ void enable_ped(uint8_t channel, int client_addr)
   uint8_t send_val = 37;
 
   if (channel < 6) {
+    pthread_mutex_lock(&usb0_mutex_lock);
     libusb_bulk_transfer(device_handle_0, 0x02, &send_val, 1, 0, 0);
+    pthread_mutex_unlock(&usb0_mutex_lock);
   } else {
+    pthread_mutex_lock(&usb1_mutex_lock);
     libusb_bulk_transfer(device_handle_1, 0x02, &send_val, 1, 0, 0);
+    pthread_mutex_unlock(&usb1_mutex_lock);
   }
 
   // log enable_ped command
@@ -648,9 +667,13 @@ void disable_ped(uint8_t channel, int client_addr)
   uint8_t send_val = 38;
 
   if (channel < 6) {
+    pthread_mutex_lock(&usb0_mutex_lock);
     libusb_bulk_transfer(device_handle_0, 0x02, &send_val, 1, 0, 0);
+    pthread_mutex_unlock(&usb0_mutex_lock);
   } else {
+    pthread_mutex_lock(&usb1_mutex_lock);
     libusb_bulk_transfer(device_handle_1, 0x02, &send_val, 1, 0, 0);
+    pthread_mutex_unlock(&usb1_mutex_lock);
   }
 
   // log disable_ped command
@@ -669,11 +692,15 @@ void trip_status(uint8_t channel, int client_addr)
   input_data = (char *)malloc(1);
 
   if (channel < 6) {
+    pthread_mutex_lock(&usb0_mutex_lock);
     libusb_bulk_transfer(device_handle_0, 0x02, &send_val, 1, 0, 0);
     libusb_bulk_transfer(device_handle_0, 0x82, input_data, sizeof(input_data), 0, 0);
+    pthread_mutex_unlock(&usb0_mutex_lock);
   } else {
+    pthread_mutex_lock(&usb1_mutex_lock);
     libusb_bulk_transfer(device_handle_1, 0x02, &send_val, 1, 0, 0);
     libusb_bulk_transfer(device_handle_1, 0x82, input_data, sizeof(input_data), 0, 0);
+    pthread_mutex_unlock(&usb1_mutex_lock);
   }
 
   int return_val = 1;
@@ -709,9 +736,13 @@ void set_trip(uint8_t channel, float value, int client_addr)
   uint16_t two = send_val[2] + one;
 
   if (channel < 6) {
+    pthread_mutex_lock(&usb0_mutex_lock);
     libusb_bulk_transfer(device_handle_0, 0x02, &send_val[0], sizeof(send_val), 0, 0);
+    pthread_mutex_unlock(&usb0_mutex_lock);
   } else {
+    pthread_mutex_lock(&usb1_mutex_lock);
     libusb_bulk_transfer(device_handle_1, 0x02, &send_val[0], sizeof(send_val), 0, 0);
+    pthread_mutex_unlock(&usb1_mutex_lock);
   }
 
   // log set_trip command
@@ -1587,30 +1618,23 @@ int initialize_txt(int pico) {
 
 void *acquire_data(void *arguments) {
   arg_struct *common = arguments;
+  int pico = common->pico;
   float last_output[6]; // State for each channel's filter
   int fd[num_pipes];
   int vfd[num_pipes];
 
 
 
-  int pico0_init_success = initialize_libusb(0); // initialize libusb connection with pico 0
-  int pico1_init_success = initialize_libusb(1); // initialize libusb connection with pico 1
+
+  int pico_init_success = initialize_libusb(pico); // initialize libusb connection with pico 0
 
 
-
-  if (use_pico0 == 1) {
+  if (pico == 0 && use_pico0 == 1) {
     int pipe_initialization_success = initialize_pipes(fd, vfd);
     int txt_init_success_0 = initialize_txt(0);
-  }
-
-  if (use_pico1 == 1) {
+  } else if (pico == 1 && use_pico1 == 1) {
     int txt_init_success_1 = initialize_txt(1);
   }
-
-
-
-
-
 
 
 
@@ -1628,8 +1652,6 @@ void *acquire_data(void *arguments) {
     // check if command is pico type, else do nothing
     if (current_type == 'c')
     {
-      pthread_mutex_lock(&usb0_mutex_lock);
-      pthread_mutex_lock(&usb1_mutex_lock);
       // select proper hv function
       if (current_command == 'k')
       { // trip
@@ -1663,61 +1685,32 @@ void *acquire_data(void *arguments) {
       { // disable ped
         disable_ped(char_parameter, client_addr);
       }
-      pthread_mutex_unlock(&usb0_mutex_lock);
-      pthread_mutex_unlock(&usb1_mutex_lock);
     }
 
 
-
-      
-
-
-      
-      if (use_pico0 == 1) {
+      if (pico == 0 && use_pico0 == 1) {
         int current_success_0 = request_averaged_currents(common->all_currents, 0);
-      }
-
-      if (use_pico1 == 1) {
-        int current_success_1 = request_averaged_currents(common->all_currents, 1);
-      }
-
-      if (use_pico0 == 1) {
         int voltage_success_0 = request_voltages(0);
       }
 
-      if (use_pico1 == 1) {
+      if (pico == 1 && use_pico1 == 1) {
+        int current_success_1 = request_averaged_currents(common->all_currents, 1);
         int voltage_success_1 = request_voltages(1);
       }
 
-
-
-
-
-
-
     // ----- Write/send voltages/currents -----
-    if (use_pico0 == 1) {
+    if (pico == 0 && use_pico0 == 1) {
       int pipe_voltage_success = write_pipe_voltages(0, vfd, voltages_0);
       int pipe_current_success = write_pipe_currents(fd, common->all_currents);
       int current_write_success = write_currents_0(common->all_currents);
       int voltage_write_success = write_voltages_0(voltages_0);
     }
 
-
-    
-    if (use_pico1 == 1) {
+    if (pico == 1 && use_pico1 == 1) {
       int current_write_success = write_currents_1(common->all_currents);
       int voltage_write_success = write_voltages_1(voltages_1);
     }
     
-
-
-    
-    
-
-
-
-
   }
 }
 
@@ -1769,7 +1762,8 @@ void sigintHandler(int sig_num) {
 
   sleep(0.1);
     
-  pthread_cancel(acquisition_thread);
+  pthread_cancel(acquisition_thread_0);
+  pthread_cancel(acquisition_thread_1);
   pthread_cancel(command_execution_thread);
 
   sleep(1);
@@ -1915,13 +1909,16 @@ int main( int argc, char **argv ) {
   arg_struct args_0;
   args_0.pico = 0;
 
+  arg_struct args_1;
+  args_1.pico = 1;
+
   // check that pico 0 is available
   int libusb_code = libusb_init(NULL);
   
   
-
   // create data acquisition thread
-  pthread_create(&acquisition_thread, NULL, acquire_data, &args_0);
+  pthread_create(&acquisition_thread_0, NULL, acquire_data, &args_0);
+  pthread_create(&acquisition_thread_1, NULL, acquire_data, &args_1);
 
   
  
