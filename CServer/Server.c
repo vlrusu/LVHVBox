@@ -148,8 +148,8 @@ char v_pipe_path_base[15] = "/tmp/vdata_pipe";
 #define ALPHA 0.1 // Choose a value between 0 and 1. Smaller values result in heavier filtering.
 #define DECIMATION_FACTOR 10
 uint8_t use_pipe = 1; // when server tries to open pipe, will be set to 0 upon fail - will then assume pipe is not to be used
-int num_pipes = 3;
-int pipe_channels[3] = {0, 1, 3};
+int num_pipes = 6;
+int pipe_channels[6] = {0, 1, 2, 3, 4, 5};
 
 // initialize command queue variables
 int queue_key;
@@ -627,23 +627,29 @@ void trip_status(uint8_t channel, int client_addr) {
   uint8_t send_val = 33;
   char *input_data;
   input_data = (char *)malloc(1);
+  int return_val = 1;
 
   if (channel < 6) {
     pthread_mutex_lock(&usb0_mutex_lock);
     libusb_bulk_transfer(device_handle_0, 0x02, &send_val, 1, 0, 0);
     libusb_bulk_transfer(device_handle_0, 0x82, input_data, sizeof(input_data), 0, 0);
     pthread_mutex_unlock(&usb0_mutex_lock);
+
+    if ((*input_data & 1 << (channel)) == 0) {
+      return_val = 0;
+    }
   } else {
     pthread_mutex_lock(&usb1_mutex_lock);
     libusb_bulk_transfer(device_handle_1, 0x02, &send_val, 1, 0, 0);
     libusb_bulk_transfer(device_handle_1, 0x82, input_data, sizeof(input_data), 0, 0);
     pthread_mutex_unlock(&usb1_mutex_lock);
+
+    if ((*input_data & 1 << (channel-6)) == 0) {
+      return_val = 0;
+    }
   }
 
-  int return_val = 1;
-  if ((*input_data & 1 << (channel)) == 0) {
-    return_val = 0;
-  }
+  
 
   if (client_addr != -9999) {
     write(client_addr, &return_val, sizeof(return_val));
@@ -716,7 +722,6 @@ void readMonI48(uint8_t channel, int client_addr) {
 
   write(client_addr, &ret, sizeof(ret));
 }
-
 // readMonV6
 void readMonV6(uint8_t channel, int client_addr) {
   uint8_t v6map[6] = {4, 3, 4, 3, 4, 3};
@@ -1637,7 +1642,7 @@ int main( int argc, char **argv ) {
   }
 
 
-
+  
   
 // Export the GPIO pins
 

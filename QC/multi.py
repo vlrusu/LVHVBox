@@ -11,7 +11,7 @@ v_pipe_path = "/tmp/vdata_pipe"  # Second pipe
 
 SPIKE_THRESHOLD = 20.
 
-plot_channels = [0, 1, 3]
+plot_channels = [0, 1, 2, 3, 4, 5]
 
 data_length = 10000
 
@@ -47,7 +47,7 @@ class DataReceiver(QtCore.QObject):
 class App(QtWidgets.QMainWindow):
     def __init__(self, channel=0, parent=None):
         super(App, self).__init__(parent)
-        self.setWindowTitle('Current (uA) channel '+str(channel))
+        self.setWindowTitle('Current (uA) channel ' + str(channel))
         self.setGeometry(100, 100, 800, 500)
 
         self.channel = channel
