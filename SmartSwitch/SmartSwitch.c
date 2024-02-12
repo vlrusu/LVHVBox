@@ -476,7 +476,7 @@ gpio_put(all_pins.P1_0, 1); // put pedestal pin high
 
 
     // ----- Update pedestal subtraction value ----- //
-
+    if (ped_on == 1) {
       gpio_put(all_pins.P1_0, 0); // put pedestal pin low
       sleep_ms(200);
 
@@ -505,6 +505,7 @@ gpio_put(all_pins.P1_0, 1); // put pedestal pin high
 
       gpio_put(all_pins.P1_0, 1); // put pedestal pin high
       sleep_ms(200);
+    }
 
 
 

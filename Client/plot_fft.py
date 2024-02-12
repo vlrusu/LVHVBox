@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 
 # Open file and read data into numpy array
 
-filename = "sw18_noped.txt"
+filename = "nomod.txt"
     #filename = "full_currents_1705610740.txt"
 
 f = open(filename, "r")
