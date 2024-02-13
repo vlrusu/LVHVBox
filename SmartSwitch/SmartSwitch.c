@@ -203,7 +203,11 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6], uint 
         */
 
        for (int i=0; i<10; i++) {
-        temp_currents[i] = full_current_history[channel][*full_position + i] * adc_to_uA - ped_subtraction[channel];
+        if (ped_on == 1) {
+          temp_currents[i] = full_current_history[channel][*full_position + i] * adc_to_uA - ped_subtraction[channel];
+        } else {
+          temp_currents[i] = full_current_history[channel][*full_position + i] * adc_to_uA;
+        }
        }
 
         
@@ -328,7 +332,7 @@ void get_all_averaged_currents(PIO pio_0, PIO pio_1, uint sm[], float current_ar
   
  for (uint32_t channel=0; channel<6; channel++) // divide & multiply summed current values by appropriate factors
  {
-  if (ped_on) {
+  if (ped_on == 1) {
   current_array[channel] = current_array[channel]*adc_to_uA/200 - ped_subtraction[channel];
   } else {
     current_array[channel] = current_array[channel]*adc_to_uA/200;
@@ -349,7 +353,7 @@ void get_all_averaged_currents(PIO pio_0, PIO pio_1, uint sm[], float current_ar
 
 
 
-          if (num_trigger[i] > 20) {
+          if (num_trigger[i] > 10) {
             *current_buffer_run = 0;
             gpio_put(all_pins.crowbarPins[i],1);
             trip_status = trip_status | (1 << i);
