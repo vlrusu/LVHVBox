@@ -308,6 +308,42 @@ void get_all_averaged_currents(PIO pio_0, PIO pio_1, uint sm[], float current_ar
     current_array[channel] += latest_current_0;
     current_array[channel+3] += latest_current_1;
 
+
+
+
+
+    if ((latest_current_0*adc_to_uA > trip_currents[channel]) && ((trip_mask & (1 << channel)))) {
+      if (num_trigger[channel] > 10) {
+        *current_buffer_run = 0;
+        gpio_put(all_pins.crowbarPins[channel],1);
+        trip_status = trip_status | (1 << channel);
+        num_trigger[channel] = 0;
+      } else {
+        num_trigger[channel] += 1;
+      }
+    } else if (num_trigger[channel] > 0) {
+      num_trigger[channel] -= 1;
+    }
+
+    if ((latest_current_1*adc_to_uA > trip_currents[channel+3]) && ((trip_mask & (1 << channel+3)))) {
+      if (num_trigger[channel+3] > 10) {
+        *current_buffer_run = 0;
+        gpio_put(all_pins.crowbarPins[channel+3],1);
+        trip_status = trip_status | (1 << channel+3);
+        num_trigger[channel+3] = 0;
+      } else {
+        num_trigger[channel+3] += 1;
+      }
+    } else if (num_trigger[channel+3] > 0) {
+      num_trigger[channel+3] -= 1;
+    }
+
+
+
+
+
+
+
     
     
     if (*current_buffer_run == 1) {
@@ -326,6 +362,10 @@ void get_all_averaged_currents(PIO pio_0, PIO pio_1, uint sm[], float current_ar
       *full_position -= full_current_history_length;
     }
   }
+
+
+
+      
 
  }
 
@@ -346,26 +386,7 @@ void get_all_averaged_currents(PIO pio_0, PIO pio_1, uint sm[], float current_ar
  }
 
 
-  for (uint32_t i=0; i<6; i++) {
-        // check if trip is required
-
-        if ((current_array[i] > trip_currents[i]) && ((trip_mask & (1 << i)))) {
-
-
-
-          if (num_trigger[i] > 10) {
-            *current_buffer_run = 0;
-            gpio_put(all_pins.crowbarPins[i],1);
-            trip_status = trip_status | (1 << i);
-            num_trigger[i] = 0;
-          } else {
-            num_trigger[i] += 1;
-          }
-        } else if (num_trigger[i] > 0) {
-          num_trigger[i] -= 1;
-        }
-        
-      }
+  
   
 }
 
@@ -383,7 +404,7 @@ int main(){
 
   board_init(); // tinyUSB formality
   
-  float clkdiv = 22; // set clock divider for PIO
+  float clkdiv = 34; // set clock divider for PIO
   uint32_t pio_start_mask = -1; // mask to select which state machines in each PIO block are started
 
   adc_init();
