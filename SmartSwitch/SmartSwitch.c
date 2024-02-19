@@ -202,8 +202,9 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6], uint 
         }
         */
 
+      // currently not accounting for pedestal
        for (int i=0; i<10; i++) {
-        if (ped_on == 1) {
+        if (0) {
           temp_currents[i] = full_current_history[channel][*full_position + i] * adc_to_uA - ped_subtraction[channel];
         } else {
           temp_currents[i] = full_current_history[channel][*full_position + i] * adc_to_uA;
@@ -215,10 +216,12 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6], uint 
         tud_cdc_write(temp_currents,sizeof(temp_currents));
         tud_cdc_write_flush();
 
+      
+
         
         *full_position += 10;
         if (*full_position >= full_current_history_length) {
-          *full_position -= full_current_history_length;
+          *full_position = 0;
         }
 
 
@@ -295,10 +298,10 @@ void get_all_averaged_currents(PIO pio_0, PIO pio_1, uint sm[], float current_ar
   {
 
     if (pio_sm_is_rx_fifo_full(pio_0, sm[channel]) || pio_sm_is_rx_fifo_full(pio_0, sm[channel+3])) {
-    if (i>5) {
-      slow_read = 1;
+      if (i>10) {
+        slow_read = 1;
+      }
     }
-  }
 
     // NOTE: with an average of 200, overflow does not occur
     // However, if this average is increased later on, it may be necessary to divide earlier/increase to 32 bit integers
@@ -359,7 +362,7 @@ void get_all_averaged_currents(PIO pio_0, PIO pio_1, uint sm[], float current_ar
   if (*current_buffer_run == 1) {
     *full_position += 1;
     if (*full_position >= full_current_history_length) {
-      *full_position -= full_current_history_length;
+      *full_position = 0;
     }
   }
 
@@ -373,7 +376,7 @@ void get_all_averaged_currents(PIO pio_0, PIO pio_1, uint sm[], float current_ar
  for (uint32_t channel=0; channel<6; channel++) // divide & multiply summed current values by appropriate factors
  {
   if (ped_on == 1) {
-  current_array[channel] = current_array[channel]*adc_to_uA/200 - ped_subtraction[channel];
+    current_array[channel] = current_array[channel]*adc_to_uA/200 - ped_subtraction[channel];
   } else {
     current_array[channel] = current_array[channel]*adc_to_uA/200;
   }
@@ -493,6 +496,8 @@ for (uint8_t i=0; i<6; i++) // ensure that all crowbar pins are initially off
 }
 
 gpio_put(all_pins.P1_0, 1); // put pedestal pin high
+sleep_ms(2000);
+
 
   tud_init(BOARD_TUD_RHPORT); // tinyUSB formality
 
@@ -501,6 +506,9 @@ gpio_put(all_pins.P1_0, 1); // put pedestal pin high
 
 
     // ----- Update pedestal subtraction value ----- //
+    // ped_on == 1
+
+    
     if (ped_on == 1) {
       gpio_put(all_pins.P1_0, 0); // put pedestal pin low
       sleep_ms(200);
@@ -529,8 +537,9 @@ gpio_put(all_pins.P1_0, 1); // put pedestal pin high
       }
 
       gpio_put(all_pins.P1_0, 1); // put pedestal pin high
-      sleep_ms(200);
+      sleep_ms(1500);
     }
+    
 
 
 

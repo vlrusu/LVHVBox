@@ -406,6 +406,7 @@ void current_burst(uint8_t channel, int client_addr) {
 
   for (int i=0; i<10; i++) {
     current_array[i] = *(float *)&current_input_data[4*i];
+
   }
 
   write(client_addr, &current_array, sizeof(current_array));
@@ -777,7 +778,7 @@ void *command_execution() {
       } else if (current_command == 'b') { // get_ihv
         get_ihv(char_parameter, client_addr);
       } else if (current_command == '(') {
-        msleep(20);
+        stop_buffer(char_parameter, client_addr);
         current_burst(char_parameter, client_addr);
       } else if (current_command == ')') {
         start_buffer(char_parameter, client_addr);
@@ -831,7 +832,7 @@ void *command_execution() {
         }
       }
     }
-    sleep(0.1);
+    msleep(50);
   }
 }
 
