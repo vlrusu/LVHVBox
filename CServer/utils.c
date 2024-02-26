@@ -151,7 +151,6 @@ int error_log(const char *data) {
     printf("Error_0 logging error\n");
     return -1;
   }
-
   if (fprintf(fp, data) < 0) {
     printf("Error_1 logging error\n");
     fclose(fp);

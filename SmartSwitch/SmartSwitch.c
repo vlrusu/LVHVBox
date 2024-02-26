@@ -202,8 +202,9 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6], uint 
         }
         */
 
+      // currently not accounting for pedestal
        for (int i=0; i<10; i++) {
-        if (ped_on == 1) {
+        if (0) {
           temp_currents[i] = full_current_history[channel][*full_position + i] * adc_to_uA - ped_subtraction[channel];
         } else {
           temp_currents[i] = full_current_history[channel][*full_position + i] * adc_to_uA;
@@ -215,10 +216,12 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6], uint 
         tud_cdc_write(temp_currents,sizeof(temp_currents));
         tud_cdc_write_flush();
 
+      
+
         
         *full_position += 10;
         if (*full_position >= full_current_history_length) {
-          *full_position -= full_current_history_length;
+          *full_position = 0;
         }
 
 
@@ -295,10 +298,10 @@ void get_all_averaged_currents(PIO pio_0, PIO pio_1, uint sm[], float current_ar
   {
 
     if (pio_sm_is_rx_fifo_full(pio_0, sm[channel]) || pio_sm_is_rx_fifo_full(pio_0, sm[channel+3])) {
-    if (i>5) {
-      slow_read = 1;
+      if (i>10) {
+        slow_read = 1;
+      }
     }
-  }
 
     // NOTE: with an average of 200, overflow does not occur
     // However, if this average is increased later on, it may be necessary to divide earlier/increase to 32 bit integers
@@ -308,7 +311,38 @@ void get_all_averaged_currents(PIO pio_0, PIO pio_1, uint sm[], float current_ar
     current_array[channel] += latest_current_0;
     current_array[channel+3] += latest_current_1;
 
-    
+
+
+
+
+    if ((latest_current_0*adc_to_uA > trip_currents[channel]) && ((trip_mask & (1 << channel)))) {
+      if (num_trigger[channel] > 10) {
+        *current_buffer_run = 0;
+        gpio_put(all_pins.crowbarPins[channel],1);
+        trip_status = trip_status | (1 << channel);
+        num_trigger[channel] = 0;
+      } else {
+        num_trigger[channel] += 1;
+      }
+    } else if (num_trigger[channel] > 0) {
+      num_trigger[channel] -= 1;
+    }
+
+    if ((latest_current_1*adc_to_uA > trip_currents[channel+3]) && ((trip_mask & (1 << channel+3)))) {
+      if (num_trigger[channel+3] > 10) {
+        *current_buffer_run = 0;
+        gpio_put(all_pins.crowbarPins[channel+3],1);
+        trip_status = trip_status | (1 << channel+3);
+        num_trigger[channel+3] = 0;
+      } else {
+        num_trigger[channel+3] += 1;
+      }
+    } else if (num_trigger[channel+3] > 0) {
+      num_trigger[channel+3] -= 1;
+    }
+
+
+
     
     if (*current_buffer_run == 1) {
       // update latest full current, along with its position in rotating buffer
@@ -323,9 +357,13 @@ void get_all_averaged_currents(PIO pio_0, PIO pio_1, uint sm[], float current_ar
   if (*current_buffer_run == 1) {
     *full_position += 1;
     if (*full_position >= full_current_history_length) {
-      *full_position -= full_current_history_length;
+      *full_position = 0;
     }
   }
+
+
+
+      
 
  }
 
@@ -333,7 +371,7 @@ void get_all_averaged_currents(PIO pio_0, PIO pio_1, uint sm[], float current_ar
  for (uint32_t channel=0; channel<6; channel++) // divide & multiply summed current values by appropriate factors
  {
   if (ped_on == 1) {
-  current_array[channel] = current_array[channel]*adc_to_uA/200 - ped_subtraction[channel];
+    current_array[channel] = current_array[channel]*adc_to_uA/200 - ped_subtraction[channel];
   } else {
     current_array[channel] = current_array[channel]*adc_to_uA/200;
   }
@@ -346,26 +384,7 @@ void get_all_averaged_currents(PIO pio_0, PIO pio_1, uint sm[], float current_ar
  }
 
 
-  for (uint32_t i=0; i<6; i++) {
-        // check if trip is required
-
-        if ((current_array[i] > trip_currents[i]) && ((trip_mask & (1 << i)))) {
-
-
-
-          if (num_trigger[i] > 10) {
-            *current_buffer_run = 0;
-            gpio_put(all_pins.crowbarPins[i],1);
-            trip_status = trip_status | (1 << i);
-            num_trigger[i] = 0;
-          } else {
-            num_trigger[i] += 1;
-          }
-        } else if (num_trigger[i] > 0) {
-          num_trigger[i] -= 1;
-        }
-        
-      }
+  
   
 }
 
@@ -383,7 +402,7 @@ int main(){
 
   board_init(); // tinyUSB formality
   
-  float clkdiv = 22; // set clock divider for PIO
+  float clkdiv = 34; // set clock divider for PIO
   uint32_t pio_start_mask = -1; // mask to select which state machines in each PIO block are started
 
   adc_init();
@@ -472,6 +491,8 @@ for (uint8_t i=0; i<6; i++) // ensure that all crowbar pins are initially off
 }
 
 gpio_put(all_pins.P1_0, 1); // put pedestal pin high
+sleep_ms(2000);
+
 
   tud_init(BOARD_TUD_RHPORT); // tinyUSB formality
 
@@ -480,6 +501,9 @@ gpio_put(all_pins.P1_0, 1); // put pedestal pin high
 
 
     // ----- Update pedestal subtraction value ----- //
+    // ped_on == 1
+
+    
     if (ped_on == 1) {
       gpio_put(all_pins.P1_0, 0); // put pedestal pin low
       sleep_ms(200);
@@ -508,8 +532,9 @@ gpio_put(all_pins.P1_0, 1); // put pedestal pin high
       }
 
       gpio_put(all_pins.P1_0, 1); // put pedestal pin high
-      sleep_ms(200);
+      sleep_ms(1500);
     }
+    
 
 
 

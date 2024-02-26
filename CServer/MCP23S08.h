@@ -153,7 +153,6 @@ int MCP_pullupMode(MCP *mcp, uint8_t, uint8_t);
 int MCP_pinWrite(MCP *mcp, uint8_t, uint8_t); 
 
 uint8_t MCP_pinRead(MCP *mcp, uint8_t);  
-uint8_t MCP_byteRead(MCP *mcp, uint8_t); 
 
 uint16_t MCP_pinReadAll(MCP *mcp);
 

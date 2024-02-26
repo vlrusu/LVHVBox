@@ -19,6 +19,8 @@
 #include <sys/mman.h>
 #include <stdint.h>
 
+#include "utils.h"
+
 
 typedef struct{
     uint32_t status;
@@ -61,6 +63,7 @@ int microsecond_sleep(long usec)
 
 
 
+
 // Function to export a GPIO pin
 int setup_gpio(uint32_t pin) {
     int memfd = open("/dev/mem", O_RDWR | O_SYNC);
@@ -74,7 +77,15 @@ int setup_gpio(uint32_t pin) {
     );
     if (map == MAP_FAILED)
     {
-        printf("mmap failed: %s\n", strerror(errno));
+
+        // create and store error message
+        char error_msg[50];
+        sprintf(error_msg, "mmap failed: %s", strerror(errno));
+        error_log(error_msg);
+
+        // display error message
+        perror(error_msg);
+
         return (-1);
     };
     close(memfd);
@@ -112,9 +123,16 @@ int write_gpio_value(uint32_t pin, int value) {
         memfd,
         0x1f00000000
     );
-    if (map == MAP_FAILED)
-    {
-        printf("mmap failed: %s\n", strerror(errno));
+    if (map == MAP_FAILED)  {
+
+        // create and store error message
+        char error_msg[50];
+        sprintf(error_msg, "mmap failed: %s", strerror(errno));
+        error_log(error_msg);
+
+        // display error message
+        perror(error_msg);
+
         return (-1);
     };
     close(memfd);

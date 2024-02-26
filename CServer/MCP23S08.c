@@ -14,6 +14,7 @@
 #include <sys/ioctl.h>
 #include <linux/spi/spidev.h>
 #include "gpio.h"
+#include "utils.h"
 
 
 
@@ -68,7 +69,16 @@ int MCP_byteWrite(MCP *mcp, uint8_t reg, uint8_t value)
 
   // do the SPI transaction
   if ((ioctl(spiFds, SPI_IOC_MESSAGE(1), &spi) < 0)) {
-    perror("mcp23s08_write_reg: Error during SPI transaction.");
+
+
+    // create and store error message
+    char error_msg[50];
+    sprintf(error_msg, "mcp23s08_write_reg: Error during SPI transaction.");
+    error_log(error_msg);
+
+    // display error message
+    perror(error_msg);
+
 
     return -1;
   }
@@ -77,34 +87,7 @@ int MCP_byteWrite(MCP *mcp, uint8_t reg, uint8_t value)
 
 }
 
-uint8_t MCP_byteRead(MCP *mcp, uint8_t reg)
-{
-  uint8_t tx_buf[3];
-  tx_buf[0] = OPCODER | (mcp->_address << 1);
-  tx_buf[1] = reg;
-  tx_buf[2] = 0;
 
-  uint8_t rx_buf[3];
-
-  struct spi_ioc_transfer spi;
-  memset(&spi, 0, sizeof(spi));
-  spi.tx_buf = (unsigned long)tx_buf;
-  spi.rx_buf = (unsigned long)rx_buf;
-  spi.len = sizeof tx_buf;
-  spi.delay_usecs = spi_delay;
-  spi.speed_hz = spi_speed;
-  spi.bits_per_word = spi_bpw;
-
-  // do the SPI transaction
-  if ((ioctl(spiFds, SPI_IOC_MESSAGE(1), &spi) < 0)) {
-    perror("mcp23s08_read_reg: Error during SPI transaction.");
-    return -1;
-  }
-
-  uint8_t recv = rx_buf[2];
-
-  return recv;
-}
 
 // MODE SETTING FUNCTIONS - BY PIN
 
@@ -112,7 +95,14 @@ int MCP_pinMode(MCP *mcp, uint8_t pin, uint8_t mode)
 { // Accept the pin # and I/O mode
 
   if (pin > 16) {
-    perror("MCP_pinMode: Pin out of bounds.");
+    // create and store error message
+    char error_msg[50];
+    sprintf(error_msg, "MCP_pinMode, pin out of bounds: %u", pin);
+    error_log(error_msg);
+
+    // display error message
+    perror(error_msg);
+
     return -1;
   }
   if (mode == MCP_INPUT)
@@ -135,10 +125,17 @@ int MCP_pinMode(MCP *mcp, uint8_t pin, uint8_t mode)
 
 int MCP_pinWrite(MCP *mcp, uint8_t pin, uint8_t value)
 {
+
   if (pin > 16)
   {
-    
-    printf("pin outta bounds: %d\n",pin);
+    // create and store error message
+    char error_msg[50];
+    sprintf(error_msg, "MCP_pinWrite, pin out of bounds: %u", pin);
+    error_log(error_msg);
+
+    // display error message
+    perror(error_msg);
+
     return -1;
   }
 

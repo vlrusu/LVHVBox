@@ -223,7 +223,6 @@ int powerOn(uint8_t channel, int client_addr) {
   if (channel == 6) {
     for (int i=0; i<6; i++) {
       if (MCP_pinWrite(lvpgoodMCP, powerChMap[i], HIGH) == -1) {
-        perror("poweron error 1");
         return -1;
       }
 
@@ -234,7 +233,6 @@ int powerOn(uint8_t channel, int client_addr) {
     }
   } else {
     if (MCP_pinWrite(lvpgoodMCP, powerChMap[channel], HIGH) == -1) {
-      perror("poweron error 2");
       return -1;
     }
 
@@ -252,13 +250,11 @@ int powerOff(uint8_t channel, int client_addr) {
 
   if (channel == 6) {
     if (write_gpio_value(lv_global_enable, LOW) == -1) {
-      perror("poweroff error 0");
       return -1;
     }
     
     for (int i=0; i<6; i++) {
       if (MCP_pinWrite(lvpgoodMCP, powerChMap[i], LOW) == -1) {
-        perror("poweroff error 1");
         return -1;
       }
 
@@ -269,7 +265,6 @@ int powerOff(uint8_t channel, int client_addr) {
     }
   } else {
     if (MCP_pinWrite(lvpgoodMCP, powerChMap[channel], LOW) == -1) {
-      perror("poweroff error 2");
       return -1;
     }
 
@@ -377,7 +372,6 @@ void get_slow_read(uint8_t channel, int client_addr) {
   }
 
   
-
   int return_val = (int) *input_data;
   printf("slow read value of: %i\n", return_val);
 
@@ -406,6 +400,7 @@ void current_burst(uint8_t channel, int client_addr) {
 
   for (int i=0; i<10; i++) {
     current_array[i] = *(float *)&current_input_data[4*i];
+
   }
 
   write(client_addr, &current_array, sizeof(current_array));
@@ -777,7 +772,7 @@ void *command_execution() {
       } else if (current_command == 'b') { // get_ihv
         get_ihv(char_parameter, client_addr);
       } else if (current_command == '(') {
-        msleep(20);
+        stop_buffer(char_parameter, client_addr);
         current_burst(char_parameter, client_addr);
       } else if (current_command == ')') {
         start_buffer(char_parameter, client_addr);
@@ -831,7 +826,7 @@ void *command_execution() {
         }
       }
     }
-    sleep(0.1);
+    msleep(50);
   }
 }
 
@@ -1025,32 +1020,38 @@ int write_pipe_voltages(int pico, int vfd[6], float voltages_0[6]) {
 
 
 int initialize_libusb(int pico) {
+
+
   // Set debugging output to max level
 	libusb_set_option( NULL, LIBUSB_OPTION_LOG_LEVEL, LIBUSB_LOG_LEVEL_WARNING );
 
   // Open our ADU device that matches our vendor id and product id
   if (pico == 0) {
+
     device_handle_0 = libusb_open_device_with_vid_pid(NULL, VENDOR_ID_0, PRODUCT_ID);
 
     if (device_handle_0 == NULL) {
-      printf("Pico 0 will not be used.\n");
       use_pico0 = 0;
     } else {
       libusb_set_auto_detach_kernel_driver(device_handle_0, 1);
       // Claim interface 0 on the device
       libusb_claim_interface(device_handle_0, 1);
     }
+
   } else {
+
     device_handle_1 = libusb_open_device_with_vid_pid(NULL, VENDOR_ID_1, PRODUCT_ID);
     if (device_handle_1 == NULL) {
-      printf("Pico 1 will not be used.\n");
       use_pico1 = 0;
     } else {
       libusb_set_auto_detach_kernel_driver(device_handle_1, 1);
       // Claim interface 0 on the device
       libusb_claim_interface(device_handle_1, 1);
     }
+
   }
+
+
 
   return 0;
 }
@@ -1069,8 +1070,6 @@ int initialize_pipes(int fd[num_pipes], int vfd[num_pipes]) {
     {
       if (mkfifo(pipe_path, 0666) == -1)
       {
-        perror("Failed to create named pipe");
-
         use_pipe = 0; // ensure that pipe isn't used if failed
       }
     }
@@ -1078,9 +1077,6 @@ int initialize_pipes(int fd[num_pipes], int vfd[num_pipes]) {
     fd[pipe_id] = open(pipe_path, O_WRONLY | O_NONBLOCK);
     if (fd[pipe_id] == -1)
     {
-      printf("current error\n");
-      perror("Error opening pipe");
-
       use_pipe = 0; // ensure that pipe isn't used if failed
     }
   }
@@ -1096,20 +1092,14 @@ int initialize_pipes(int fd[num_pipes], int vfd[num_pipes]) {
     {
       if (mkfifo(v_pipe_path, 0666) == -1)
       {
-        perror("Failed to create named pipe");
-
         // ensure that pipe isn't used - would result in failure
         use_pipe = 0;
       }
     }
-    printf("v pipe path: %s\n", v_pipe_path);
 
     vfd[pipe_id] = open(v_pipe_path, O_WRONLY | O_NONBLOCK);
     if (vfd[pipe_id] == -1)
     {
-      printf("voltage error\n");
-      perror("Error opening pipe");
-
       // ensure that pipe isn't used - would result in failure
       use_pipe = 0;
     }
@@ -1572,9 +1562,15 @@ void sigintHandler(int sig_num) {
 
 
   sleep(0.1);
-    
-  pthread_cancel(acquisition_thread_0);
-  pthread_cancel(acquisition_thread_1);
+  
+  if (use_pico0 == 1) {
+    pthread_cancel(acquisition_thread_0);
+  }
+
+  if (use_pico1 == 1) {
+    pthread_cancel(acquisition_thread_1);
+  }
+
   pthread_cancel(command_execution_thread);
 
   sleep(1);
@@ -1693,15 +1689,36 @@ int main( int argc, char **argv ) {
 
   // check that pico 0 is available
   int libusb_code = libusb_init(NULL);
+
+
+
   
+  device_handle_0 = libusb_open_device_with_vid_pid(NULL, VENDOR_ID_0, PRODUCT_ID);
+  if (device_handle_0 == NULL) {
+    use_pico0 = 0;
+    printf("Pico 0 will not be used.\n");
+  }
+
+  device_handle_1 = libusb_open_device_with_vid_pid(NULL, VENDOR_ID_1, PRODUCT_ID);
+  if (device_handle_1 == NULL) {
+    use_pico1 = 0;
+    printf("Pico 1 will not be used.\n");
+  }
   
+
   // create data acquisition thread
-  pthread_create(&acquisition_thread_0, NULL, acquire_data, &args_0);
-  pthread_create(&acquisition_thread_1, NULL, acquire_data, &args_1);
+  if (use_pico0 == 1) {
+    pthread_create(&acquisition_thread_0, NULL, acquire_data, &args_0);
+  }
+  if (use_pico1 == 1) {
+    pthread_create(&acquisition_thread_1, NULL, acquire_data, &args_1);
+  }
 
   // create statusing thread
-  pthread_t status_thread_0;
-  pthread_create(&status_thread_0, NULL, live_status, &args_0);
+  if (use_pico0 == 1) {
+    pthread_t status_thread_0;
+    pthread_create(&status_thread_0, NULL, live_status, &args_0);
+  }
 
   // create socket initialization thread
   pthread_t socket_creation_thread;
