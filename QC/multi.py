@@ -105,7 +105,7 @@ class App(QtWidgets.QMainWindow):
         # Set up a timer to update to reset the spike plot
         self.thirdTimer = QtCore.QTimer(self)
         self.thirdTimer.timeout.connect(self.reset_hourly_count)
-        self.thirdTimer.start(300 * 1000)  # Every 300,000 ms or 5 minute
+        self.thirdTimer.start(300 * 1000 * 12)  # Every 300,000 ms or 5 minute
         
         
         central_widget = QtWidgets.QWidget()

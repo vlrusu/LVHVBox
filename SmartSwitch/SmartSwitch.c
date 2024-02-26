@@ -316,7 +316,7 @@ void get_all_averaged_currents(PIO pio_0, PIO pio_1, uint sm[], float current_ar
 
 
     if ((latest_current_0*adc_to_uA > trip_currents[channel]) && ((trip_mask & (1 << channel)))) {
-      if (num_trigger[channel] > 10) {
+      if (num_trigger[channel] > 25) {
         *current_buffer_run = 0;
         gpio_put(all_pins.crowbarPins[channel],1);
         trip_status = trip_status | (1 << channel);
@@ -329,7 +329,7 @@ void get_all_averaged_currents(PIO pio_0, PIO pio_1, uint sm[], float current_ar
     }
 
     if ((latest_current_1*adc_to_uA > trip_currents[channel+3]) && ((trip_mask & (1 << channel+3)))) {
-      if (num_trigger[channel+3] > 10) {
+      if (num_trigger[channel+3] > 25) {
         *current_buffer_run = 0;
         gpio_put(all_pins.crowbarPins[channel+3],1);
         trip_status = trip_status | (1 << channel+3);
