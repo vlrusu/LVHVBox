@@ -532,7 +532,7 @@ sleep_ms(2000);
       }
 
       gpio_put(all_pins.P1_0, 1); // put pedestal pin high
-      sleep_ms(1500);
+      sleep_ms(700);
     }
     
 
