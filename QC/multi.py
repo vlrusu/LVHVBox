@@ -81,6 +81,7 @@ class App(QtWidgets.QMainWindow):
 
         # Histogram plot
         self.histogramWidget = pg.PlotWidget()
+        self.histogramWidget.setLabel("bottom", "Time (hours)")
         layout.addWidget(self.histogramWidget,stretch=1)  # This adds the histogram plot below the main plot
 
         # Set up some sample histogram data (you can replace this with your actual data)
