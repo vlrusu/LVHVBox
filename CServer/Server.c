@@ -223,7 +223,14 @@ int powerOn(uint8_t channel, int client_addr) {
   if (channel == 6) {
     for (int i=0; i<6; i++) {
       if (MCP_pinWrite(lvpgoodMCP, powerChMap[i], HIGH) == -1) {
-        return -1;
+        //return -1;
+
+        char error_msg[50];
+        sprintf(error_msg, "mcp powerOn fail write channel %i", i);
+        error_log(error_msg);
+
+        // display error message
+        perror(error_msg);
       }
 
       // log powerOn command
@@ -233,7 +240,16 @@ int powerOn(uint8_t channel, int client_addr) {
     }
   } else {
     if (MCP_pinWrite(lvpgoodMCP, powerChMap[channel], HIGH) == -1) {
-      return -1;
+      //return -1;
+
+
+      char error_msg[50];
+      sprintf(error_msg, "mcp powerOn fail write channel %u", channel);
+      error_log(error_msg);
+
+      // display error message
+      perror(error_msg);
+
     }
 
     // log powerOn command
@@ -255,8 +271,16 @@ int powerOff(uint8_t channel, int client_addr) {
     
     for (int i=0; i<6; i++) {
       if (MCP_pinWrite(lvpgoodMCP, powerChMap[i], LOW) == -1) {
-        return -1;
+        //return -1;
+
+        char error_msg[50];
+        sprintf(error_msg, "mcp powerOff fail write channel %i", i);
+        error_log(error_msg);
+
+        // display error message
+        perror(error_msg);
       }
+
 
       // log powerOff command
       char log_message[13];
@@ -265,7 +289,15 @@ int powerOff(uint8_t channel, int client_addr) {
     }
   } else {
     if (MCP_pinWrite(lvpgoodMCP, powerChMap[channel], LOW) == -1) {
-      return -1;
+      //return -1;
+
+      char error_msg[50];
+      sprintf(error_msg, "mcp powerOff fail write channel %u", channel);
+      error_log(error_msg);
+
+      // display error message
+      perror(error_msg);
+
     }
 
     // log powerOff command
@@ -623,6 +655,7 @@ void trip_status(uint8_t channel, int client_addr) {
   char *input_data;
   input_data = (char *)malloc(1);
   int return_val = 1;
+
 
   if (channel < 6) {
     pthread_mutex_lock(&usb0_mutex_lock);

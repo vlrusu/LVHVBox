@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 if __name__=="__main__":
     #filename = "full_currents_1728949092.txt"
     
-    filename = "temp.txt"
+    filename = "murata_on_noped_14.txt"
     #filename = "full_currents_1705610740.txt"
 
     f = open(filename, "r")

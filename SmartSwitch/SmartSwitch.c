@@ -211,6 +211,11 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6], uint 
         }
        }
 
+
+
+
+
+
         
 
         tud_cdc_write(temp_currents,sizeof(temp_currents));
