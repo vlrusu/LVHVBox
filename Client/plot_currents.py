@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 if __name__=="__main__":
     #filename = "full_currents_1728949092.txt"
     
-    filename = "murata_on_noped_14.txt"
+    filename = "on_noped_sparkingcaps.txt"
     #filename = "full_currents_1705610740.txt"
 
     f = open(filename, "r")
@@ -20,7 +20,7 @@ if __name__=="__main__":
     float_vals = [i for i in float_vals]
     float_vals = np.array(float_vals)
     std = np.std(float_vals)
-    #float_vals -= float_vals.mean()
+    float_vals -= float_vals.mean()
     print(float_vals)
     
 

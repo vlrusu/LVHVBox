@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include "gpio.h"
 #include "MCP23S08.h"
+#include "utils.h"
 
 #define DAC8164DELAY 2
 
@@ -23,15 +24,48 @@ int DAC8164_setup(DAC8164 *self, MCP *MCP, uint8_t sync, int sclk, uint8_t sdi, 
   self->_enable_pin = enable_pin;
   self->_ldac_pin = ldac_pin;
 
+  char error_msg[100];
 
-  MCP_pinMode(self->_MCP, self->_sync_pin, OUTPUT);
-  MCP_pinWrite(self->_MCP, self->_sync_pin, HIGH);
 
-  MCP_pinMode(self->_MCP, self->_sclk_pin, OUTPUT);
-  MCP_pinWrite(self->_MCP, self->_sclk_pin, LOW);
+  if (MCP_pinMode(self->_MCP, self->_sync_pin, OUTPUT) == -1) {
+    sprintf(error_msg, "dac8164_setup _sync_pin MCP_pinMode fail: %u", self->_sync_pin);
+    error_log(error_msg);
 
-  MCP_pinMode(self->_MCP, self->_sdi_pin, OUTPUT);
-  MCP_pinWrite(self->_MCP, self->_sdi_pin, LOW);
+    return -1;
+  }
+  if (MCP_pinWrite(self->_MCP, self->_sync_pin, HIGH) == -1) {
+    sprintf(error_msg, "dac8164_setup _sync_pin MCP_pinWrite fail: %u", self->_sync_pin);
+    error_log(error_msg);
+
+    return -1;
+  }
+
+
+  if (MCP_pinMode(self->_MCP, self->_sclk_pin, OUTPUT) == -1) {
+    sprintf(error_msg, "dac8164_setup _sclk_pin MCP_pinMode fail: %u", self->_sclk_pin);
+    error_log(error_msg);
+
+    return -1;
+  }
+  if (MCP_pinWrite(self->_MCP, self->_sclk_pin, LOW) == -1) {
+    sprintf(error_msg, "dac8164_setup _sync_pin MCP_pinWrite fail: %u", self->_sclk_pin);
+    error_log(error_msg);
+
+    return -1;
+  }
+
+  if (MCP_pinMode(self->_MCP, self->_sdi_pin, OUTPUT) == -1) {
+    sprintf(error_msg, "dac8164_setup _sync_pin MCP_pinMode fail: %u", self->_sdi_pin);
+    error_log(error_msg);
+
+    return -1;
+  }
+  if (MCP_pinWrite(self->_MCP, self->_sdi_pin, LOW) == -1) {
+    sprintf(error_msg, "dac8164_setup _sync_pin MCP_pinWrite fail: %u", self->_sdi_pin);
+    error_log(error_msg);
+
+    return -1;
+  }
 
   
 
@@ -42,10 +76,18 @@ int DAC8164_setup(DAC8164 *self, MCP *MCP, uint8_t sync, int sclk, uint8_t sdi, 
 
 void DAC8164_write(DAC8164 *self, uint32_t data)
 {
+  char error_msg[50];
 
+
+  if (MCP_pinWrite(self->_MCP, self->_sclk_pin, 0) == -1) {
+    sprintf(error_msg, "dac8164_write _sclk_pin fail: %u", self->_sclk_pin);
+    error_log(error_msg);
+  }
   
-  MCP_pinWrite(self->_MCP, self->_sclk_pin, 0);
-  MCP_pinWrite(self->_MCP, self->_sync_pin, 0);
+  if (MCP_pinWrite(self->_MCP, self->_sync_pin, 0) == -1) {
+    sprintf(error_msg, "dac8164_write _sync_pin fail: %u", self->_sync_pin);
+    error_log(error_msg);
+  }
   //delayMicroseconds(DAC8164DELAY);
 
   for (int i=23;i>=0;i--){
@@ -55,15 +97,28 @@ void DAC8164_write(DAC8164 *self, uint32_t data)
     else
       thisbit = 0;
 
-    MCP_pinWrite(self->_MCP, self->_sdi_pin, thisbit);
+
+    if (MCP_pinWrite(self->_MCP, self->_sdi_pin, thisbit) == -1) {
+      sprintf(error_msg, "dac8164_write _sdi_pin fail: %u", self->_sdi_pin);
+      error_log(error_msg);
+    }
     //delayMicroseconds(DAC8164DELAY);
-    MCP_pinWrite(self->_MCP, self->_sclk_pin, 1);
+    if (MCP_pinWrite(self->_MCP, self->_sclk_pin, 1) == -1) {
+      sprintf(error_msg, "dac8164_write _sclk_pin on fail: %u", self->_sclk_pin);
+      error_log(error_msg);
+    }
     //delayMicroseconds(DAC8164DELAY);
-    MCP_pinWrite(self->_MCP, self->_sclk_pin, 0);
+    if (MCP_pinWrite(self->_MCP, self->_sclk_pin, 0) == -1) {
+      sprintf(error_msg, "dac8164_write _sclk_pin off fail: %u", self->_sclk_pin);
+      error_log(error_msg);
+    }
     //delayMicroseconds(DAC8164DELAY);
   }
 
-  MCP_pinWrite(self->_MCP, self->_sync_pin, 1);
+  if (MCP_pinWrite(self->_MCP, self->_sync_pin, 1) == -1) {
+    sprintf(error_msg, "dac8164_write _sync_pin on fail: %u", self->_sync_pin);
+    error_log(error_msg);
+  }
   
 }
 

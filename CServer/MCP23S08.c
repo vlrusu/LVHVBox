@@ -31,6 +31,9 @@ int MCP_setup(MCP* mcp, uint8_t address)
   mcp->_address = address;
 
   if (MCP_byteWrite(mcp, IOCON, IOCON_INIT) == -1) {
+    error_log("MCP_byteWrite failure 0 inside MCP_setup");
+    printf("MCP_byteWrite failure 0 inside MCP_setup");
+
     return  -1;
   }
 
@@ -40,8 +43,14 @@ int MCP_setup(MCP* mcp, uint8_t address)
   mcp->_invertCache = 0x00; // Default input inversion state is not inverted, 0x0000
 
   if (MCP_byteWrite(mcp, IODIR, mcp->_modeCache) == -1) {
+    error_log("MCP_byteWrite failure 1 inside MCP_setup");
+    printf("MCP_byteWrite failure 1 inside MCP_setup");
+
     return -1;
   } else if (MCP_byteWrite(mcp, IOCON, IOCON_INIT) == -1) {
+    error_log("MCP_byteWrite failure 2 inside MCP_setup");
+    printf("MCP_byteWrite failure 2 inside MCP_setup");
+
     return -1;
   }
 
@@ -69,16 +78,8 @@ int MCP_byteWrite(MCP *mcp, uint8_t reg, uint8_t value)
 
   // do the SPI transaction
   if ((ioctl(spiFds, SPI_IOC_MESSAGE(1), &spi) < 0)) {
-
-
-    // create and store error message
-    char error_msg[50];
-    sprintf(error_msg, "mcp23s08_write_reg: Error during SPI transaction.");
-    error_log(error_msg);
-
-    // display error message
-    perror(error_msg);
-
+    error_log("mcp23s08_write_reg: Error during SPI transaction.");
+    printf("mcp23s08_write_reg: Error during SPI transaction.");
 
     return -1;
   }
@@ -101,7 +102,7 @@ int MCP_pinMode(MCP *mcp, uint8_t pin, uint8_t mode)
     error_log(error_msg);
 
     // display error message
-    perror(error_msg);
+    printf(error_msg);
 
     return -1;
   }
@@ -115,6 +116,9 @@ int MCP_pinMode(MCP *mcp, uint8_t pin, uint8_t mode)
   }
 
   if (MCP_byteWrite(mcp, IODIR, mcp->_modeCache) == -1) {
+    error_log("MCP_byteWrite failure inside MCP_pinMode");
+    printf("MCP_byteWrite failure inside MCP_pinMode");
+
     return -1; // return -1 upon bytewrite failure
   }
 
@@ -134,7 +138,7 @@ int MCP_pinWrite(MCP *mcp, uint8_t pin, uint8_t value)
     error_log(error_msg);
 
     // display error message
-    perror(error_msg);
+    printf(error_msg);
 
     return -1;
   }
@@ -146,6 +150,9 @@ int MCP_pinWrite(MCP *mcp, uint8_t pin, uint8_t value)
   }
   
   if (MCP_byteWrite(mcp, GPIO, mcp->_outputCache) == -1) {
+    error_log("MCP_byteWrite failure inside MCP_pinWrite");
+    printf("MCP_byteWrite failure inside MCP_pinWrite");
+
     return -1;
   }
 

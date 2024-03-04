@@ -118,16 +118,20 @@ char* load_config(char* constant_name) {
 
 
 int write_fixed_location(const char *filename, long position, int value) {
-  if (value != 0 && value != 1)
-  {
-    perror("write_fixed_location: Invalid value. Only 0 or 1 allowed.\n");
+  char error_msg[100];
+
+  if (value != 0 && value != 1) {
+    sprintf(error_msg, "write_fixed_location: Invalid value of %i. Only 0 or 1 allowed.", value);
+    error_log(error_msg);
+    printf(error_msg);
+
     return -1;
   }
 
   FILE *file = fopen(filename, "r+");
-  if (file == NULL)
-  {
-    perror("write_fixed_location: Error opening file");
+  if (file == NULL) {
+    error_log("write_fixed_location: Error opening file");
+    printf("write_fixed_location: Error opening file");
     return -1;
   }
 
@@ -167,6 +171,8 @@ int error_log(const char *data) {
 }
 
 int write_log(char* filename, const char *data, int datatype, int client_addr) {
+  char error_msg[100];
+  
   /*
   printf("sizeof filename: %i\n", sizeof(filename));
 
@@ -187,24 +193,38 @@ int write_log(char* filename, const char *data, int datatype, int client_addr) {
   char *file_string = "../../Logs/command_log.log";
   FILE *fp = fopen(file_string, "a");
   if (fp == NULL) {
-    printf("Error logging datatype %i", datatype);
+    sprintf(error_msg, "Error logging datatype %i", datatype);
+    error_log(error_msg);
+    printf(error_msg);
     return -1;
   }
 
   if (fprintf(fp, "%lu ", (unsigned long)time(NULL)) < 0) {
-    printf("Error writing logfile, datatype %i\n", datatype);
+    sprintf(error_msg, "Error writing logfile, datatype %i", datatype);
+    error_log(error_msg);
+    printf(error_msg);
+
     fclose(fp);
     return -1;
   } else if (fprintf(fp, data) < 0) {
-    printf("Error writing logfile, datatype %i\n", datatype);
+    sprintf(error_msg, "Error writing logfile, datatype %i", datatype);
+    error_log(error_msg);
+    printf(error_msg);
+
     fclose(fp);
     return -1;
   } else if (fprintf(fp, " %i", datatype) < 0) {
-    printf("Error writing logfile, datatype %i\n", datatype);
+    sprintf(error_msg, "Error writing logfile, datatype %i", datatype);
+    error_log(error_msg);
+    printf(error_msg);
+
     fclose(fp);
     return -1;
   } else if (fprintf(fp, " %i\n", client_addr) < 0) {
-    printf("Error writing logfile, datatype %i\n", datatype);
+    sprintf(error_msg, "Error writing logfile, datatype %i", datatype);
+    error_log(error_msg);
+    printf(error_msg);
+
     fclose(fp);
     return -1;
   }

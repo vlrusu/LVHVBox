@@ -190,7 +190,10 @@ float i2c_ltc2497(int address, int channelLTC) {
   if (write(lv_i2c, block, length) != length) // write() returns the number of bytes actually written, if it doesn't match then an error occurred (e.g. no response from the device)
   {
     /* ERROR HANDLING: i2c transaction failed */
-    perror("Failed to write to the i2c bus.");
+
+    error_log("Failed to write to the i2c bus");
+    printf("Failed to write to the i2c bus");
+
     return -1;
   }
 
@@ -201,7 +204,10 @@ float i2c_ltc2497(int address, int channelLTC) {
   if (read(lv_i2c, block, length) != length) // read() returns the number of bytes actually read, if it doesn't match then an error occurred (e.g. no response from the device)
   {
     // ERROR HANDLING: i2c transaction failed
-    perror("Failed to read from the i2c bus.");
+
+    error_log("Failed to read from the i2c bus");
+    printf("Failed to read from the i2c bus");
+
     return -1;
   }
 
@@ -214,15 +220,17 @@ float i2c_ltc2497(int address, int channelLTC) {
 
 int powerOn(uint8_t channel, int client_addr) {
   char* command_log = load_config("Command_Log_File");
+  uint8_t local_powerChMap[6] = {5, 6, 7, 2, 3, 4};
 
   if (write_gpio_value(lv_global_enable, HIGH) == -1) {
-    perror("poweron error 0");
-    return -1;
+    error_log("poweron error 0");
+    printf("poweron error 0");
+    //return -1;
   }
   
   if (channel == 6) {
     for (int i=0; i<6; i++) {
-      if (MCP_pinWrite(lvpgoodMCP, powerChMap[i], HIGH) == -1) {
+      if (MCP_pinWrite(lvpgoodMCP, local_powerChMap[i], HIGH) == -1) {
         //return -1;
 
         char error_msg[50];
@@ -230,7 +238,7 @@ int powerOn(uint8_t channel, int client_addr) {
         error_log(error_msg);
 
         // display error message
-        perror(error_msg);
+        printf(error_msg);
       }
 
       // log powerOn command
@@ -239,7 +247,7 @@ int powerOn(uint8_t channel, int client_addr) {
       write_log(command_log, log_message, 1, client_addr);
     }
   } else {
-    if (MCP_pinWrite(lvpgoodMCP, powerChMap[channel], HIGH) == -1) {
+    if (MCP_pinWrite(lvpgoodMCP, local_powerChMap[channel], HIGH) == -1) {
       //return -1;
 
 
@@ -248,8 +256,7 @@ int powerOn(uint8_t channel, int client_addr) {
       error_log(error_msg);
 
       // display error message
-      perror(error_msg);
-
+      printf(error_msg);
     }
 
     // log powerOn command
@@ -263,14 +270,17 @@ int powerOn(uint8_t channel, int client_addr) {
 
 int powerOff(uint8_t channel, int client_addr) {
   char *command_log = load_config("Command_Log_File");
+  uint8_t local_powerChMap[6] = {5, 6, 7, 2, 3, 4};
 
   if (channel == 6) {
     if (write_gpio_value(lv_global_enable, LOW) == -1) {
-      return -1;
+      error_log("poweroff error 0");
+      printf("poweroff error 0");
+      //return -1;
     }
     
     for (int i=0; i<6; i++) {
-      if (MCP_pinWrite(lvpgoodMCP, powerChMap[i], LOW) == -1) {
+      if (MCP_pinWrite(lvpgoodMCP, local_powerChMap[i], LOW) == -1) {
         //return -1;
 
         char error_msg[50];
@@ -278,7 +288,7 @@ int powerOff(uint8_t channel, int client_addr) {
         error_log(error_msg);
 
         // display error message
-        perror(error_msg);
+        printf(error_msg);
       }
 
 
@@ -288,7 +298,7 @@ int powerOff(uint8_t channel, int client_addr) {
       write_log(command_log, log_message, 1, client_addr);
     }
   } else {
-    if (MCP_pinWrite(lvpgoodMCP, powerChMap[channel], LOW) == -1) {
+    if (MCP_pinWrite(lvpgoodMCP, local_powerChMap[channel], LOW) == -1) {
       //return -1;
 
       char error_msg[50];
@@ -296,7 +306,7 @@ int powerOff(uint8_t channel, int client_addr) {
       error_log(error_msg);
 
       // display error message
-      perror(error_msg);
+      printf(error_msg);
 
     }
 
@@ -311,18 +321,39 @@ int powerOff(uint8_t channel, int client_addr) {
 
 int hv_initialization() {
   if (MCP_pinMode(hvMCP, 4, OUTPUT) == -1) {
+    error_log("hv_initialization MCP_pinMode pin 4 failure");
+    printf("hv_initialization MCP_pinMode pin 4 failure");
+
     return -1;
-  } else if (MCP_pinMode(hvMCP, 4, LOW) == -1) {
+  } else if (MCP_pinWrite(hvMCP, 4, LOW) == -1) {
+    error_log("hv_initialization MCP_pinWrite pin 4 failure");
+    printf("hv_initialization MCP_pinWrite pin 4 failure");
+
     return -1;
   } else if (MCP_pinMode(hvMCP, 2, OUTPUT) == -1) {
+    error_log("hv_initialization MCP_pinMode pin 2 failure");
+    printf("hv_initialization MCP_pinMode pin 2 failure");
+
     return -1;
   } else if (MCP_pinWrite(hvMCP, 2, LOW) == -1) {
+    error_log("hv_initialization MCP_pinWrite pin 2 failure");
+    printf("hv_initialization MCP_pinWrite pin 2 failure");
+
     return -1;
   } else if (DAC8164_setup (&dac[0], hvMCP, 6, 7, 0, -1, -1) == -1) {
+    error_log("hv_initialization DAC8164_setup dac0 failure");
+    printf("hv_initialization DAC8164_setup dac0 failure");
+
     return -1;
   } else if (DAC8164_setup (&dac[1], hvMCP, 3, 7, 0, -1, -1) == -1) {
+    error_log("hv_initialization DAC8164_setup dac1 failure");
+    printf("hv_initialization DAC8164_setup dac1 failure");
+
     return -1;
   } else if (DAC8164_setup (&dac[2], hvMCP, 5, 7, 0, -1, -1) == -1) {
+    error_log("hv_initialization DAC8164_setup dac2 failure");
+    printf("hv_initialization DAC8164_setup dac2 failure");
+
     return -1;
   }
 
@@ -1552,18 +1583,34 @@ void *acquire_data(void *arguments) {
 
 
 int lv_initialization() {
+  char error_msg[100];
+
   if (setup_gpio(lv_global_enable) == -1) {
+    error_log("lv_initialization setup_gpio lv_global_enable failure");
+    printf("lv_initialization setup_gpio lv_global_enable failure");
+
     return -1;
   } else if (write_gpio_value(lv_global_enable, LOW) == -1) {
+    error_log("lv_initialization write_gpio_value lv_global_enable failure");
+    printf("lv_initialization write_gpio_value lv_global_enable failure");
+
     return -1;
   }
 
   for (int i=0; i<6; i++) {
     if (MCP_pinMode(lvpgoodMCP, powerChMap[i], OUTPUT) == -1) {
+      sprintf(error_msg, "lv_initialization MCP_pinMode pin %u failure", powerChMap[i]);
+      error_log(error_msg);
+      printf(error_msg);
+
       return -1;
     }
 
     if (MCP_pinWrite(lvpgoodMCP, powerChMap[i],0) == -1) {
+      sprintf(error_msg, "lv_initialization MCP_pinWrite pin %u failure", powerChMap[i]);
+      error_log(error_msg);
+      printf(error_msg);
+
       return -1;
     }
   }
@@ -1580,6 +1627,9 @@ int lv_initialization() {
   lv_i2c = open_i2c_dev(lv_i2cbus, lv_i2cname, sizeof(lv_i2cname), 0);
 
   if (lv_i2c < 0) { // return -1 in case of not acquiring file
+    error_log("lv_initialization i2c file not acquired");
+    printf("lv_initialization i2c file not acquired");
+
     return -1;
   }
 
@@ -1630,6 +1680,8 @@ void sigintHandler(int sig_num) {
 
 
 int main( int argc, char **argv ) {
+  char error_msg[100];
+
   // initialize queues
   const char *pathname = "/home/mu2e/LVHVBox/CServer/build";
   queue_id = 0;
@@ -1651,22 +1703,34 @@ int main( int argc, char **argv ) {
 
 
   if ((spiFds = open (spidev, O_RDWR)) < 0){
-    printf("Unable to open SPI device: %s\n",spidev);
+    sprintf(error_msg, "Unable to open SPI device: %s", spidev);
+    error_log(error_msg);
+    printf(error_msg);
+
     return 0;
   }
 
-  if (ioctl (spiFds, SPI_IOC_WR_MODE, &spi_mode)            < 0){
-    printf("SPI Mode Change failure: %s\n",spidev);
+  if (ioctl (spiFds, SPI_IOC_WR_MODE, &spi_mode) < 0){
+    sprintf(error_msg, "SPI Mode Change failure: %s", spidev);
+    error_log(error_msg);
+    printf(error_msg);
+
     return 0;
   }
 
   if (ioctl (spiFds, SPI_IOC_WR_BITS_PER_WORD, &spi_bpw) < 0){
-    printf("SPI BPW Change failure: %s\n",spidev);
+    sprintf(error_msg, "SPI BPW Change failure: %s", spidev);
+    error_log(error_msg);
+    printf(error_msg);
+
     return 0;
   }
 
-  if (ioctl (spiFds, SPI_IOC_WR_MAX_SPEED_HZ, &spi_speed)   < 0){
-    printf("SPI Speed Change failure: %s\n",spidev);
+  if (ioctl (spiFds, SPI_IOC_WR_MAX_SPEED_HZ, &spi_speed) < 0){
+    sprintf(error_msg, "SPI Speed Change failure: %s", spidev);
+    error_log(error_msg);
+    printf(error_msg);
+
     return 0;
   }
 
@@ -1676,30 +1740,51 @@ int main( int argc, char **argv ) {
 // Export the GPIO pins
 
   if (setup_gpio(lv_mcp_reset) == -1) {
-      return 1;
+    error_log("main setup_gpio lv_mcp_reset failure");
+    printf("main setup_gpio lv_mcp_reset failure");
+
+    return 1;
   }
 
   // Turn off the GPIO pin (set it to 1)
   if (write_gpio_value(lv_mcp_reset, 0) == -1) {
-      return 1;
+    error_log("main write_gpio_value lv_mcp_reset failure");
+    printf("main write_gpio_value lv_mcp_reset failure");
+    
+    return 1;
   }
 
   // Turn on the GPIO pin (set it to 1)
   if (write_gpio_value(lv_mcp_reset, 1) == -1) {
-      return 1;
+    error_log("main write_gpio_value lv_mcp_reset failure");
+    printf("main write_gpio_value lv_mcp_reset failure");
+
+    return 1;
   }
 
   
   if (MCP_setup(hvMCP,2) == -1) {
+    error_log("main MCP_set hvMCP failure");
+    printf("main MCP_set hvMCP failure");
+
     return -1;
   } else if (MCP_setup(lvpgoodMCP,1) == -1) {
+    error_log("main MCP_set lvpgoodMCP failure");
+    printf("main MCP_set lvpgoodMCP failure");
+
     return -1;
   }
   
 
   if (hv_initialization() == -1) {
+    error_log("HV Initialization failure, program will terminate");
+    printf("HV Initialization failure, program will terminate");
+
     return -1;
   } else if (lv_initialization() == -1) {
+    error_log("LV Initialization failure, program will terminate");
+    printf("LV Initialization failure, program will terminate");
+
     return -1;
   }
 
