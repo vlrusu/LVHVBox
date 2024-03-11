@@ -58,6 +58,9 @@ int use_pico1 = 1;
 pthread_t acquisition_thread_0;
 pthread_t acquisition_thread_1;
 pthread_t command_execution_thread;
+pthread_t status_thread_0;
+pthread_t socket_creation_thread;
+
 pthread_mutex_t usb0_mutex_lock;
 pthread_mutex_t usb1_mutex_lock;
 
@@ -146,7 +149,7 @@ char pipe_path_base[14] = "/tmp/data_pipe";
 char v_pipe_path_base[15] = "/tmp/vdata_pipe";
 
 #define ALPHA 0.1 // Choose a value between 0 and 1. Smaller values result in heavier filtering.
-#define DECIMATION_FACTOR 10
+#define DECIMATION_FACTOR 5
 uint8_t use_pipe = 1; // when server tries to open pipe, will be set to 0 upon fail - will then assume pipe is not to be used
 int num_pipes = 6;
 int pipe_channels[6] = {0, 1, 2, 3, 4, 5};
@@ -222,6 +225,20 @@ int powerOn(uint8_t channel, int client_addr) {
   char* command_log = load_config("Command_Log_File");
   uint8_t local_powerChMap[6] = {5, 6, 7, 2, 3, 4};
 
+  // log powerOn command
+  char log_message[12];
+  snprintf(log_message, 12, "powerOn: %i", channel);
+  write_log(command_log, log_message, 1, client_addr);
+
+  if (channel < 0 || channel > 6) {
+    error_log("Invalid powerOn channel value");
+    printf("Invalid powerOn channel value\n");
+
+    return 0;
+  }
+
+  
+
   if (write_gpio_value(lv_global_enable, HIGH) == -1) {
     error_log("poweron error 0");
     printf("poweron error 0");
@@ -241,10 +258,6 @@ int powerOn(uint8_t channel, int client_addr) {
         printf(error_msg);
       }
 
-      // log powerOn command
-      char log_message[12];
-      snprintf(log_message, 12, "powerOn: %i", i);
-      write_log(command_log, log_message, 1, client_addr);
     }
   } else {
     if (MCP_pinWrite(lvpgoodMCP, local_powerChMap[channel], HIGH) == -1) {
@@ -259,10 +272,7 @@ int powerOn(uint8_t channel, int client_addr) {
       printf(error_msg);
     }
 
-    // log powerOn command
-    char log_message[12];
-    snprintf(log_message, 12, "powerOn: %i", channel);
-    write_log(command_log, log_message, 1, client_addr);
+    
   }
 
   return 0;
@@ -271,6 +281,19 @@ int powerOn(uint8_t channel, int client_addr) {
 int powerOff(uint8_t channel, int client_addr) {
   char *command_log = load_config("Command_Log_File");
   uint8_t local_powerChMap[6] = {5, 6, 7, 2, 3, 4};
+
+  // log powerOff command
+  char log_message[13];
+  snprintf(log_message, 12, "powerOff: %i", channel);
+  write_log(command_log, log_message, 1, client_addr);
+
+  if (channel < 0 || channel > 6) {
+    error_log("Invalid powerOff channel value");
+    printf("Invalid powerOff channel value\n");
+
+    return 0;
+  }
+
 
   if (channel == 6) {
     if (write_gpio_value(lv_global_enable, LOW) == -1) {
@@ -292,10 +315,7 @@ int powerOff(uint8_t channel, int client_addr) {
       }
 
 
-      // log powerOff command
-      char log_message[13];
-      snprintf(log_message, 12, "powerOff: %i", i);
-      write_log(command_log, log_message, 1, client_addr);
+      
     }
   } else {
     if (MCP_pinWrite(lvpgoodMCP, local_powerChMap[channel], LOW) == -1) {
@@ -310,10 +330,7 @@ int powerOff(uint8_t channel, int client_addr) {
 
     }
 
-    // log powerOff command
-    char log_message[13];
-    snprintf(log_message, 12, "powerOff: %i", channel);
-    write_log(command_log, log_message, 1, client_addr);
+   
   }
 
   return 0;
@@ -373,12 +390,19 @@ void set_hv(int channel, float value) {
 
 // get_vhv
 void get_vhv(uint8_t channel, int client_addr) {
-  float return_val;
+  float return_val = 0;
 
-  if (channel < 6) {
+  if (0 <= channel && channel < 6 && use_pico0 == 1) {
     return_val = voltages_0[channel];
-  } else {
+  } else if (5 < channel && channel < 12 && use_pico1 == 1) {
     return_val = voltages_1[channel - 6];
+  } else {
+    error_log("Invalid get_vhv channel value");
+    printf("Invalid get_vhv channel value\n");
+
+    write(client_addr, &return_val, sizeof(return_val));
+
+    return;
   }
 
   int float_channel = (int)channel;
@@ -388,11 +412,19 @@ void get_vhv(uint8_t channel, int client_addr) {
 
 // get_ihv
 void get_ihv(uint8_t channel, int client_addr) {
-  float return_val;
-  if (channel < 6) {
+  float return_val = 0;
+
+  if (0 <= channel && channel < 6 && use_pico0 == 1) {
     return_val = currents_0[channel];
-  } else {
+  } else if (5 < channel && channel < 12 && use_pico1 == 1) {
     return_val = currents_1[channel - 6];
+  } else {
+    error_log("Invalid get_ihv channel value");
+    printf("Invalid get_ihv channel value\n");
+
+    write(client_addr, &return_val, sizeof(return_val));
+
+    return;
   }
 
   write(client_addr, &return_val, sizeof(return_val));
@@ -404,15 +436,24 @@ void get_buffer_status(uint8_t channel, int client_addr) {
   char *input_data;
   input_data = (char *)malloc(1);
 
-  if (channel < 6) {
+  int return_val = 1;
+
+  if (0 <= channel && channel < 6 && use_pico0 == 1) {
     libusb_bulk_transfer(device_handle_0, 0x02, &send_val, 1, 0, 0);
     libusb_bulk_transfer(device_handle_0, 0x82, input_data, sizeof(input_data), 0, 0);
-  } else {
+  } else if (5 < channel & channel < 12 && use_pico1 == 1) {
     libusb_bulk_transfer(device_handle_1, 0x02, &send_val, 1, 0, 0);
     libusb_bulk_transfer(device_handle_1, 0x82, input_data, sizeof(input_data), 0, 0);
+  } else {
+    error_log("Invalid get_buffer_status channel value");
+    printf("Invalid get_buffer_status channel value\n");
+
+    write(client_addr, &return_val, sizeof(return_val));
+
+    return;
   }
 
-  int return_val = 1;
+  
   if ((*input_data & 1 << (channel)) == 0) {
     return_val = 0;
   }
@@ -426,16 +467,25 @@ void get_slow_read(uint8_t channel, int client_addr) {
   char *input_data;
   input_data = (char *)malloc(1);
 
-  if (channel < 6) {
+  int return_val = 0;
+
+  if (0 <= channel && channel < 6 && use_pico0 == 1) {
     libusb_bulk_transfer(device_handle_0, 0x02, &send_val, 1, 0, 0);
     libusb_bulk_transfer(device_handle_0, 0x82, input_data, sizeof(input_data), 0, 0);
-  } else {
+  } else if (5 < channel && channel < 12 && use_pico1 == 1) {
     libusb_bulk_transfer(device_handle_1, 0x02, &send_val, 1, 0, 0);
     libusb_bulk_transfer(device_handle_1, 0x82, input_data, sizeof(input_data), 0, 0);
+  } else {
+    error_log("Invalid get_slow_read channel");
+    printf("Invalid get_slow_read channel\n");
+
+    write(client_addr, &return_val, sizeof(return_val));
+
+    return;
   }
 
   
-  int return_val = (int) *input_data;
+  return_val = (int) *input_data;
   printf("slow read value of: %i\n", return_val);
 
   write(client_addr, &return_val, sizeof(return_val));
@@ -446,10 +496,15 @@ void get_slow_read(uint8_t channel, int client_addr) {
 void current_burst(uint8_t channel, int client_addr) {
   struct libusb_device_handle *device_handle;
 
-  if (channel < 6) {
+  if (0 <= channel && channel < 6 && use_pico0 == 1) {
     device_handle = device_handle_0;
-  } else {
+  } else if (5 < channel && channel < 12 && use_pico1 == 1) {
     device_handle = device_handle_1;
+  } else {
+    error_log("Invalid current_burst channel value");
+    printf("Invalid current_burst channel value\n");
+
+    return;
   }
 
   uint8_t get_buffer = 89 + channel;
@@ -474,10 +529,15 @@ void start_buffer(uint8_t channel, int client_addr) {
 
   struct libusb_device_handle *device_handle;
 
-  if (channel < 6) {
+  if (0 <= channel && channel < 6 && use_pico0 == 1) {
     device_handle = device_handle_0;
-  } else {
+  } else if (5 < channel && channel < 12 && use_pico1 == 1) {
     device_handle = device_handle_1;
+  } else {
+    error_log("Invalid start_buffer channel value");
+    printf("Invalid start_buffer channel value\n");
+
+    return;
   }
 
   libusb_bulk_transfer(device_handle, 0x02, &start_buffer, 1, 0, 0);
@@ -489,10 +549,15 @@ void stop_buffer(uint8_t channel, int client_addr) {
 
   struct libusb_device_handle *device_handle;
 
-  if (channel < 6) {
+  if (0 <= channel && channel < 6 && use_pico0 == 1) {
     device_handle = device_handle_0;
-  } else {
+  } else if (5 < channel && channel < 12 && use_pico1 == 1) {
     device_handle = device_handle_1;
+  } else {
+    error_log("Invalid stop_buffer channel value");
+    printf("Invalid stop_buffer channel value\n");
+
+    return;
   }
 
   libusb_bulk_transfer(device_handle, 0x02, &stop_buffer, 1, 0, 0);
@@ -502,34 +567,54 @@ void stop_buffer(uint8_t channel, int client_addr) {
 // rampHV
 void ramp_hv(uint8_t channel, float voltage, int client_addr) {
   printf("in ramp_hv\n");
-  char *command_log = load_config("Command_Log_File");
-
-  int idac = (int)(channel / 4);
-  float increment = voltage / NSTEPS;
-  float current_value = 0;
-
-  for (int itick=0; itick<NSTEPS; itick++) {
-    usleep(50000);
-    current_value += increment;
-
-    set_hv(channel, current_value);
-  }
+  //char *command_log = load_config("Command_Log_File");
+  char *command_log = "Command_Log_File:../../Logs/command_log.log";
 
   // log ramp_hv command
   char log_message[12];
   snprintf(log_message, 12, "ramp_hv: %u", channel);
   write_log(command_log, log_message, 0, client_addr);
+
+  int idac = (int)(channel / 4);
+  float increment = voltage / NSTEPS;
+  float current_value = 0;
+
+  if (0 <= channel && channel < 12) {
+    for (int itick=0; itick<NSTEPS; itick++) {
+      usleep(50000);
+      current_value += increment;
+
+      set_hv(channel, current_value);
+    }
+  } else {
+    error_log("Invalid ramp_hv channel value");
+    printf("Invalid ramp_hv channel value\n");
+
+    return;
+  }
+
+  
 }
 
 
 void down_hv(uint8_t channel, int client_addr) {
   char *command_log = load_config("Command_Log_File");
 
+  // log down_hv command
+  char log_message[12];
+  snprintf(log_message, 12, "down_hv: %u", channel);
+  write_log(command_log, log_message, 0, client_addr);
+
   float current_voltage;
-  if (channel < 6) {
+  if (0 <= channel && channel < 6) {
     current_voltage = voltages_0[channel];
-  } else {
+  } else if (5 < channel && channel < 12) {
     current_voltage = voltages_1[channel - 6];
+  } else {
+    error_log("Invalid down_hv channel value");
+    printf("Invalid down_hv channel value\n");
+
+    return;
   }
 
   int idac = (int)(channel / 4);
@@ -543,10 +628,7 @@ void down_hv(uint8_t channel, int client_addr) {
 
   set_hv(channel,0);
 
-  // log down_hv command
-  char log_message[12];
-  snprintf(log_message, 12, "down_hv: %u", channel);
-  write_log(command_log, log_message, 0, client_addr);
+  
 }
 
 // trip
@@ -554,20 +636,27 @@ void trip(uint8_t channel, int client_addr) {
   char *command_log = load_config("Command_Log_File");
   uint8_t send_val = 103 + (channel % 6);
 
-  if (channel < 6) {
-    pthread_mutex_lock(&usb0_mutex_lock);
-    libusb_bulk_transfer(device_handle_0, 0x02, &send_val, 1, 0, 0);
-    pthread_mutex_unlock(&usb0_mutex_lock);
-  } else {
-    pthread_mutex_lock(&usb1_mutex_lock);
-    libusb_bulk_transfer(device_handle_1, 0x02, &send_val, 1, 0, 0);
-    pthread_mutex_unlock(&usb1_mutex_lock);
-  }
-
   // log trip command
   char log_message[12];
   snprintf(log_message, 12, "tripped: %u", channel);
   write_log(command_log, log_message, 0, client_addr);
+
+  if (0 <= channel && channel < 6 && use_pico0 == 1) {
+    pthread_mutex_lock(&usb0_mutex_lock);
+    libusb_bulk_transfer(device_handle_0, 0x02, &send_val, 1, 0, 0);
+    pthread_mutex_unlock(&usb0_mutex_lock);
+  } else if (5 < channel && channel < 12 && use_pico1 == 1) {
+    pthread_mutex_lock(&usb1_mutex_lock);
+    libusb_bulk_transfer(device_handle_1, 0x02, &send_val, 1, 0, 0);
+    pthread_mutex_unlock(&usb1_mutex_lock);
+  } else {
+    error_log("Invalid trip channel value");
+    printf("Invalid trip channel value\n");
+
+    return;
+  }
+
+  
 }
 
 // reset_trip
@@ -576,20 +665,28 @@ void reset_trip(uint8_t channel, int client_addr) {
   uint8_t send_val = 109 + (channel % 6);
 
 
-  if (channel < 6) {
-    pthread_mutex_lock(&usb0_mutex_lock);
-    libusb_bulk_transfer(device_handle_0, 0x02, &send_val, 1, 0, 0);
-    pthread_mutex_unlock(&usb0_mutex_lock);
-  } else {
-    pthread_mutex_lock(&usb1_mutex_lock);
-    libusb_bulk_transfer(device_handle_1, 0x02, &send_val, 1, 0, 0);
-    pthread_mutex_unlock(&usb1_mutex_lock);
-  }
-
   // log reset_trip command
   char log_message[15];
   snprintf(log_message, 15, "reset_trip: %u", channel);
   write_log(command_log, log_message, 0, client_addr);
+
+
+  if (0 <= channel && channel < 6 && use_pico0 == 1) {
+    pthread_mutex_lock(&usb0_mutex_lock);
+    libusb_bulk_transfer(device_handle_0, 0x02, &send_val, 1, 0, 0);
+    pthread_mutex_unlock(&usb0_mutex_lock);
+  } else if (5 < channel && channel < 12 && use_pico1 == 1) {
+    pthread_mutex_lock(&usb1_mutex_lock);
+    libusb_bulk_transfer(device_handle_1, 0x02, &send_val, 1, 0, 0);
+    pthread_mutex_unlock(&usb1_mutex_lock);
+  } else {
+    error_log("Invalid reset_trip channel value");
+    printf("Invalid reset_trip channel value\n");
+
+    return;
+  }
+
+  
 }
 
 // disable_trip
@@ -597,20 +694,26 @@ void disable_trip(uint8_t channel, int client_addr) {
   char *command_log = load_config("Command_Log_File");
   uint8_t send_val = 115 + (channel % 6);
 
-  if (channel < 6) {
-    pthread_mutex_lock(&usb0_mutex_lock);
-    libusb_bulk_transfer(device_handle_0, 0x02, &send_val, 1, 0, 0);
-    pthread_mutex_unlock(&usb0_mutex_lock);
-  } else {
-    pthread_mutex_lock(&usb1_mutex_lock);
-    libusb_bulk_transfer(device_handle_1, 0x02, &send_val, 1, 0, 0);
-    pthread_mutex_unlock(&usb1_mutex_lock);
-  }
-
   // log disable_trip command
   char log_message[17];
   snprintf(log_message, 17, "disable_trip: %u", channel);
   write_log(command_log, log_message, 0, client_addr);
+
+  if (0 <= channel && channel < 6 && use_pico0 == 1) {
+    pthread_mutex_lock(&usb0_mutex_lock);
+    libusb_bulk_transfer(device_handle_0, 0x02, &send_val, 1, 0, 0);
+    pthread_mutex_unlock(&usb0_mutex_lock);
+  } else if (5 < channel && channel < 12 && use_pico1 == 1) {
+    pthread_mutex_lock(&usb1_mutex_lock);
+    libusb_bulk_transfer(device_handle_1, 0x02, &send_val, 1, 0, 0);
+    pthread_mutex_unlock(&usb1_mutex_lock);
+  } else {
+    error_log("Invalid disable_trip channel value");
+    printf("Invalid disable_trip channel value\n");
+
+    return;
+  }
+
 }
 
 // enable_trip
@@ -618,20 +721,27 @@ void enable_trip(uint8_t channel, int client_addr) {
   char *command_log = load_config("Command_Log_File");
   uint8_t send_val = 121 + (channel % 6);
 
-  if (channel < 6) {
-    pthread_mutex_lock(&usb0_mutex_lock);
-    libusb_bulk_transfer(device_handle_0, 0x02, &send_val, 1, 0, 0);
-    pthread_mutex_unlock(&usb0_mutex_lock);
-  } else {
-    pthread_mutex_lock(&usb1_mutex_lock);
-    libusb_bulk_transfer(device_handle_1, 0x02, &send_val, 1, 0, 0);
-    pthread_mutex_unlock(&usb1_mutex_lock);
-  }
-
   // log enable_trip command
   char log_message[16];
   snprintf(log_message, 16, "enable_trip: %u", channel);
   write_log(command_log, log_message, 0, client_addr);
+
+  if (0 <= channel && channel < 6 && use_pico0 == 1) {
+    pthread_mutex_lock(&usb0_mutex_lock);
+    libusb_bulk_transfer(device_handle_0, 0x02, &send_val, 1, 0, 0);
+    pthread_mutex_unlock(&usb0_mutex_lock);
+  } else if (5 < channel && channel < 12 && use_pico1 == 1) {
+    pthread_mutex_lock(&usb1_mutex_lock);
+    libusb_bulk_transfer(device_handle_1, 0x02, &send_val, 1, 0, 0);
+    pthread_mutex_unlock(&usb1_mutex_lock);
+  } else {
+    error_log("Invalid enable_trip channel value");
+    printf("Invalid enable_trip channel value\n");
+
+    return;
+  }
+
+  
 }
 
 
@@ -641,20 +751,25 @@ void enable_ped(uint8_t channel, int client_addr) {
   char *command_log = load_config("Command_Log_File");
   uint8_t send_val = 37;
 
-  if (channel < 6) {
-    pthread_mutex_lock(&usb0_mutex_lock);
-    libusb_bulk_transfer(device_handle_0, 0x02, &send_val, 1, 0, 0);
-    pthread_mutex_unlock(&usb0_mutex_lock);
-  } else {
-    pthread_mutex_lock(&usb1_mutex_lock);
-    libusb_bulk_transfer(device_handle_1, 0x02, &send_val, 1, 0, 0);
-    pthread_mutex_unlock(&usb1_mutex_lock);
-  }
-
   // log enable_ped command
   char log_message[15];
   snprintf(log_message, 15, "enable_ped: %u", channel);
   write_log(command_log, log_message, 0, client_addr);
+
+  if (0 <= channel && channel < 6 && use_pico0 == 1) {
+    pthread_mutex_lock(&usb0_mutex_lock);
+    libusb_bulk_transfer(device_handle_0, 0x02, &send_val, 1, 0, 0);
+    pthread_mutex_unlock(&usb0_mutex_lock);
+  } else if (5 < channel && channel < 12 && use_pico1 == 1) {
+    pthread_mutex_lock(&usb1_mutex_lock);
+    libusb_bulk_transfer(device_handle_1, 0x02, &send_val, 1, 0, 0);
+    pthread_mutex_unlock(&usb1_mutex_lock);
+  } else {
+    error_log("Invalid enable_ped channel value");
+    printf("Invalid enable_ped channel value\n");
+
+    return;
+  }
 }
 
 // disable_ped
@@ -663,20 +778,27 @@ void disable_ped(uint8_t channel, int client_addr) {
   
   uint8_t send_val = 38;
 
-  if (channel < 6) {
-    pthread_mutex_lock(&usb0_mutex_lock);
-    libusb_bulk_transfer(device_handle_0, 0x02, &send_val, 1, 0, 0);
-    pthread_mutex_unlock(&usb0_mutex_lock);
-  } else {
-    pthread_mutex_lock(&usb1_mutex_lock);
-    libusb_bulk_transfer(device_handle_1, 0x02, &send_val, 1, 0, 0);
-    pthread_mutex_unlock(&usb1_mutex_lock);
-  }
-
   // log disable_ped command
   char log_message[16];
   snprintf(log_message, 16, "disable_ped: %u", channel);
   write_log(command_log, log_message, 0, client_addr);
+
+  if (0 <= channel && channel < 6 && use_pico0 == 1) {
+    pthread_mutex_lock(&usb0_mutex_lock);
+    libusb_bulk_transfer(device_handle_0, 0x02, &send_val, 1, 0, 0);
+    pthread_mutex_unlock(&usb0_mutex_lock);
+  } else if (5 < channel && channel < 12 && use_pico1 == 1) {
+    pthread_mutex_lock(&usb1_mutex_lock);
+    libusb_bulk_transfer(device_handle_1, 0x02, &send_val, 1, 0, 0);
+    pthread_mutex_unlock(&usb1_mutex_lock);
+  } else {
+    error_log("Invalid disable_ped channel value");
+    printf("Invalid disable_ped channel value\n");
+
+    return;
+  }
+
+  
 }
 
 
@@ -688,7 +810,8 @@ void trip_status(uint8_t channel, int client_addr) {
   int return_val = 1;
 
 
-  if (channel < 6) {
+
+  if (0 <= channel && channel < 6 && use_pico0 == 1) {
     pthread_mutex_lock(&usb0_mutex_lock);
     libusb_bulk_transfer(device_handle_0, 0x02, &send_val, 1, 0, 0);
     libusb_bulk_transfer(device_handle_0, 0x82, input_data, sizeof(input_data), 0, 0);
@@ -697,7 +820,7 @@ void trip_status(uint8_t channel, int client_addr) {
     if ((*input_data & 1 << (channel)) == 0) {
       return_val = 0;
     }
-  } else {
+  } else if (5 < channel && channel < 12 && use_pico1 == 1) {
     pthread_mutex_lock(&usb1_mutex_lock);
     libusb_bulk_transfer(device_handle_1, 0x02, &send_val, 1, 0, 0);
     libusb_bulk_transfer(device_handle_1, 0x82, input_data, sizeof(input_data), 0, 0);
@@ -706,7 +829,16 @@ void trip_status(uint8_t channel, int client_addr) {
     if ((*input_data & 1 << (channel-6)) == 0) {
       return_val = 0;
     }
+  } else {
+    error_log("Invalid trip_status channel value");
+    printf("Invalid trip_status channel value\n");
+    free(input_data);
+
+    write(client_addr, &return_val, sizeof(return_val));
+
+    return;
   }
+  free(input_data);
 
   
 
@@ -730,20 +862,26 @@ void set_trip(uint8_t channel, float value, int client_addr) {
   uint16_t one = send_val[1] << 8;
   uint16_t two = send_val[2] + one;
 
-  if (channel < 6) {
-    pthread_mutex_lock(&usb0_mutex_lock);
-    libusb_bulk_transfer(device_handle_0, 0x02, &send_val[0], sizeof(send_val), 0, 0);
-    pthread_mutex_unlock(&usb0_mutex_lock);
-  } else {
-    pthread_mutex_lock(&usb1_mutex_lock);
-    libusb_bulk_transfer(device_handle_1, 0x02, &send_val[0], sizeof(send_val), 0, 0);
-    pthread_mutex_unlock(&usb1_mutex_lock);
-  }
-
   // log set_trip command
   char log_message[13];
   snprintf(log_message, 13, "set_trip: %u", channel);
   write_log(command_log, log_message, 0, client_addr);
+
+  if (0 <= channel && channel < 6 && use_pico0 == 1) {
+    pthread_mutex_lock(&usb0_mutex_lock);
+    libusb_bulk_transfer(device_handle_0, 0x02, &send_val[0], sizeof(send_val), 0, 0);
+    pthread_mutex_unlock(&usb0_mutex_lock);
+  } else if (5 < channel && channel < 12 && use_pico1 == 1) {
+    pthread_mutex_lock(&usb1_mutex_lock);
+    libusb_bulk_transfer(device_handle_1, 0x02, &send_val[0], sizeof(send_val), 0, 0);
+    pthread_mutex_unlock(&usb1_mutex_lock);
+  } else {
+    error_log("Invalid set_trip channel value");
+    printf("Invalid set_trip channel value\n");
+
+    return;
+  }
+
 }
 
 // readMonV48
@@ -753,12 +891,22 @@ void readMonV48(uint8_t channel, int client_addr) {
 
   float v48scale = 0.0012089;
   float acplscale = 8.2;
+  float ret = 0;
+
+  if (channel > 5 || channel < 0) {
+    error_log("Invalid readMonV48 channel value");
+    printf("Invalid readMonV48 channel value\n");
+
+    write(client_addr, &ret, sizeof(ret));
+
+    return;
+  }
 
   uint8_t index = v48map[channel];
   uint8_t channelLTC = (5 << 5) + index;
   uint8_t address = LTCaddress[channel];
 
-  float ret = i2c_ltc2497(address, channelLTC);
+  ret = i2c_ltc2497(address, channelLTC);
   ret = ret / (v48scale * acplscale);
 
   write(client_addr, &ret, sizeof(ret));
@@ -771,12 +919,22 @@ void readMonI48(uint8_t channel, int client_addr) {
 
   float i48scale = 0.010;
   float acplscale = 8.2;
+  float ret = 0;
+
+  if (channel > 5 || channel < 0) {
+    error_log("Invalid readMonI48 channel value");
+    printf("Invalid readMonI48 channel value\n");
+
+    write(client_addr, &ret, sizeof(ret));
+
+    return;
+  }
 
   uint8_t index = i48map[channel];
   uint8_t channelLTC = (5 << 5) + index;
   uint8_t address = LTCaddress[channel];
 
-  float ret = i2c_ltc2497(address, channelLTC);
+  ret = i2c_ltc2497(address, channelLTC);
   ret = ret / (i48scale * acplscale);
 
   write(client_addr, &ret, sizeof(ret));
@@ -788,12 +946,22 @@ void readMonV6(uint8_t channel, int client_addr) {
 
   float v6scale = 0.00857905;
   float acplscale = 8.2;
+  float ret = 0;
+
+  if (channel > 5 || channel < 0) {
+    error_log("Invalid readMonV6 channel value");
+    printf("Invalid readMonV6 channel value\n");
+
+    write(client_addr, &ret, sizeof(ret));
+
+    return;
+  }
 
   uint8_t index = v6map[channel];
   uint8_t channelLTC = (5 << 5) + index;
   uint8_t address = LTCaddress[channel];
 
-  float ret = i2c_ltc2497(address, channelLTC);
+  ret = i2c_ltc2497(address, channelLTC);
   ret = ret / (v6scale * acplscale);
 
   write(client_addr, &ret, sizeof(ret));
@@ -807,12 +975,22 @@ void readMonI6(uint8_t channel, int client_addr) {
 
   float i6scale = 0.010;
   float acplscale = 8.2;
+  float ret = 0;
+
+  if (channel > 5 || channel < 0) {
+    error_log("Invalid readMonI6 channel value");
+    printf("Invalid readMonI6 channel value\n");
+
+    write(client_addr, &ret, sizeof(ret));
+
+    return;
+  }
 
   uint8_t index = i6map[channel];
   uint8_t channelLTC = (5 << 5) + index;
   uint8_t address = LTCaddress[channel];
 
-  float ret = i2c_ltc2497(address, channelLTC);
+  ret = i2c_ltc2497(address, channelLTC);
   ret = ret / (i6scale * acplscale);
 
   write(client_addr, &ret, sizeof(ret));
@@ -890,7 +1068,7 @@ void *command_execution() {
         }
       }
     }
-    msleep(50);
+    msleep(20);
   }
 }
 
@@ -901,11 +1079,15 @@ void *handle_client(void *args) {
   char buffer[9];
   char flush_buffer[1];
 
+  char* command_log = load_config("Command_Log_File");
+  write_log(command_log, "New Client Connected", 3, inner_socket);
+
   while (1) {
     int return_val = read(inner_socket, buffer, 9);
     // if return_val is -1, terminate thread
     if (return_val == 0) {
       printf("Thread terminated \n");
+      write_log(command_log, "Client Disconnected", 3, inner_socket);
       return 0;
     }
 
@@ -1125,6 +1307,7 @@ int initialize_libusb(int pico) {
 
 int initialize_pipes(int fd[num_pipes], int vfd[num_pipes]) {
   char *pipe_path = malloc(15);
+  char *v_pipe_path = malloc(16);
   struct stat st_i;
 
   for (int pipe_id=0; pipe_id<num_pipes; pipe_id++) {
@@ -1148,7 +1331,6 @@ int initialize_pipes(int fd[num_pipes], int vfd[num_pipes]) {
   struct stat st[num_pipes];
   for (int pipe_id=0; pipe_id<num_pipes; pipe_id++) {
     sleep(0.1);
-    char *v_pipe_path = malloc(16);
     memcpy(v_pipe_path, &v_pipe_path_base, 15);
     v_pipe_path[15] = pipe_channels[pipe_id]+48;
 
@@ -1168,6 +1350,9 @@ int initialize_pipes(int fd[num_pipes], int vfd[num_pipes]) {
       use_pipe = 0;
     }
   }
+
+  free(pipe_path);
+  free(v_pipe_path);
 
   return 0;
 }
@@ -1328,72 +1513,72 @@ int request_averaged_currents(float currents[12][HISTORY_LENGTH], int pico) {
   char current_char = 'H';
 
   // fill up array
-      for (uint16_t time_index = 0; time_index < HISTORY_LENGTH;)
+  for (uint16_t time_index = 0; time_index < HISTORY_LENGTH;)
+  {
+    if (pico == 0)
+    {
+      pthread_mutex_lock(&usb0_mutex_lock);
+      libusb_bulk_transfer(device_handle_0, 0x02, &current_char, 1, 0, 0);
+      libusb_bulk_transfer(device_handle_0, 0x82, input_data, 48, 0, 0);
+      pthread_mutex_unlock(&usb0_mutex_lock);
+    }
+    else
+    {
+      pthread_mutex_lock(&usb1_mutex_lock);
+      libusb_bulk_transfer(device_handle_1, 0x02, &current_char, 1, 0, 0);
+      libusb_bulk_transfer(device_handle_1, 0x82, input_data, 48, 0, 0);
+      pthread_mutex_unlock(&usb1_mutex_lock);
+    }
+
+    // check if new data from SmartSwitch
+    floatval = *(float *)&input_data[0];
+    if (floatval != -100)
+    {
+
+      for (uint32_t i = 0; i < 12; i++)
       {
-        if (pico == 0)
-        {
-          pthread_mutex_lock(&usb0_mutex_lock);
-          libusb_bulk_transfer(device_handle_0, 0x02, &current_char, 1, 0, 0);
-          libusb_bulk_transfer(device_handle_0, 0x82, input_data, 48, 0, 0);
-          pthread_mutex_unlock(&usb0_mutex_lock);
-        }
-        else
-        {
-          pthread_mutex_lock(&usb1_mutex_lock);
-          libusb_bulk_transfer(device_handle_1, 0x02, &current_char, 1, 0, 0);
-          libusb_bulk_transfer(device_handle_1, 0x82, input_data, 48, 0, 0);
-          pthread_mutex_unlock(&usb1_mutex_lock);
-        }
-
-        // check if new data from SmartSwitch
-        floatval = *(float *)&input_data[0];
-        if (floatval != -100)
-        {
-
-          for (uint32_t i = 0; i < 12; i++)
+        floatval = *(float *)&input_data[4 * i];
+        if (pico == 0) {
+          if (i < 6)
           {
-            floatval = *(float *)&input_data[4 * i];
-            if (pico == 0) {
-              if (i < 6)
-              {
-                currents[i][time_index] = floatval;
-              }
-              else
-              {
-                currents[i-6][time_index+1] = floatval;
-              }
-            } else {
-              if (i < 6)
-              {
-                currents[i+6][time_index] = floatval;
-              }
-              else
-              {
-                currents[i][time_index+1] = floatval;
-              }
-            }
+            currents[i][time_index] = floatval;
           }
-          time_index += 2;
+          else
+          {
+            currents[i-6][time_index+1] = floatval;
+          }
+        } else {
+          if (i < 6)
+          {
+            currents[i+6][time_index] = floatval;
+          }
+          else
+          {
+            currents[i][time_index+1] = floatval;
+          }
         }
       }
+      time_index += 2;
+    }
+  }
 
 
-      if (pico == 0)
-      {
-        for (uint8_t i = 0; i < 6; i++)
-        {
-          currents_0[i] = *(float *)&input_data[24+4*i];
-        }
-      }
-      else
-      {
-        for (uint8_t i = 0; i < 6; i++)
-        {
-          currents_1[i] = *(float *)&input_data[24+4*i];
-        }
-      }
+  if (pico == 0) {
+    for (uint8_t i = 0; i < 6; i++)
+    {
+      currents_0[i] = *(float *)&input_data[24+4*i];
+    }
+  } else {
+    for (uint8_t i = 0; i < 6; i++)
+    {
+      currents_1[i] = *(float *)&input_data[24+4*i];
+    }
+  }
 
-    return 0;
+  free(input_data);
+
+
+  return 0;
 }
 
 
@@ -1423,6 +1608,9 @@ int request_voltages(int pico) {
       voltages_1[i] = *(float *)&input_data[4 * i];
     }
   }
+  
+  free(input_data);
+
   return 0;
 }
 
@@ -1498,7 +1686,12 @@ void *acquire_data(void *arguments) {
   int fd[num_pipes];
   int vfd[num_pipes];
 
-  int pico_init_success = initialize_libusb(pico); // initialize libusb connection with pico 0
+  if (initialize_libusb(pico) == -1) {
+    char error_msg[100];
+    sprintf(error_msg, "initialize_libusb failed for pico %i", pico);
+    error_log(error_msg);
+    printf(error_msg);
+  }
 
   if (pico == 0 && use_pico0 == 1) {
     int pipe_initialization_success = initialize_pipes(fd, vfd);
@@ -1506,6 +1699,7 @@ void *acquire_data(void *arguments) {
   } else if (pico == 1 && use_pico1 == 1) {
     int txt_init_success_1 = initialize_txt(1);
   }
+  msleep(200);
 
   while (1) {
     command check_command = parse_pico_queue();
@@ -1648,6 +1842,7 @@ void sigintHandler(int sig_num) {
   
   if (use_pico0 == 1) {
     pthread_cancel(acquisition_thread_0);
+    pthread_cancel(status_thread_0);
   }
 
   if (use_pico1 == 1) {
@@ -1655,6 +1850,7 @@ void sigintHandler(int sig_num) {
   }
 
   pthread_cancel(command_execution_thread);
+  pthread_cancel(socket_creation_thread);
 
   sleep(1);
 
@@ -1675,6 +1871,9 @@ void sigintHandler(int sig_num) {
     fclose(fp_I_1);
     fclose(fp_V_1);
   }
+
+  free(hvMCP);
+  free(lvpgoodMCP);
 } 
 
 
@@ -1805,8 +2004,14 @@ int main( int argc, char **argv ) {
   arg_struct args_1;
   args_1.pico = 1;
 
-  // check that pico 0 is available
-  int libusb_code = libusb_init(NULL);
+
+
+  if (libusb_init(NULL) != 0) {
+    error_log("libusb_init failure");
+    printf("libusb_init failure");
+
+    return 0;
+  }
 
 
 
@@ -1834,12 +2039,10 @@ int main( int argc, char **argv ) {
 
   // create statusing thread
   if (use_pico0 == 1) {
-    pthread_t status_thread_0;
     pthread_create(&status_thread_0, NULL, live_status, &args_0);
   }
 
   // create socket initialization thread
-  pthread_t socket_creation_thread;
   pthread_create(&socket_creation_thread, NULL, create_connections, NULL);
 
   // create hv execution thread

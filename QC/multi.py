@@ -13,7 +13,7 @@ SPIKE_THRESHOLD = 20.
 
 plot_channels = [0, 1, 2, 3, 4, 5]
 
-data_length = 10000
+data_length = 3000
 
 
 
@@ -81,7 +81,7 @@ class App(QtWidgets.QMainWindow):
 
         # Histogram plot
         self.histogramWidget = pg.PlotWidget()
-        self.histogramWidget.setLabel("bottom", "Time (hours)")
+        self.histogramWidget.setLabel("bottom", "Time (minutes)")
         layout.addWidget(self.histogramWidget,stretch=1)  # This adds the histogram plot below the main plot
 
         # Set up some sample histogram data (you can replace this with your actual data)
@@ -106,7 +106,7 @@ class App(QtWidgets.QMainWindow):
         # Set up a timer to update to reset the spike plot
         self.thirdTimer = QtCore.QTimer(self)
         self.thirdTimer.timeout.connect(self.reset_hourly_count)
-        self.thirdTimer.start(300 * 1000 * 12)  # Every 300,000 ms or 5 minute
+        self.thirdTimer.start(60 * 1000)  # Every 300,000 ms or 5 minute
         
         
         central_widget = QtWidgets.QWidget()

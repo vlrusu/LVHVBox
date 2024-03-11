@@ -142,6 +142,7 @@ int MCP_pinWrite(MCP *mcp, uint8_t pin, uint8_t value)
 
     return -1;
   }
+ 
 
   if (value) {
     mcp->_outputCache |= 1 << (pin);
