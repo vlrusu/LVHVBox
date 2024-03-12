@@ -39,6 +39,11 @@
 #include <i2c/smbus.h>
 #include "i2cbusses.h"
 
+#include <sys/un.h>
+
+#define CLIENT_SOCK_FILE "client.sock"
+#define SERVER_SOCK_FILE "/tmp/serversock"
+
 
 // ----- libusb constants and variables ----- //
 #define HISTORY_LENGTH 100
@@ -522,6 +527,8 @@ void current_burst(uint8_t channel, int client_addr) {
   }
 
   write(client_addr, &current_array, sizeof(current_array));
+
+
 }
 
 void start_buffer(uint8_t channel, int client_addr) {
@@ -1131,52 +1138,71 @@ void *live_status(void *args) {
   }
 }
 
+
+
 void *create_connections() {
-  int server_fd, new_socket, valread;
-  struct sockaddr_in address;
-  int opt = 1;
-  int addrlen = sizeof(address);
+  int new_socket;
+  int fd;
+	struct sockaddr_un addr;
+	int ret;
+	char buff[8192];
+	struct sockaddr_un from;
+	int ok = 1;
+	int len;
+	socklen_t fromlen = sizeof(from);
 
-  // Creating socket file descriptor
-  if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-    perror("socket failed");
-    exit(EXIT_FAILURE);
+	if ((fd = socket(AF_UNIX, SOCK_SEQPACKET, 0)) < 0) {
+		perror("socket");
+		ok = 0;
+	}
+
+	if (ok) {
+		memset(&addr, 0, sizeof(addr));
+		addr.sun_family = AF_UNIX;
+		strcpy(addr.sun_path, SERVER_SOCK_FILE);
+		unlink(SERVER_SOCK_FILE);
+		if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+			perror("bind");
+			ok = 0;
+		}
+	}
+
+  
+  if (listen(fd, 20) == -1) {
+      perror("listen");
+      exit(EXIT_FAILURE);
   }
 
-  // Forcefully attaching socket to the port 8080
-  if (setsockopt(server_fd, SOL_SOCKET,
-                 SO_REUSEADDR | SO_REUSEPORT, &opt,
-                 sizeof(opt))) {
-    perror("setsockopt");
-    exit(EXIT_FAILURE);
-  }
-  address.sin_family = AF_INET;
-  address.sin_addr.s_addr = INADDR_ANY;
-  address.sin_port = htons(PORT);
 
-  // Forcefully attaching socket to the port 8080
-  if (bind(server_fd, (struct sockaddr *)&address,
-           sizeof(address)) < 0) {
-    perror("bind failed");
-    exit(EXIT_FAILURE);
-  }
-
-  if (listen(server_fd, 3) < 0) {
-    perror("listen");
-    exit(EXIT_FAILURE);
-  }
-
+  
   while (1) {
-    if ((new_socket = accept(server_fd, (struct sockaddr *)&address,
-                             (socklen_t *)&addrlen)) < 0) {
+    if ((new_socket = accept(fd, (struct sockaddr *)&addr,
+                             (socklen_t *)&fromlen)) < 0) {
       perror("accept");
       exit(EXIT_FAILURE);
     }
 
+
+
+
+
+
+
+
     pthread_t client_thread;
     pthread_create(&client_thread, NULL, handle_client, &new_socket);
   }
+  
 }
+
+
+
+
+
+
+
+
+
 
 int write_pipe_currents(int fd[num_pipes], float store_all_currents_internal[6][HISTORY_LENGTH]) {
       char buffer[1024];

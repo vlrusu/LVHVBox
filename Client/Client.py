@@ -338,10 +338,8 @@ def process_command(line):
 
 
 if __name__=="__main__":
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    host = "127.0.0.1"
-    port = 12000
-    sock.connect((host,port))
+    sock = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
+    sock.connect('/tmp/serversock')
 
     while True:
         try:
