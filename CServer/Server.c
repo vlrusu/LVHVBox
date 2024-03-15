@@ -41,7 +41,8 @@
 
 #include <sys/un.h>
 
-#define CLIENT_SOCK_FILE "client.sock"
+#include "../commands.h"
+
 #define SERVER_SOCK_FILE "/tmp/serversock"
 
 
@@ -56,6 +57,7 @@ struct libusb_device_handle *device_handle_1 = NULL;
 
 int use_pico0 = 1;
 int use_pico1 = 1;
+
 
 
 // ----- Thread-related variables -----
@@ -183,6 +185,7 @@ command parse_pico_queue() {
   msgrcv(pico_msqid, (void *)&return_command, 56, msgtyp, MSG_NOERROR | IPC_NOWAIT);
   return return_command;
 }
+
 
 float i2c_ltc2497(int address, int channelLTC) {
   float max_reading = 8388608.0;
@@ -527,6 +530,8 @@ void current_burst(uint8_t channel, int client_addr) {
   }
 
   write(client_addr, &current_array, sizeof(current_array));
+
+  msleep(15);
 
 
 }
@@ -1006,67 +1011,62 @@ void readMonI6(uint8_t channel, int client_addr) {
 void *command_execution() {
   while (1) {
     command check_command = parse_queue();
-    char current_command = check_command.command_name;
-    char current_type = check_command.command_type;
+    uint32_t current_command = check_command.command_name;
+    uint32_t current_type = check_command.command_type;
     uint8_t char_parameter = (uint8_t)check_command.char_parameter-97;
     float float_parameter = check_command.float_parameter;
     int client_addr = check_command.client_addr;
 
 
     // check if command is hv type, else do nothing
-    if (current_type == 'a') {
+    if (current_type == TYPE_hv) {
       // select proper hv function
-      if (current_command == 'a') { // get_vhv
+      if (current_command == COMMAND_get_vhv) { // get_vhv
         get_vhv(char_parameter, client_addr);
-      } else if (current_command == 'b') { // get_ihv
+      } else if (current_command == COMMAND_get_ihv) { // get_ihv
         get_ihv(char_parameter, client_addr);
-      } else if (current_command == '(') {
+      } else if (current_command == COMMAND_current_burst) {
         stop_buffer(char_parameter, client_addr);
         current_burst(char_parameter, client_addr);
-      } else if (current_command == ')') {
+      } else if (current_command == COMMAND_current_start) {
         start_buffer(char_parameter, client_addr);
-      } else if (current_command == '*') {
+      } else if (current_command == COMMAND_current_stop) {
         stop_buffer(char_parameter, client_addr);
-      } else if (current_command == '+') {
+      } else if (current_command == COMMAND_current_buffer_run) {
         get_buffer_status(char_parameter, client_addr);
-      } else if (current_command == 'y') {
+      } else if (current_command == COMMAND_get_slow_read) {
         get_slow_read(char_parameter, client_addr);
-      }
-    }
-
-    if (current_type == 'a') {
-      // select proper hv function
-      if (current_command == 'c') { // ramp_hv
+      } else if (current_command == COMMAND_ramp_hv) { // ramp_hv
         ramp_hv(char_parameter, float_parameter, client_addr);
-      } else if (current_command == 'd') { // down_hv
+      } else if (current_command == COMMAND_down_hv) { // down_hv
         down_hv(char_parameter, client_addr);
       }
     }
 
 
-    if (current_type == 'b') {
+    if (current_type == TYPE_lv) {
 
       // select proper lv function
-      if (current_command == 'g') { // readMonV48
+      if (current_command == COMMAND_readMonV48) { // readMonV48
         usleep(1);
         readMonV48(char_parameter, client_addr);
-      } else if (current_command == 'h') { // readMonI48
+      } else if (current_command == COMMAND_readMonI48) { // readMonI48
         usleep(1);
         readMonI48(char_parameter, client_addr);
-      } else if (current_command == 'i') { // readMonV6
+      } else if (current_command == COMMAND_readMonV6) { // readMonV6
         usleep(1);
         readMonV6(char_parameter, client_addr);
-      } else if (current_command == 'j') { // readMonI6
+      } else if (current_command == COMMAND_readMonI6) { // readMonI6
         usleep(1);
         readMonI6(char_parameter, client_addr);
-      } else if (current_command == 'e') { // powerOn
+      } else if (current_command == COMMAND_powerOn) { // powerOn
         usleep(1);
         int errval = powerOn(char_parameter, client_addr);
 
         if (errval == -1) {
           error_log("LV powerOn Error");
         }
-      } else if (current_command == 'f') { // powerOff
+      } else if (current_command == COMMAND_powerOff) { // powerOff
         usleep(1);
         int errval = powerOff(char_parameter, client_addr);
 
@@ -1083,8 +1083,9 @@ void *command_execution() {
 void *handle_client(void *args) {
   client_data *client_information = args;
   int inner_socket = client_information->client_addr;
-  char buffer[9];
+  char buffer[128];
   char flush_buffer[1];
+  int command_valid;
 
   char* command_log = load_config("Command_Log_File");
   write_log(command_log, "New Client Connected", 3, inner_socket);
@@ -1101,16 +1102,21 @@ void *handle_client(void *args) {
     if (return_val == 9) {
       // create command
       add_command.command_name = buffer[0];
-      add_command.command_type = buffer[1];
-      add_command.char_parameter = buffer[2];
-      add_command.float_parameter = atof(&buffer[3]);
+      add_command.command_type = buffer[32];
+      add_command.char_parameter = buffer[64];
+      add_command.float_parameter = atof(&buffer[65]);
       add_command.client_addr = inner_socket;
 
-      // add command to linux kernel queue
-      if (add_command.command_type == 'c') {
-        msgsnd(pico_msqid, (void *)&add_command, sizeof(add_command), IPC_NOWAIT);
-      } else {
-        msgsnd(msqid, (void *)&add_command, sizeof(add_command), IPC_NOWAIT);
+      // check if command is valid
+      //command_valid = is_command_valid(add_command.command_type, add_command.command_name);
+      
+      if (command_valid == 1) {
+        // add command to linux kernel queue
+        if (add_command.command_type == TYPE_pico) {
+          msgsnd(pico_msqid, (void *)&add_command, sizeof(add_command), IPC_NOWAIT);
+        } else {
+          msgsnd(msqid, (void *)&add_command, sizeof(add_command), IPC_NOWAIT);
+        }
       }
     }
   }
@@ -1124,8 +1130,8 @@ void *live_status(void *args) {
   while (1) {
     for (int ichannel = 0; ichannel < 6; ichannel++) {
       // create command
-      add_command.command_name = 'o';
-      add_command.command_type = 'c';
+      add_command.command_name = COMMAND_trip_status;
+      add_command.command_type = TYPE_pico;
       add_command.char_parameter = ichannel + 97;
       add_command.float_parameter = 0;
       add_command.client_addr = -9999;
@@ -1729,45 +1735,44 @@ void *acquire_data(void *arguments) {
 
   while (1) {
     command check_command = parse_pico_queue();
-    char current_command = check_command.command_name;
-    char current_type = check_command.command_type;
+    uint32_t current_command = check_command.command_name;
+    uint32_t current_type = check_command.command_type;
     uint8_t char_parameter = (uint8_t)check_command.char_parameter - 97;
     float float_parameter = check_command.float_parameter;
     int client_addr = check_command.client_addr;
 
     // check if command is pico type, else do nothing
-    if (current_type == 'c')
-    {
+    if (current_type == TYPE_pico) {
       // select proper hv function
-      if (current_command == 'k')
+      if (current_command == COMMAND_trip)
       { // trip
         trip(char_parameter, client_addr);
       }
-      else if (current_command == 'l')
+      else if (current_command == COMMAND_reset_trip)
       { // reset trip
         reset_trip(char_parameter, client_addr);
       }
-      else if (current_command == 'm')
+      else if (current_command == COMMAND_disable_trip)
       { // disable trip
         disable_trip(char_parameter, client_addr);
       }
-      else if (current_command == 'n')
+      else if (current_command == COMMAND_enable_trip)
       { // enable trip
         enable_trip(char_parameter, client_addr);
       }
-      else if (current_command == 'p')
+      else if (current_command == COMMAND_set_trip)
       { // set trip
         set_trip(char_parameter, float_parameter, client_addr);
       }
-      else if (current_command == 'o')
+      else if (current_command == COMMAND_trip_status)
       { // trip status
         trip_status(char_parameter, client_addr);
       }
-      else if (current_command == '%')
+      else if (current_command == COMMAND_enable_ped)
       { // enable ped
         enable_ped(char_parameter, client_addr);
       }
-      else if (current_command == '&')
+      else if (current_command == COMMAND_disable_ped)
       { // disable ped
         disable_ped(char_parameter, client_addr);
       }
@@ -1795,7 +1800,6 @@ void *acquire_data(void *arguments) {
       int current_write_success = write_currents_1(common->all_currents);
       int voltage_write_success = write_voltages_1(voltages_1);
     }
-    
   }
 }
 

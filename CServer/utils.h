@@ -10,8 +10,8 @@
 
 typedef struct
 {
-  char command_name;
-  char command_type;
+  uint32_t command_name;
+  uint32_t command_type;
   uint8_t char_parameter;
   float float_parameter;
   int client_addr;

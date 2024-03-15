@@ -37,6 +37,17 @@ cmds = {'get_vhv',
 if "libedit" in readline.__doc__:
     readline.parse_and_bind("bind ^I rl_complete")
 
+def read_commands():
+    file = open("../commands.h", "r")
+    pre_command_list = file.readlines()
+    pre_command_list = [i.split() for i in pre_command_list]
+
+    command_dict = {}
+    for i in pre_command_list:
+        command_dict[i[1]] = format(int(i[2]), '032b').decode(encoding='utf-8')
+
+    return command_dict
+
 def process_float(input):
     v = format(input[3], '008b') + format(input[2], '008b') + format(input[1], '008b') + format(input[0], '008b')
 
@@ -64,6 +75,7 @@ def create_command_string_default():
     pass
 
 def process_command(line):
+    command_dict = read_commands()
     
     keys = line.split(" ")
 
@@ -72,7 +84,7 @@ def process_command(line):
             channel = int(keys[1])
             assert 0 <= channel <= 11
 
-            command_string = "aa" + chr(channel+97) + "      "
+            command_string = command_dict["COMMAND_get_vhv"] + command_dict["TYPE_hv"] + chr(channel+97) + "      "
 
             sock.send(bytes(command_string,"utf-8"))
             temp = sock.recv(1024)
@@ -83,7 +95,7 @@ def process_command(line):
             channel = int(keys[1])
             assert 0 <= channel <= 11
 
-            command_string = "ba" + chr(channel+97) + "      "
+            command_string = command_dict["COMMAND_get_ihv"] + command_dict["TYPE_hv"] + chr(channel+97) + "      "
 
             sock.send(bytes(command_string,"utf-8"))
             temp = sock.recv(1024)
@@ -94,7 +106,7 @@ def process_command(line):
             channel = int(keys[1])
             assert 0 <= channel <= 5
 
-            command_string = "gb" + chr(channel+97) + "      "
+            command_string = command_dict["COMMAND_readMonV48"] + command_dict["TYPE_lv"] + chr(channel+97) + "      "
             sock.send(bytes(command_string,"utf-8"))
             temp = sock.recv(1024)
             return_val = round(process_float(temp),2)
@@ -104,7 +116,7 @@ def process_command(line):
             channel = int(keys[1])
             assert 0 <= channel <= 5
 
-            command_string = "hb" + chr(channel+97) + "      "
+            command_string = command_dict["COMMAND_readMonI48"] + command_dict["TYPE_lv"] + chr(channel+97) + "      "
             sock.send(bytes(command_string,"utf-8"))
             temp = sock.recv(1024)
             return_val = round(process_float(temp),2)
@@ -114,7 +126,7 @@ def process_command(line):
             channel = int(keys[1])
             assert 0 <= channel <= 5
 
-            command_string = "ib" + chr(channel+97) + "      "
+            command_string = command_dict["COMMAND_readMonV6"] + command_dict["TYPE_lv"] + chr(channel+97) + "      "
             sock.send(bytes(command_string,"utf-8"))
             temp = sock.recv(1024)
             return_val = round(process_float(temp),2)
@@ -124,7 +136,7 @@ def process_command(line):
             channel = int(keys[1])
             assert 0 <= channel <= 5
 
-            command_string = "jb" + chr(channel+97) + "      "
+            command_string = command_dict["COMMAND_readMonI6"] + command_dict["TYPE_lv"] + chr(channel+97) + "      "
             sock.send(bytes(command_string,"utf-8"))
             temp = sock.recv(1024)
             return_val = round(process_float(temp),2)
@@ -134,7 +146,7 @@ def process_command(line):
             channel = int(keys[1])
             assert 0 <= channel <= 11
 
-            command_string = "+a" + chr(channel+97) + "         "
+            command_string = command_dict["COMMAND_current_buffer_run"] + command_dict["TYPE_pico"] + chr(channel+97) + "         "
             sock.send(bytes(command_string,"utf-8"))
         
             temp = sock.recv(1024)
@@ -145,7 +157,7 @@ def process_command(line):
             channel = int(keys[1])
             assert 0 <= channel <= 11
 
-            command_string = "oc" + chr(channel+97) + "         "
+            command_string = command_dict["COMMAND_trip_status"] + command_dict["TYPE_pico"] + chr(channel+97) + "         "
             sock.send(bytes(command_string,"utf-8"))
 
             temp = sock.recv(1024)
@@ -156,7 +168,7 @@ def process_command(line):
             channel = int(keys[1])
             assert 0 <= channel <= 11
 
-            command_string = "ya" + chr(channel+97) + "         "
+            command_string = command_dict["COMMAND_get_slow_read"] + command_dict["TYPE_hv"] + chr(channel+97) + "         "
             sock.send(bytes(command_string,"utf-8"))
 
             temp = sock.recv(1024)
@@ -167,63 +179,63 @@ def process_command(line):
             channel = int(keys[1])
             assert 0 <= channel <= 11
 
-            command_string = ")a" + chr(channel+97) + "          "
+            command_string = command_dict["COMMAND_current_start"] + command_dict["TYPE_hv"] + chr(channel+97) + "          "
             sock.send(bytes(command_string,"utf-8"))
 
         elif keys[0] == "current_stop":
             channel = int(keys[1])
             assert 0 <= channel <= 11
 
-            command_string = "*a" + chr(channel+97) + "          "
+            command_string = command_dict["COMMAND_current_stop"] + command_dict["TYPE_hv"] + chr(channel+97) + "          "
             sock.send(bytes(command_string,"utf-8"))
 
         elif keys[0] == "down_hv":
             channel = int(keys[1])
             assert 0 <= channel <= 11
 
-            command_string = "da" + chr(channel+97) + "          "
+            command_string = command_dict["COMMAND_down_hv"] + command_dict["TYPE_hv"] + chr(channel+97) + "          "
             sock.send(bytes(command_string,"utf-8"))
         
         elif keys[0] == "trip":
             channel = int(keys[1])
             assert 0 <= channel <= 11
 
-            command_string = "kc" + chr(channel+97) + "          "
+            command_string = command_dict["COMMAND_trip"] + command_dict["TYPE_pico"] + chr(channel+97) + "          "
             sock.send(bytes(command_string,"utf-8"))
         
         elif keys[0] == "reset_trip":
             channel = int(keys[1])
             assert 0 <= channel <= 11
 
-            command_string = "lc" + chr(channel+97) + "          "
+            command_string = command_dict["COMMAND_reset_trip"] + command_dict["TYPE_pico"] + chr(channel+97) + "          "
             sock.send(bytes(command_string,"utf-8"))
         
         elif keys[0] == "disable_trip":
             channel = int(keys[1])
             assert 0 <= channel <= 11
 
-            command_string = "mc" + chr(channel+97) + "          "
+            command_string = command_dict["COMMAND_disable_trip"] + command_dict["TYPE_pico"] + chr(channel+97) + "          "
             sock.send(bytes(command_string,"utf-8"))
 
         elif keys[0] == "enable_trip":
             channel = int(keys[1])
             assert 0 <= channel <= 11
 
-            command_string = "nc" + chr(channel+97) + "          "
+            command_string = command_dict["COMMAND_enable_trip"] + command_dict["TYPE_pico"] + chr(channel+97) + "          "
             sock.send(bytes(command_string,"utf-8"))
         
         elif keys[0] == "enable_ped":
             channel = int(keys[1])
             assert 0 <= channel <= 11
 
-            command_string = "&c" + chr(channel+97) + "          "
+            command_string = command_dict["COMMAND_enable_ped"] + command_dict["TYPE_pico"] + chr(channel+97) + "          "
             sock.send(bytes(command_string,"utf-8"))
         
         elif keys[0] == "disable_ped":
             channel = int(keys[1])
             assert 0 <= channel <= 11
 
-            command_string = "%c" + chr(channel+97) + "          "
+            command_string = command_dict["COMMAND_disable_ped"] + command_dict["TYPE_pico"] + chr(channel+97) + "          "
             sock.send(bytes(command_string,"utf-8"))
         
         elif keys[0] == "powerOn":
@@ -233,7 +245,7 @@ def process_command(line):
             else:
                 channel = 6
             
-            command_string = "eb" + chr(channel+97) + "          "
+            command_string = command_dict["COMMAND_powerOn"] + command_dict["TYPE_lv"] + chr(channel+97) + "          "
             sock.send(bytes(command_string,"utf-8"))
         
         elif keys[0] == "powerOff":
@@ -243,35 +255,32 @@ def process_command(line):
             else:
                 channel = 6
             
-            command_string = "fb" + chr(channel+97) + "          "
+            command_string = command_dict["COMMAND_powerOff"] + command_dict["TYPE_lv"] + chr(channel+97) + "          "
             sock.send(bytes(command_string,"utf-8"))
 
         elif keys[0] == "enable_trip":
             channel = int(keys[1])
             assert 0 <= channel <= 11
 
-            command_string = "nc" + chr(channel+97) + "          "
+            command_string = command_dict["COMMAND_enable_trip"] + command_dict["TYPE_pico"] + chr(channel+97) + "          "
             sock.send(bytes(command_string,"utf-8"))
 
         elif keys[0] == "disable_trip":
             channel = int(keys[1])
             assert 0 <= channel <= 11
 
-            command_string = "mc" + chr(channel+97) + "          "
+            command_string = command_dict["COMMAND_disable_trip"] + command_dict["TYPE_pico"] + chr(channel+97) + "          "
             sock.send(bytes(command_string,"utf-8"))
 
         elif keys[0] == "set_trip":
             channel = int(keys[1])
             assert 0 <= channel <= 11
 
-            command_string = "pc" + chr(channel+97)
+            command_string = command_dict["COMMAND_set_trip"] + command_dict["TYPE_pico"] + chr(channel+97)
             len_float_string = len(str(float(keys[2])))
             pad = 6-len_float_string
             command_string += ''.join("0" for i in range(pad))
             command_string += str(float(keys[2]))
-
-
-
 
             print(command_string)
             sock.send(bytes(command_string,"utf-8"))
@@ -280,7 +289,7 @@ def process_command(line):
             channel = int(keys[1])
             assert 0 <= channel <= 11
 
-            command_string = "ca" + chr(channel+97)
+            command_string = command_dict["COMMAND_ramp_hv"] + command_dict["TYPE_hv"] + chr(channel+97)
             len_float_string = len(str(float(keys[2])))
             pad = 6-len_float_string
             command_string += ''.join("0" for i in range(pad))
@@ -291,7 +300,7 @@ def process_command(line):
             channel = int(keys[1])
             assert 0 <= channel <= 11
 
-            command_string = "(a" + chr(channel+97) + "         "
+            command_string = command_dict["COMMAND_current_burst"] + command_dict["TYPE_hv"] + chr(channel+97) + "         "
 
             num_cycles = int(current_buffer_len/full_current_chunk)
             full_currents = []
@@ -320,9 +329,6 @@ def process_command(line):
             for i in full_currents:
                 f.write(str(i) + "\n")
             f.close()
-
-
-
 
 
 
