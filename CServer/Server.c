@@ -57,6 +57,9 @@ struct libusb_device_handle *device_handle_1 = NULL;
 int use_pico0 = 1;
 int use_pico1 = 1;
 
+// ----- Sets whether or not current & voltage files are written to -----
+int write_data = 0;
+
 
 // ----- Thread-related variables -----
 
@@ -574,8 +577,8 @@ void stop_buffer(uint8_t channel, int client_addr) {
 // rampHV
 void ramp_hv(uint8_t channel, float voltage, int client_addr) {
   printf("in ramp_hv\n");
-  //char *command_log = load_config("Command_Log_File");
-  char *command_log = "Command_Log_File:../../Logs/command_log.log";
+  char *command_log = load_config("Command_Log_File");
+  //char *command_log = "Command_Log_File:../../Logs/command_log.log";
 
   // log ramp_hv command
   char log_message[12];
@@ -1196,14 +1199,6 @@ void *create_connections() {
 }
 
 
-
-
-
-
-
-
-
-
 int write_pipe_currents(int fd[num_pipes], float store_all_currents_internal[6][HISTORY_LENGTH]) {
       char buffer[1024];
       int write_success = 0;
@@ -1217,7 +1212,7 @@ int write_pipe_currents(int fd[num_pipes], float store_all_currents_internal[6][
             float filtered_value = ALPHA * input_value + (1 - ALPHA) * last_current_output[channel];
             last_current_output[channel] = filtered_value;
 
-            // Decimation by 5: Only write every 5th sample
+            // Decimation by DECIMATION_FACTOR: may be adjusted to reduce GUI computational requirements
             if (time_index % DECIMATION_FACTOR == 0 && use_pipe == 1) {
               int length = snprintf(buffer, sizeof(buffer), "%f ", filtered_value);
 
@@ -1409,14 +1404,15 @@ int write_currents_0(float all_currents[12][HISTORY_LENGTH]) {
   }
   
   // save data in current log
-  /*
-  for (uint32_t time_index=0; time_index<HISTORY_LENGTH; time_index++) {
-    for (uint8_t channel=0; channel<6; channel++) {
-      fprintf(fp_I_0, "%f ", all_currents[channel][time_index]);
+  if (write_data == 1) {
+    for (uint32_t time_index=0; time_index<HISTORY_LENGTH; time_index++) {
+      for (uint8_t channel=0; channel<6; channel++) {
+        fprintf(fp_I_0, "%f ", all_currents[channel][time_index]);
+      }
+      fprintf(fp_I_0, "%f\n", (float)time(NULL));
     }
-    fprintf(fp_I_0, "%f\n", (float)time(NULL));
   }
-  */
+  
 
   return 0;
 }
@@ -1446,14 +1442,15 @@ int write_currents_1(float all_currents[12][HISTORY_LENGTH]) {
   }
   
   // save data in current log
-  /*
-  for (uint32_t time_index=0; time_index<HISTORY_LENGTH; time_index++) {
-    for (uint8_t channel=0; channel<6; channel++) {
-      fprintf(fp_I_1, "%f ", all_currents[channel+6][time_index]);
+  if (write_data == 1) {
+    for (uint32_t time_index=0; time_index<HISTORY_LENGTH; time_index++) {
+      for (uint8_t channel=0; channel<6; channel++) {
+        fprintf(fp_I_1, "%f ", all_currents[channel+6][time_index]);
+      }
+      fprintf(fp_I_1, "%f\n", (float)time(NULL));
     }
-    fprintf(fp_I_1, "%f\n", (float)time(NULL));
   }
-  */
+
 
   return 0;
 }
@@ -1486,12 +1483,12 @@ int write_voltages_0(float voltages[6]) {
   }
   
   // save data in voltage log
-  /*
-  for (uint8_t channel=0; channel<6; channel++) {
-    fprintf(fp_V_0, "%f ", voltages[channel]);
+  if (write_data == 1) {
+    for (uint8_t channel=0; channel<6; channel++) {
+      fprintf(fp_V_0, "%f ", voltages[channel]);
+    }
+    fprintf(fp_V_0, "%f\n", (float)time(NULL));
   }
-  fprintf(fp_V_0, "%f\n", (float)time(NULL));
-  */
 
   return 0;
 }
@@ -1525,12 +1522,13 @@ int write_voltages_1(float voltages[6]) {
   }
   
   // save data in voltage log
-  /*
-    for (uint8_t channel=0; channel<6; channel++) {
-      fprintf(fp_V_1, "%f ", voltages[channel]);
-    }
-    fprintf(fp_V_1, "%f\n", (float)time(NULL));
-  */
+  if (write_data == 1) {
+      for (uint8_t channel=0; channel<6; channel++) {
+        fprintf(fp_V_1, "%f ", voltages[channel]);
+      }
+      fprintf(fp_V_1, "%f\n", (float)time(NULL));
+  }
+
 
   return 0;
 }
@@ -1729,8 +1727,11 @@ void *acquire_data(void *arguments) {
 
   if (pico == 0 && use_pico0 == 1) {
     int pipe_initialization_success = initialize_pipes(fd, vfd);
-    int txt_init_success_0 = initialize_txt(0);
-  } else if (pico == 1 && use_pico1 == 1) {
+
+    if (write_data == 1) {
+      int txt_init_success_0 = initialize_txt(0);
+    }
+  } else if (pico == 1 && use_pico1 == 1 && write_data == 1) {
     int txt_init_success_1 = initialize_txt(1);
   }
   msleep(200);
