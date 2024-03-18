@@ -13,7 +13,7 @@ SPIKE_THRESHOLD = 20.
 
 plot_channels = [0, 1, 2, 3, 4, 5]
 
-data_length = 3000
+data_length = 6000
 
 
 
@@ -72,7 +72,7 @@ class App(QtWidgets.QMainWindow):
 
         
         self.plotWidget = pg.PlotWidget()
-        self.plotWidget.setLabel("bottom", "Time (S)")
+        self.plotWidget.setLabel("bottom", "Time (H)")
         self.plotWidget.setLabel("left", "Current (uA)")
         layout.addWidget(self.plotWidget)
 
@@ -106,7 +106,7 @@ class App(QtWidgets.QMainWindow):
         # Set up a timer to update to reset the spike plot
         self.thirdTimer = QtCore.QTimer(self)
         self.thirdTimer.timeout.connect(self.reset_hourly_count)
-        self.thirdTimer.start(60 * 1000)  # Every 300,000 ms or 5 minute
+        self.thirdTimer.start(3600 * 1000)  # Every 300,000 ms or 5 minute
         
         
         central_widget = QtWidgets.QWidget()
