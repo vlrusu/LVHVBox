@@ -1894,8 +1894,10 @@ void sigintHandler(int sig_num) {
     libusb_unref_device(device_0);
     free(device_handle_0);
 
-    fclose(fp_I_0);
-    fclose(fp_V_0);
+    if (write_data == 1) {
+      fclose(fp_I_0);
+      fclose(fp_V_0);
+    }
   }
 
   if (use_pico1 == 1) {
@@ -1903,8 +1905,10 @@ void sigintHandler(int sig_num) {
     libusb_unref_device(device_1);
     free(device_handle_1);
 
-    fclose(fp_I_1);
-    fclose(fp_V_1);
+    if (write_data == 1) {
+      fclose(fp_I_1);
+      fclose(fp_V_1);
+    }
   }
 
   free(hvMCP);
