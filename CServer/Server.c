@@ -1409,14 +1409,12 @@ int write_currents_0(float all_currents[12][HISTORY_LENGTH]) {
   }
   
   // save data in current log
-  /*
   for (uint32_t time_index=0; time_index<HISTORY_LENGTH; time_index++) {
     for (uint8_t channel=0; channel<6; channel++) {
       fprintf(fp_I_0, "%f ", all_currents[channel][time_index]);
     }
     fprintf(fp_I_0, "%f\n", (float)time(NULL));
   }
-  */
 
   return 0;
 }
@@ -1446,14 +1444,12 @@ int write_currents_1(float all_currents[12][HISTORY_LENGTH]) {
   }
   
   // save data in current log
-  /*
   for (uint32_t time_index=0; time_index<HISTORY_LENGTH; time_index++) {
     for (uint8_t channel=0; channel<6; channel++) {
       fprintf(fp_I_1, "%f ", all_currents[channel+6][time_index]);
     }
     fprintf(fp_I_1, "%f\n", (float)time(NULL));
   }
-  */
 
   return 0;
 }
@@ -1486,12 +1482,10 @@ int write_voltages_0(float voltages[6]) {
   }
   
   // save data in voltage log
-  /*
   for (uint8_t channel=0; channel<6; channel++) {
     fprintf(fp_V_0, "%f ", voltages[channel]);
   }
   fprintf(fp_V_0, "%f\n", (float)time(NULL));
-  */
 
   return 0;
 }
@@ -1525,14 +1519,12 @@ int write_voltages_1(float voltages[6]) {
   }
   
   // save data in voltage log
-  /*
     for (uint8_t channel=0; channel<6; channel++) {
       fprintf(fp_V_1, "%f ", voltages[channel]);
     }
     fprintf(fp_V_1, "%f\n", (float)time(NULL));
-  */
 
-  return 0;
+    return 0;
 }
 
 
