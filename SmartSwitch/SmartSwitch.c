@@ -38,6 +38,7 @@ struct Pins {
   uint8_t enablePin;
 } all_pins;
 
+
 PIO pio_0 = pio0; // pio block 0 reference
 PIO pio_1 = pio1; // pio block 1 reference
 
@@ -66,6 +67,9 @@ uint32_t average_current_history_length = 2000;
 #define full_current_history_length 8000
 uint8_t current_buffer_run = 1;
 uint16_t full_position = 0;
+
+const int trip_requirement = 500;
+int remaining_buffer_iterations = 4000;
 
 uint32_t full_current_array[6][full_current_history_length];
 
@@ -133,9 +137,14 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6], uint 
         }
 
       } else if (108 < receive_chars[0] && receive_chars[0] < 115) { // ----- Reset Trip ----- //
+        *current_buffer_run = 1;
+        remaining_buffer_iterations = floor(full_current_history_length/2);
+
         uint8_t tripPin = all_pins.crowbarPins[receive_chars[0] - 109]; // acquire proper crowbar pin
         gpio_put(tripPin, 0); // set relevant crowbar pin low
         *trip_status = *trip_status & ~(1 << receive_chars[0] - 109); // store information that channel is no longer tripped
+
+        sleep_ms(250);
       
       } else if (114 < receive_chars[0] && receive_chars[0] < 121) { // ----- Disable Trip ----- //
         *trip_mask = *trip_mask & ~(1 << (receive_chars[0]-115)); // store that channel is no longer capable of tripping
@@ -204,7 +213,7 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6], uint 
 
       // currently not accounting for pedestal
        for (int i=0; i<10; i++) {
-        if (0) {
+        if (ped_on == 1) {
           temp_currents[i] = full_current_history[channel][*full_position + i] * adc_to_uA - ped_subtraction[channel];
         } else {
           temp_currents[i] = full_current_history[channel][*full_position + i] * adc_to_uA;
@@ -285,7 +294,7 @@ float get_single_voltage(PIO pio, uint sm) // obtains a single non-averaged volt
   return voltage;
 }
 
-void get_all_averaged_currents(PIO pio_0, PIO pio_1, uint sm[], float current_array[6], uint32_t full_current_array[6][full_current_history_length], uint16_t* full_position, uint8_t* current_buffer_run) {
+void get_all_averaged_currents(PIO pio_0, PIO pio_1, uint sm[], float current_array[6], uint32_t full_current_array[6][full_current_history_length], uint16_t* full_position, uint8_t* current_buffer_run, int* remaining_buffer_iterations) {
  for (uint32_t channel = 0; channel < 6; channel++) // initializes each element of current array to zero
  {
   current_array[channel] = 0;
@@ -320,9 +329,11 @@ void get_all_averaged_currents(PIO pio_0, PIO pio_1, uint sm[], float current_ar
 
 
 
-    if ((latest_current_0*adc_to_uA > trip_currents[channel]) && ((trip_mask & (1 << channel)))) {
-      if (num_trigger[channel] > 500) {
+    if ((latest_current_0*adc_to_uA > trip_currents[channel]) && ((trip_mask & (1 << channel))) && *current_buffer_run == 1) {
+      if (num_trigger[channel] > trip_requirement) {
         *current_buffer_run = 0;
+        *remaining_buffer_iterations = floor(full_current_history_length/2);
+
         gpio_put(all_pins.crowbarPins[channel],1);
         trip_status = trip_status | (1 << channel);
         num_trigger[channel] = 0;
@@ -333,9 +344,11 @@ void get_all_averaged_currents(PIO pio_0, PIO pio_1, uint sm[], float current_ar
       num_trigger[channel] -= 1;
     }
 
-    if ((latest_current_1*adc_to_uA > trip_currents[channel+3]) && ((trip_mask & (1 << channel+3)))) {
-      if (num_trigger[channel+3] > 500) {
+    if ((latest_current_1*adc_to_uA > trip_currents[channel+3]) && ((trip_mask & (1 << channel+3))) && *current_buffer_run == 1) {
+      if (num_trigger[channel+3] > trip_requirement) {
         *current_buffer_run = 0;
+        *remaining_buffer_iterations = floor(full_current_history_length/2);
+
         gpio_put(all_pins.crowbarPins[channel+3],1);
         trip_status = trip_status | (1 << channel+3);
         num_trigger[channel+3] = 0;
@@ -346,10 +359,10 @@ void get_all_averaged_currents(PIO pio_0, PIO pio_1, uint sm[], float current_ar
       num_trigger[channel+3] -= 1;
     }
 
+  
 
 
-    
-    if (*current_buffer_run == 1) {
+    if (*remaining_buffer_iterations > 0) {
       // update latest full current, along with its position in rotating buffer
       full_current_array[channel][*full_position] = (uint32_t) latest_current_0;
       full_current_array[channel+3][*full_position] = (uint32_t) latest_current_1;
@@ -359,10 +372,15 @@ void get_all_averaged_currents(PIO pio_0, PIO pio_1, uint sm[], float current_ar
   }
 
   
-  if (*current_buffer_run == 1) {
+  if (*remaining_buffer_iterations > 0) {
     *full_position += 1;
     if (*full_position >= full_current_history_length) {
       *full_position = 0;
+    }
+
+    if (*current_buffer_run == 0 && *remaining_buffer_iterations > 0) {
+      *remaining_buffer_iterations -= 1;
+
     }
   }
 
@@ -375,17 +393,13 @@ void get_all_averaged_currents(PIO pio_0, PIO pio_1, uint sm[], float current_ar
   
  for (uint32_t channel=0; channel<6; channel++) // divide & multiply summed current values by appropriate factors
  {
+  // ped_on == 1
   if (ped_on == 1) {
     current_array[channel] = current_array[channel]*adc_to_uA/200 - ped_subtraction[channel];
   } else {
     current_array[channel] = current_array[channel]*adc_to_uA/200;
   }
-  //current_array[channel] = current_array[channel]*adc_to_uA/200;
-  /*
-  if (current_array[channel] <1) {
-    current_array[channel] += 0.5;
-  }
-  */
+
  }
 
 
@@ -559,7 +573,7 @@ sleep_ms(2000);
 
       // acquire averaged current values
       for (uint32_t i=0; i<1000; i++) {
-        get_all_averaged_currents(pio_0, pio_1, sm_array, channel_current_averaged, full_current_array, &full_position, &current_buffer_run); // get average of 200 full speed current measurements
+        get_all_averaged_currents(pio_0, pio_1, sm_array, channel_current_averaged, full_current_array, &full_position, &current_buffer_run, &remaining_buffer_iterations); // get average of 200 full speed current measurements
 
         // store averaged currents
         if (average_store_position < 1999) // check that current buffer size has not been exceeded

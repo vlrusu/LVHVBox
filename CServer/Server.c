@@ -57,6 +57,9 @@ struct libusb_device_handle *device_handle_1 = NULL;
 int use_pico0 = 1;
 int use_pico1 = 1;
 
+int write_data_0 = 0;
+int write_data_1 = 0;
+
 
 // ----- Thread-related variables -----
 
@@ -1721,8 +1724,11 @@ void *acquire_data(void *arguments) {
 
   if (pico == 0 && use_pico0 == 1) {
     int pipe_initialization_success = initialize_pipes(fd, vfd);
-    int txt_init_success_0 = initialize_txt(0);
-  } else if (pico == 1 && use_pico1 == 1) {
+
+    if (write_data_0 == 1) {
+      int txt_init_success_0 = initialize_txt(0);
+    }
+  } else if (pico == 1 && use_pico1 == 1 && write_data_1 == 1) {
     int txt_init_success_1 = initialize_txt(1);
   }
   msleep(200);
@@ -1787,11 +1793,14 @@ void *acquire_data(void *arguments) {
     if (pico == 0 && use_pico0 == 1) {
       int pipe_voltage_success = write_pipe_voltages(0, vfd, voltages_0);
       int pipe_current_success = write_pipe_currents(fd, common->all_currents);
-      int current_write_success = write_currents_0(common->all_currents);
-      int voltage_write_success = write_voltages_0(voltages_0);
+
+      if (write_data_0 == 1) {
+        int current_write_success = write_currents_0(common->all_currents);
+        int voltage_write_success = write_voltages_0(voltages_0);
+      }
     }
 
-    if (pico == 1 && use_pico1 == 1) {
+    if (pico == 1 && use_pico1 == 1 && write_data_1 == 1) {
       int current_write_success = write_currents_1(common->all_currents);
       int voltage_write_success = write_voltages_1(voltages_1);
     }
@@ -1885,8 +1894,10 @@ void sigintHandler(int sig_num) {
     libusb_unref_device(device_0);
     free(device_handle_0);
 
-    fclose(fp_I_0);
-    fclose(fp_V_0);
+    if (write_data_0 == 1) {
+      fclose(fp_I_0);
+      fclose(fp_V_0);
+    }
   }
 
   if (use_pico1 == 1) {
@@ -1894,8 +1905,10 @@ void sigintHandler(int sig_num) {
     libusb_unref_device(device_1);
     free(device_handle_1);
 
-    fclose(fp_I_1);
-    fclose(fp_V_1);
+    if (write_data_1 == 1) {
+      fclose(fp_I_1);
+      fclose(fp_V_1);
+    }
   }
 
   free(hvMCP);
