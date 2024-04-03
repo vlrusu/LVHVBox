@@ -41,6 +41,8 @@
 
 #include <sys/un.h>
 
+#include "../commands.h"
+
 #define CLIENT_SOCK_FILE "client.sock"
 #define SERVER_SOCK_FILE "/tmp/serversock"
 
@@ -157,7 +159,7 @@ char pipe_path_base[14] = "/tmp/data_pipe";
 char v_pipe_path_base[15] = "/tmp/vdata_pipe";
 
 #define ALPHA 0.1 // Choose a value between 0 and 1. Smaller values result in heavier filtering.
-#define DECIMATION_FACTOR 5
+#define DECIMATION_FACTOR 10
 uint8_t use_pipe = 1; // when server tries to open pipe, will be set to 0 upon fail - will then assume pipe is not to be used
 int num_pipes = 6;
 int pipe_channels[6] = {0, 1, 2, 3, 4, 5};
@@ -399,18 +401,13 @@ void set_hv(int channel, float value) {
 // get_vhv
 void get_vhv(uint8_t channel, int client_addr) {
   float return_val = 0;
-
+  
   if (0 <= channel && channel < 6 && use_pico0 == 1) {
     return_val = voltages_0[channel];
   } else if (5 < channel && channel < 12 && use_pico1 == 1) {
     return_val = voltages_1[channel - 6];
   } else {
-    error_log("Invalid get_vhv channel value");
-    printf("Invalid get_vhv channel value\n");
-
-    write(client_addr, &return_val, sizeof(return_val));
-
-    return;
+    return_val = 0;
   }
 
   int float_channel = (int)channel;
@@ -447,11 +444,15 @@ void get_buffer_status(uint8_t channel, int client_addr) {
   int return_val = 1;
 
   if (0 <= channel && channel < 6 && use_pico0 == 1) {
+    pthread_mutex_lock(&usb0_mutex_lock);
     libusb_bulk_transfer(device_handle_0, 0x02, &send_val, 1, 0, 0);
     libusb_bulk_transfer(device_handle_0, 0x82, input_data, sizeof(input_data), 0, 0);
+    pthread_mutex_unlock(&usb0_mutex_lock);
   } else if (5 < channel & channel < 12 && use_pico1 == 1) {
+    pthread_mutex_lock(&usb1_mutex_lock);
     libusb_bulk_transfer(device_handle_1, 0x02, &send_val, 1, 0, 0);
     libusb_bulk_transfer(device_handle_1, 0x82, input_data, sizeof(input_data), 0, 0);
+    pthread_mutex_unlock(&usb1_mutex_lock);
   } else {
     error_log("Invalid get_buffer_status channel value");
     printf("Invalid get_buffer_status channel value\n");
@@ -478,11 +479,15 @@ void get_slow_read(uint8_t channel, int client_addr) {
   int return_val = 0;
 
   if (0 <= channel && channel < 6 && use_pico0 == 1) {
+    pthread_mutex_lock(&usb0_mutex_lock);
     libusb_bulk_transfer(device_handle_0, 0x02, &send_val, 1, 0, 0);
     libusb_bulk_transfer(device_handle_0, 0x82, input_data, sizeof(input_data), 0, 0);
+    pthread_mutex_unlock(&usb0_mutex_lock);
   } else if (5 < channel && channel < 12 && use_pico1 == 1) {
+    pthread_mutex_lock(&usb1_mutex_lock);
     libusb_bulk_transfer(device_handle_1, 0x02, &send_val, 1, 0, 0);
     libusb_bulk_transfer(device_handle_1, 0x82, input_data, sizeof(input_data), 0, 0);
+    pthread_mutex_unlock(&usb1_mutex_lock);
   } else {
     error_log("Invalid get_slow_read channel");
     printf("Invalid get_slow_read channel\n");
@@ -500,14 +505,16 @@ void get_slow_read(uint8_t channel, int client_addr) {
 }
 
 
-// returns 10 value from full speed current buffer
+// returns 10 values from full speed current buffer
 void current_burst(uint8_t channel, int client_addr) {
   struct libusb_device_handle *device_handle;
 
   if (0 <= channel && channel < 6 && use_pico0 == 1) {
     device_handle = device_handle_0;
+    pthread_mutex_lock(&usb0_mutex_lock);
   } else if (5 < channel && channel < 12 && use_pico1 == 1) {
     device_handle = device_handle_1;
+    pthread_mutex_lock(&usb1_mutex_lock);
   } else {
     error_log("Invalid current_burst channel value");
     printf("Invalid current_burst channel value\n");
@@ -529,20 +536,31 @@ void current_burst(uint8_t channel, int client_addr) {
 
   }
 
+  if (0 <= channel && channel < 6 && use_pico0 == 1) {
+    pthread_mutex_unlock(&usb0_mutex_lock);
+  } else if (5 < channel && channel < 12 && use_pico1 == 1) {
+    pthread_mutex_unlock(&usb1_mutex_lock);
+  }
+
   write(client_addr, &current_array, sizeof(current_array));
+
 
 
 }
 
 void start_buffer(uint8_t channel, int client_addr) {
+  printf("in start_buffer\n");
+
   uint8_t start_buffer = 87;
 
   struct libusb_device_handle *device_handle;
 
   if (0 <= channel && channel < 6 && use_pico0 == 1) {
     device_handle = device_handle_0;
+    pthread_mutex_lock(&usb0_mutex_lock);
   } else if (5 < channel && channel < 12 && use_pico1 == 1) {
     device_handle = device_handle_1;
+    pthread_mutex_lock(&usb1_mutex_lock);
   } else {
     error_log("Invalid start_buffer channel value");
     printf("Invalid start_buffer channel value\n");
@@ -551,6 +569,12 @@ void start_buffer(uint8_t channel, int client_addr) {
   }
 
   libusb_bulk_transfer(device_handle, 0x02, &start_buffer, 1, 0, 0);
+
+  if (0 <= channel && channel < 6 && use_pico0 == 1) {
+    pthread_mutex_unlock(&usb0_mutex_lock);
+  } else if (5 < channel && channel < 12 && use_pico1 == 1) {
+    pthread_mutex_unlock(&usb1_mutex_lock);
+  }
 }
 
 
@@ -561,8 +585,10 @@ void stop_buffer(uint8_t channel, int client_addr) {
 
   if (0 <= channel && channel < 6 && use_pico0 == 1) {
     device_handle = device_handle_0;
+    pthread_mutex_lock(&usb0_mutex_lock);
   } else if (5 < channel && channel < 12 && use_pico1 == 1) {
     device_handle = device_handle_1;
+    pthread_mutex_lock(&usb1_mutex_lock);
   } else {
     error_log("Invalid stop_buffer channel value");
     printf("Invalid stop_buffer channel value\n");
@@ -571,6 +597,13 @@ void stop_buffer(uint8_t channel, int client_addr) {
   }
 
   libusb_bulk_transfer(device_handle, 0x02, &stop_buffer, 1, 0, 0);
+
+  if (0 <= channel && channel < 6 && use_pico0 == 1) {
+    pthread_mutex_unlock(&usb0_mutex_lock);
+  } else if (5 < channel && channel < 12 && use_pico1 == 1) {
+    device_handle = device_handle_1;
+    pthread_mutex_unlock(&usb1_mutex_lock);
+  }
 }
 
 
@@ -665,6 +698,8 @@ void trip(uint8_t channel, int client_addr) {
 
     return;
   }
+
+
 
   
 }
@@ -830,6 +865,9 @@ void trip_status(uint8_t channel, int client_addr) {
     if ((*input_data & 1 << (channel)) == 0) {
       return_val = 0;
     }
+
+
+
   } else if (5 < channel && channel < 12 && use_pico1 == 1) {
     pthread_mutex_lock(&usb1_mutex_lock);
     libusb_bulk_transfer(device_handle_1, 0x02, &send_val, 1, 0, 0);
@@ -842,11 +880,8 @@ void trip_status(uint8_t channel, int client_addr) {
   } else {
     error_log("Invalid trip_status channel value");
     printf("Invalid trip_status channel value\n");
-    free(input_data);
 
-    write(client_addr, &return_val, sizeof(return_val));
 
-    return;
   }
   free(input_data);
 
@@ -1007,69 +1042,77 @@ void readMonI6(uint8_t channel, int client_addr) {
 }
 
 void *command_execution() {
+  uint32_t current_command;
+  uint32_t current_type;
+  uint8_t char_parameter;
+  float float_parameter;
+  int client_addr;
+
   while (1) {
     command check_command = parse_queue();
-    char current_command = check_command.command_name;
-    char current_type = check_command.command_type;
-    uint8_t char_parameter = (uint8_t)check_command.char_parameter-97;
-    float float_parameter = check_command.float_parameter;
-    int client_addr = check_command.client_addr;
+    current_command = check_command.command_name;
+    current_type = check_command.command_type;
+    char_parameter = (uint8_t)check_command.char_parameter-97;
+    //char_parameter = 0;
+
+
+    float_parameter = check_command.float_parameter;
+    client_addr = check_command.client_addr;
+
+
+
+    //printf("current type: %u\n",current_type);
+
+
+
+
+
+ 
+
 
 
     // check if command is hv type, else do nothing
-    if (current_type == 'a') {
+    if (current_type == TYPE_hv) {;
       // select proper hv function
-      if (current_command == 'a') { // get_vhv
+      //printf("in typehv\n");
+
+      fflush(stdout); // not sure why needed, investigate
+      
+      if (current_command == COMMAND_get_vhv) { // get_vhv
         get_vhv(char_parameter, client_addr);
-      } else if (current_command == 'b') { // get_ihv
+      } else if (current_command == COMMAND_get_ihv) { // get_ihv
         get_ihv(char_parameter, client_addr);
-      } else if (current_command == '(') {
-        stop_buffer(char_parameter, client_addr);
-        current_burst(char_parameter, client_addr);
-      } else if (current_command == ')') {
-        start_buffer(char_parameter, client_addr);
-      } else if (current_command == '*') {
-        stop_buffer(char_parameter, client_addr);
-      } else if (current_command == '+') {
-        get_buffer_status(char_parameter, client_addr);
-      } else if (current_command == 'y') {
-        get_slow_read(char_parameter, client_addr);
-      }
-    }
-
-    if (current_type == 'a') {
-      // select proper hv function
-      if (current_command == 'c') { // ramp_hv
+      } else if (current_command == COMMAND_ramp_hv) { // ramp_hv
         ramp_hv(char_parameter, float_parameter, client_addr);
-      } else if (current_command == 'd') { // down_hv
+      } else if (current_command == COMMAND_down_hv) { // down_hv
         down_hv(char_parameter, client_addr);
+      } else if (current_command == COMMAND_current_burst) { // under TYPE_hv to increase speed
+        current_burst(char_parameter, client_addr);
       }
     }
 
+    
 
-    if (current_type == 'b') {
+
+    if (current_type == TYPE_lv) {
+      fflush(stdout);
 
       // select proper lv function
-      if (current_command == 'g') { // readMonV48
-        usleep(1);
+      if (current_command == COMMAND_readMonV48) { // readMonV48
         readMonV48(char_parameter, client_addr);
-      } else if (current_command == 'h') { // readMonI48
-        usleep(1);
+      } else if (current_command == COMMAND_readMonI48) { // readMonI48
         readMonI48(char_parameter, client_addr);
-      } else if (current_command == 'i') { // readMonV6
-        usleep(1);
+      } else if (current_command == COMMAND_readMonV6) { // readMonV6
         readMonV6(char_parameter, client_addr);
-      } else if (current_command == 'j') { // readMonI6
-        usleep(1);
+      } else if (current_command == COMMAND_readMonI6) { // readMonI6
         readMonI6(char_parameter, client_addr);
-      } else if (current_command == 'e') { // powerOn
-        usleep(1);
+      } else if (current_command == COMMAND_powerOn) { // powerOn
         int errval = powerOn(char_parameter, client_addr);
 
         if (errval == -1) {
           error_log("LV powerOn Error");
         }
-      } else if (current_command == 'f') { // powerOff
+      } else if (current_command == COMMAND_powerOff) { // powerOff
         usleep(1);
         int errval = powerOff(char_parameter, client_addr);
 
@@ -1078,7 +1121,7 @@ void *command_execution() {
         }
       }
     }
-    msleep(20);
+    msleep(5);
   }
 }
 
@@ -1086,14 +1129,15 @@ void *command_execution() {
 void *handle_client(void *args) {
   client_data *client_information = args;
   int inner_socket = client_information->client_addr;
-  char buffer[9];
+  char buffer[30];
   char flush_buffer[1];
+  int command_valid;
 
   char* command_log = load_config("Command_Log_File");
   write_log(command_log, "New Client Connected", 3, inner_socket);
 
   while (1) {
-    int return_val = read(inner_socket, buffer, 9);
+    int return_val = read(inner_socket, buffer, 30);
     // if return_val is -1, terminate thread
     if (return_val == 0) {
       printf("Thread terminated \n");
@@ -1101,21 +1145,49 @@ void *handle_client(void *args) {
       return 0;
     }
 
-    if (return_val == 9) {
+    if (return_val == 13) {
+
       // create command
-      add_command.command_name = buffer[0];
-      add_command.command_type = buffer[1];
-      add_command.char_parameter = buffer[2];
-      add_command.float_parameter = atof(&buffer[3]);
+      //add_command.command_name = memcpy(buffer[0]);
+
+      uint32_t zero = buffer[3];
+      uint32_t one = buffer[2] << 8;
+      uint32_t two = buffer[1] << 16;
+      uint32_t three = buffer[0] << 24;
+      add_command.command_name = zero + one + two + three;
+      //add_command.command_name = (uint32_t) 1354023252;
+
+      uint32_t zero_0 = buffer[7];
+      uint32_t one_0 = buffer[6] << 8;
+      uint32_t two_0 = buffer[5] << 16;
+      uint32_t three_0 = buffer[4] << 24;
+      add_command.command_type = zero_0 + one_0 + two_0 + three_0;
+      //add_command.command_type = (uint32_t) 1354023252;
+
+
+      
+      memcpy(&add_command.char_parameter, &buffer[8], 1);
+      memcpy(&add_command.float_parameter, &buffer[9], 4);
+
       add_command.client_addr = inner_socket;
 
+
+    
+
+      // check if command is valid
+      //command_valid = is_command_valid(add_command.command_type, add_command.command_name);
+      
       // add command to linux kernel queue
-      if (add_command.command_type == 'c') {
+      if (add_command.command_type == TYPE_pico) {
         msgsnd(pico_msqid, (void *)&add_command, sizeof(add_command), IPC_NOWAIT);
-      } else {
-        msgsnd(msqid, (void *)&add_command, sizeof(add_command), IPC_NOWAIT);
+      } else if (add_command.command_type == TYPE_hv || add_command.command_type == TYPE_lv) {
+
+
+
+        int snd_success = msgsnd(msqid, (void *)&add_command, sizeof(add_command), 0);
       }
     }
+
   }
 }
 
@@ -1127,8 +1199,8 @@ void *live_status(void *args) {
   while (1) {
     for (int ichannel = 0; ichannel < 6; ichannel++) {
       // create command
-      add_command.command_name = 'o';
-      add_command.command_type = 'c';
+      add_command.command_name = COMMAND_trip_status;
+      add_command.command_type = TYPE_pico;
       add_command.char_parameter = ichannel + 97;
       add_command.float_parameter = 0;
       add_command.client_addr = -9999;
@@ -1144,61 +1216,51 @@ void *live_status(void *args) {
 
 
 void *create_connections() {
-  int new_socket;
-  int fd;
-	struct sockaddr_un addr;
-	int ret;
-	char buff[8192];
-	struct sockaddr_un from;
-	int ok = 1;
-	int len;
-	socklen_t fromlen = sizeof(from);
+  int server_fd, new_socket, valread;
+  struct sockaddr_in address;
+  int opt = 1;
+  int addrlen = sizeof(address);
 
-	if ((fd = socket(AF_UNIX, SOCK_SEQPACKET, 0)) < 0) {
-		perror("socket");
-		ok = 0;
-	}
-
-	if (ok) {
-		memset(&addr, 0, sizeof(addr));
-		addr.sun_family = AF_UNIX;
-		strcpy(addr.sun_path, SERVER_SOCK_FILE);
-		unlink(SERVER_SOCK_FILE);
-		if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-			perror("bind");
-			ok = 0;
-		}
-	}
-
-  
-  if (listen(fd, 20) == -1) {
-      perror("listen");
-      exit(EXIT_FAILURE);
+  // Creating socket file descriptor
+  if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+    perror("socket failed");
+    exit(EXIT_FAILURE);
   }
 
+  // Forcefully attaching socket to the port 8080
+  if (setsockopt(server_fd, SOL_SOCKET,
+                 SO_REUSEADDR | SO_REUSEPORT, &opt,
+                 sizeof(opt))) {
+    perror("setsockopt");
+    exit(EXIT_FAILURE);
+  }
+  address.sin_family = AF_INET;
+  address.sin_addr.s_addr = INADDR_ANY;
+  address.sin_port = htons(PORT);
 
-  
+  // Forcefully attaching socket to the port 8080
+  if (bind(server_fd, (struct sockaddr *)&address,
+           sizeof(address)) < 0) {
+    perror("bind failed");
+    exit(EXIT_FAILURE);
+  }
+
+  if (listen(server_fd, 3) < 0) {
+    perror("listen");
+    exit(EXIT_FAILURE);
+  }
+
   while (1) {
-    if ((new_socket = accept(fd, (struct sockaddr *)&addr,
-                             (socklen_t *)&fromlen)) < 0) {
+    if ((new_socket = accept(server_fd, (struct sockaddr *)&address,
+                             (socklen_t *)&addrlen)) < 0) {
       perror("accept");
       exit(EXIT_FAILURE);
     }
 
-
-
-
-
-
-
-
     pthread_t client_thread;
     pthread_create(&client_thread, NULL, handle_client, &new_socket);
   }
-  
 }
-
-
 
 
 
@@ -1735,54 +1797,75 @@ void *acquire_data(void *arguments) {
 
   while (1) {
     command check_command = parse_pico_queue();
-    char current_command = check_command.command_name;
-    char current_type = check_command.command_type;
+    uint32_t current_command = check_command.command_name;
+    uint32_t current_type = check_command.command_type;
     uint8_t char_parameter = (uint8_t)check_command.char_parameter - 97;
     float float_parameter = check_command.float_parameter;
     int client_addr = check_command.client_addr;
 
+
     // check if command is pico type, else do nothing
-    if (current_type == 'c')
+    if (current_type == TYPE_pico)
     {
+
       // select proper hv function
-      if (current_command == 'k')
+      if (current_command == COMMAND_trip)
       { // trip
         trip(char_parameter, client_addr);
       }
-      else if (current_command == 'l')
+      else if (current_command == COMMAND_reset_trip)
       { // reset trip
         reset_trip(char_parameter, client_addr);
       }
-      else if (current_command == 'm')
+      else if (current_command == COMMAND_disable_trip)
       { // disable trip
         disable_trip(char_parameter, client_addr);
       }
-      else if (current_command == 'n')
+      else if (current_command == COMMAND_enable_trip)
       { // enable trip
         enable_trip(char_parameter, client_addr);
       }
-      else if (current_command == 'p')
+      else if (current_command == COMMAND_set_trip)
       { // set trip
         set_trip(char_parameter, float_parameter, client_addr);
       }
-      else if (current_command == 'o')
+      else if (current_command == COMMAND_trip_status)
       { // trip status
         trip_status(char_parameter, client_addr);
       }
-      else if (current_command == '%')
+      else if (current_command == COMMAND_enable_ped)
       { // enable ped
         enable_ped(char_parameter, client_addr);
       }
-      else if (current_command == '&')
+      else if (current_command == COMMAND_disable_ped)
       { // disable ped
         disable_ped(char_parameter, client_addr);
+      } 
+      else if (current_command == COMMAND_current_start) 
+      {
+        start_buffer(char_parameter, client_addr);
+      } 
+      else if (current_command == COMMAND_current_stop) 
+      {
+        stop_buffer(char_parameter, client_addr);
+      } 
+      else if (current_command == COMMAND_current_buffer_run) 
+      {
+        get_buffer_status(char_parameter, client_addr);
+      } 
+      else if (current_command == COMMAND_get_slow_read) 
+      {
+        get_slow_read(char_parameter, client_addr);
       }
+      
     }
 
+    
     if (pico == 0 && use_pico0 == 1) {
       int current_success_0 = request_averaged_currents(common->all_currents, 0);
       int voltage_success_0 = request_voltages(0);
     }
+    
 
     if (pico == 1 && use_pico1 == 1) {
       int current_success_1 = request_averaged_currents(common->all_currents, 1);
@@ -1872,12 +1955,15 @@ void sigintHandler(int sig_num) {
   Refer http://en.cppreference.com/w/c/program/signal */
   signal(SIGINT, sigintHandler);
 
+  pthread_mutex_destroy(&usb0_mutex_lock);
+  pthread_mutex_destroy(&usb1_mutex_lock);
+
 
   sleep(0.1);
   
   if (use_pico0 == 1) {
     pthread_cancel(acquisition_thread_0);
-    pthread_cancel(status_thread_0);
+    //pthread_cancel(status_thread_0);
   }
 
   if (use_pico1 == 1) {
@@ -1919,6 +2005,10 @@ void sigintHandler(int sig_num) {
 
 int main( int argc, char **argv ) {
   char error_msg[100];
+
+  // initialize mutexes
+  pthread_mutex_init(&usb0_mutex_lock, NULL);
+  pthread_mutex_init(&usb1_mutex_lock, NULL);
 
   // initialize queues
   const char *pathname = "/home/mu2e/LVHVBox/CServer/build";

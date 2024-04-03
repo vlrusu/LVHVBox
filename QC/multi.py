@@ -13,7 +13,8 @@ SPIKE_THRESHOLD = 20.
 
 plot_channels = [0, 1, 2, 3, 4, 5]
 
-data_length = 6000
+data_length = 3300
+
 
 
 
@@ -185,6 +186,7 @@ class App(QtWidgets.QMainWindow):
 
         if self.paused:  # Check if paused
             return
+        
 
         thissample = float(value[self.channel])
         self.data = np.append(self.data, thissample)[-data_length:]

@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 if __name__=="__main__":
     #filename = "full_currents_1728949092.txt"
     
-    filename = "ch1_1.txt"
+    filename = "spark2_ch1.txt"
     #filename = "full_currents_1705610740.txt"
 
     f = open(filename, "r")
@@ -17,7 +17,7 @@ if __name__=="__main__":
     f.close()
 
     float_vals = [float(i) for i in lines]
-    float_vals = [i for i in float_vals]
+    float_valch2_4s = [i for i in float_vals]
     float_vals = np.array(float_vals)
     std = np.std(float_vals)
     #float_vals -= float_vals.mean()

@@ -74,6 +74,7 @@ int remaining_buffer_iterations = 4000;
 uint32_t full_current_array[6][full_current_history_length];
 
 float ped_subtraction[6] = {0, 0, 0, 0, 0, 0};
+float ped_subtraction_stored[6] = {0, 0, 0, 0, 0, 0};
 int ped_on = 1;
 
 void port_init() {
@@ -134,6 +135,9 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6], uint 
         if (*trip_mask & (1 << (receive_chars[0]-103))) {
           gpio_put(tripPin, 1);
           *trip_status = *trip_status | (1 << (receive_chars[0]-103));
+
+          // store ped subtract values from time of trip
+          memcpy(ped_subtraction_stored, ped_subtraction, sizeof(ped_subtraction));
         }
 
       } else if (108 < receive_chars[0] && receive_chars[0] < 115) { // ----- Reset Trip ----- //
@@ -194,6 +198,7 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6], uint 
 
       } else if (receive_chars[0] == 87) { // ----- start current buffer ----- //
         *current_buffer_run = 1;
+        remaining_buffer_iterations = floor(full_current_history_length/2);
 
       } else if (receive_chars[0] == 88) { // ----- stop current buffer ----- //
         *current_buffer_run = 0;
@@ -204,13 +209,9 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6], uint 
 
         *current_buffer_run = 0;
 
-        /*
-        for (uint8_t i=0; i<10; i++) {
-          temp_current = full_current_history[channel][*full_position + i] * adc_to_uA;
-          tud_cdc_write(&temp_current,sizeof(&temp_current));
-        }
-        */
+  
 
+      /*
       // currently not accounting for pedestal
        for (int i=0; i<10; i++) {
         if (ped_on == 1) {
@@ -219,23 +220,37 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6], uint 
           temp_currents[i] = full_current_history[channel][*full_position + i] * adc_to_uA;
         }
        }
-
-
-
-
-
-
-        
-
         tud_cdc_write(temp_currents,sizeof(temp_currents));
         tud_cdc_write_flush();
 
-      
-
-        
         *full_position += 10;
         if (*full_position >= full_current_history_length) {
           *full_position = 0;
+        }
+        */
+
+       int send_index;
+
+       for (int i=0; i<10; i++) {
+        if (*full_position + i < full_current_history_length) {
+          send_index = *full_position + i;
+        } else {
+          send_index = i - (full_current_history_length - *full_position);
+        }
+
+        if (ped_on == 1) {
+          temp_currents[i] = full_current_history[channel][send_index] * adc_to_uA - ped_subtraction_stored[channel];
+        } else {
+          temp_currents[i] = full_current_history[channel][send_index] * adc_to_uA;
+        }
+       }
+
+       tud_cdc_write(temp_currents,sizeof(temp_currents));
+        tud_cdc_write_flush();
+
+       *full_position += 10;
+        if (*full_position >= full_current_history_length) {
+          *full_position -= full_current_history_length;
         }
 
 
@@ -352,6 +367,9 @@ void get_all_averaged_currents(PIO pio_0, PIO pio_1, uint sm[], float current_ar
         gpio_put(all_pins.crowbarPins[channel+3],1);
         trip_status = trip_status | (1 << channel+3);
         num_trigger[channel+3] = 0;
+
+        // store ped subtract values from time of trip
+        memcpy(ped_subtraction_stored, ped_subtraction, sizeof(ped_subtraction));
       } else {
         num_trigger[channel+3] += 1;
       }
@@ -421,7 +439,8 @@ int main(){
 
   board_init(); // tinyUSB formality
   
-  float clkdiv = 34; // set clock divider for PIO
+  //float clkdiv = 34; // set clock divider for PIO
+  float clkdiv = 40;
   uint32_t pio_start_mask = -1; // mask to select which state machines in each PIO block are started
 
   adc_init();
@@ -551,6 +570,12 @@ sleep_ms(2000);
       }
 
       gpio_put(all_pins.P1_0, 1); // put pedestal pin high
+      
+      // update ped_subtraction_stored
+      if (current_buffer_run == 1) {
+        memcpy(ped_subtraction_stored, ped_subtraction, sizeof(ped_subtraction));
+      }
+
       sleep_ms(700);
     }
     
