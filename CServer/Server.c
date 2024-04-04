@@ -549,8 +549,6 @@ void current_burst(uint8_t channel, int client_addr) {
 }
 
 void start_buffer(uint8_t channel, int client_addr) {
-  printf("in start_buffer\n");
-
   uint8_t start_buffer = 87;
 
   struct libusb_device_handle *device_handle;
@@ -609,8 +607,6 @@ void stop_buffer(uint8_t channel, int client_addr) {
 
 // rampHV
 void ramp_hv(uint8_t channel, float voltage, int client_addr) {
-  printf("in ramp_hv\n");
-  //char *command_log = load_config("Command_Log_File");
   char *command_log = "Command_Log_File:../../Logs/command_log.log";
 
   // log ramp_hv command
@@ -785,8 +781,6 @@ void enable_trip(uint8_t channel, int client_addr) {
 
     return;
   }
-
-  
 }
 
 
@@ -865,8 +859,6 @@ void trip_status(uint8_t channel, int client_addr) {
     if ((*input_data & 1 << (channel)) == 0) {
       return_val = 0;
     }
-
-
 
   } else if (5 < channel && channel < 12 && use_pico1 == 1) {
     pthread_mutex_lock(&usb1_mutex_lock);
@@ -1053,29 +1045,12 @@ void *command_execution() {
     current_command = check_command.command_name;
     current_type = check_command.command_type;
     char_parameter = (uint8_t)check_command.char_parameter-97;
-    //char_parameter = 0;
-
 
     float_parameter = check_command.float_parameter;
     client_addr = check_command.client_addr;
 
-
-
-    //printf("current type: %u\n",current_type);
-
-
-
-
-
- 
-
-
-
     // check if command is hv type, else do nothing
     if (current_type == TYPE_hv) {;
-      // select proper hv function
-      //printf("in typehv\n");
-
       fflush(stdout); // not sure why needed, investigate
       
       if (current_command == COMMAND_get_vhv) { // get_vhv
@@ -1146,44 +1121,27 @@ void *handle_client(void *args) {
     }
 
     if (return_val == 13) {
-
-      // create command
-      //add_command.command_name = memcpy(buffer[0]);
-
       uint32_t zero = buffer[3];
       uint32_t one = buffer[2] << 8;
       uint32_t two = buffer[1] << 16;
       uint32_t three = buffer[0] << 24;
       add_command.command_name = zero + one + two + three;
-      //add_command.command_name = (uint32_t) 1354023252;
 
       uint32_t zero_0 = buffer[7];
       uint32_t one_0 = buffer[6] << 8;
       uint32_t two_0 = buffer[5] << 16;
       uint32_t three_0 = buffer[4] << 24;
       add_command.command_type = zero_0 + one_0 + two_0 + three_0;
-      //add_command.command_type = (uint32_t) 1354023252;
-
-
       
       memcpy(&add_command.char_parameter, &buffer[8], 1);
       memcpy(&add_command.float_parameter, &buffer[9], 4);
 
       add_command.client_addr = inner_socket;
 
-
-    
-
-      // check if command is valid
-      //command_valid = is_command_valid(add_command.command_type, add_command.command_name);
-      
       // add command to linux kernel queue
       if (add_command.command_type == TYPE_pico) {
         msgsnd(pico_msqid, (void *)&add_command, sizeof(add_command), IPC_NOWAIT);
       } else if (add_command.command_type == TYPE_hv || add_command.command_type == TYPE_lv) {
-
-
-
         int snd_success = msgsnd(msqid, (void *)&add_command, sizeof(add_command), 0);
       }
     }
@@ -1667,7 +1625,6 @@ int request_averaged_currents(float currents[12][HISTORY_LENGTH], int pico) {
   }
 
   free(input_data);
-
 
   return 0;
 }
