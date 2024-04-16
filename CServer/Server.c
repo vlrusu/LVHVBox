@@ -67,6 +67,7 @@ int write_data_1 = 0;
 
 pthread_t acquisition_thread_0;
 pthread_t acquisition_thread_1;
+pthread_t lv_acquisition_thread;
 pthread_t command_execution_thread;
 pthread_t status_thread_0;
 pthread_t socket_creation_thread;
@@ -83,11 +84,16 @@ int lv_i2cbus;
 static int lv_i2c = 0;
 
 // assorted values to be returned upon client request
-float voltages_0[6];
-float voltages_1[6];
+float voltages_0[6] = {0,0,0,0,0,0};
+float voltages_1[6] = {0,0,0,0,0,0};
 
-float currents_0[6];
-float currents_1[6];
+float currents_0[6] = {0,0,0,0,0,0};
+float currents_1[6] = {0,0,0,0,0,0};
+
+float v48[6] = {0,0,0,0,0,0};
+float i48[6] = {0,0,0,0,0,0};
+float v6[6] = {0,0,0,0,0,0};
+float i6[6] = {0,0,0,0,0,0};
 
 // LV channel information
 uint8_t powerChMap[6] = {5, 6, 7, 2, 3, 4};
@@ -126,7 +132,7 @@ typedef struct
 {
   float all_currents[12][HISTORY_LENGTH];
   uint8_t pico;
-} arg_struct;
+} hv_arg_struct;
 
 
 // ----- Structures used in server communications with clients ----- //
@@ -197,6 +203,8 @@ float i2c_ltc2497(int address, int channelLTC) {
 
   set_slave_addr(lv_i2c, address, 1);
 
+  msleep(150);
+
   //----- WRITE BYTES -----
   block[0] = channelLTC;
   int length = 1;                             //<<< Number of bytes to write
@@ -210,7 +218,7 @@ float i2c_ltc2497(int address, int channelLTC) {
     return -1;
   }
 
-  msleep(500);
+  msleep(150);
 
   //----- READ BYTES -----
   length = 3;                                //<<< Number of bytes to read
@@ -223,6 +231,8 @@ float i2c_ltc2497(int address, int channelLTC) {
 
     return -1;
   }
+
+
 
   uint32_t val = ((block[0] & 0x3f) << 16) + (block[1] << 8) + (block[2] & 0xE0);
 
@@ -921,16 +931,89 @@ void set_trip(uint8_t channel, float value, int client_addr) {
 
 }
 
-// readMonV48
-void readMonV48(uint8_t channel, int client_addr) {
+// updateV48
+void updateV48() {
   uint8_t LTCaddress[6] = {0x26, 0x26, 0x16, 0x16, 0x14, 0x14};
   uint8_t v48map[6] = {6, 0, 6, 0, 6, 0};
-
+  float ret;
   float v48scale = 0.0012089;
+  float acplscale = 8.2;
+
+  for (int channel=0; channel<6; channel++) { 
+    ret = i2c_ltc2497(LTCaddress[channel], (5<<5)+v48map[channel]);
+    ret = ret / (v48scale * acplscale);
+    memcpy(&v48[channel], &ret, sizeof(ret));
+
+  }
+}
+
+// updateI48
+void updateI48() {
+  uint8_t LTCaddress[6] = {0x26, 0x26, 0x16, 0x16, 0x14, 0x14};
+  uint8_t i48map[6] = {7, 1, 7, 1, 7, 1};
+
+  float i48scale = 0.010;
+  float acplscale = 8.2;
+  float ret;
+
+  for (int channel=0; channel<6; channel++) {
+    ret = i2c_ltc2497(LTCaddress[channel], (5<<5)+i48map[channel]);
+    ret = ret / (i48scale * acplscale);
+
+    memcpy(&i48[channel], &ret, sizeof(ret));
+  }
+}
+
+// updateV6
+void updateV6() {
+  uint8_t v6map[6] = {4, 3, 4, 3, 4, 3};
+  uint8_t LTCaddress[6] = {0x26, 0x26, 0x16, 0x16, 0x14, 0x14};
+
+  float v6scale = 0.00857905;
   float acplscale = 8.2;
   float ret = 0;
 
+  for (int channel=0; channel<6; channel++) {
+    ret = i2c_ltc2497(LTCaddress[channel], (5<<5)+v6map[channel]);
+    ret = ret / (v6scale * acplscale);
+
+    memcpy(&v6[channel], &ret, sizeof(ret));
+  }
+}
+
+// updateI6
+void updateI6() {
+  uint8_t LTCaddress[6] = {0x26, 0x26, 0x16, 0x16, 0x14, 0x14};
+  uint8_t i6map[6] = {5, 2, 5, 2, 5, 2};
+
+  float i6scale = 0.010;
+  float acplscale = 8.2;
+  float ret = 0;
+
+  for (int channel=0; channel<6; channel++) {
+    ret = i2c_ltc2497(LTCaddress[channel], (5<<5)+i6map[channel]);
+    ret = ret / (i6scale * acplscale);
+
+    memcpy(&i6[channel], &ret, sizeof(ret));
+  }
+}
+
+// lv_acquisition
+void* lv_acquisition() {
+  while (1) {
+    updateV48();
+    updateI48();
+    updateV6();
+    updateI6();
+  }
+}
+
+
+
+// readMonV48
+void readMonV48(uint8_t channel, int client_addr) {
   if (channel > 5 || channel < 0) {
+    int ret = 0;
     error_log("Invalid readMonV48 channel value");
     printf("Invalid readMonV48 channel value\n");
 
@@ -939,26 +1022,13 @@ void readMonV48(uint8_t channel, int client_addr) {
     return;
   }
 
-  uint8_t index = v48map[channel];
-  uint8_t channelLTC = (5 << 5) + index;
-  uint8_t address = LTCaddress[channel];
-
-  ret = i2c_ltc2497(address, channelLTC);
-  ret = ret / (v48scale * acplscale);
-
-  write(client_addr, &ret, sizeof(ret));
+  write(client_addr, &v48[channel], sizeof(v48[channel]));
 }
 
 // readMonI48
 void readMonI48(uint8_t channel, int client_addr) {
-  uint8_t LTCaddress[6] = {0x26, 0x26, 0x16, 0x16, 0x14, 0x14};
-  uint8_t i48map[6] = {7, 1, 7, 1, 7, 1};
-
-  float i48scale = 0.010;
-  float acplscale = 8.2;
-  float ret = 0;
-
   if (channel > 5 || channel < 0) {
+    int ret = 0;
     error_log("Invalid readMonI48 channel value");
     printf("Invalid readMonI48 channel value\n");
 
@@ -967,25 +1037,12 @@ void readMonI48(uint8_t channel, int client_addr) {
     return;
   }
 
-  uint8_t index = i48map[channel];
-  uint8_t channelLTC = (5 << 5) + index;
-  uint8_t address = LTCaddress[channel];
-
-  ret = i2c_ltc2497(address, channelLTC);
-  ret = ret / (i48scale * acplscale);
-
-  write(client_addr, &ret, sizeof(ret));
+  write(client_addr, &i48[channel], sizeof(i48[channel]));
 }
 // readMonV6
 void readMonV6(uint8_t channel, int client_addr) {
-  uint8_t v6map[6] = {4, 3, 4, 3, 4, 3};
-  uint8_t LTCaddress[6] = {0x26, 0x26, 0x16, 0x16, 0x14, 0x14};
-
-  float v6scale = 0.00857905;
-  float acplscale = 8.2;
-  float ret = 0;
-
   if (channel > 5 || channel < 0) {
+    int ret = 0;
     error_log("Invalid readMonV6 channel value");
     printf("Invalid readMonV6 channel value\n");
 
@@ -994,27 +1051,13 @@ void readMonV6(uint8_t channel, int client_addr) {
     return;
   }
 
-  uint8_t index = v6map[channel];
-  uint8_t channelLTC = (5 << 5) + index;
-  uint8_t address = LTCaddress[channel];
-
-  ret = i2c_ltc2497(address, channelLTC);
-  ret = ret / (v6scale * acplscale);
-
-  write(client_addr, &ret, sizeof(ret));
+  write(client_addr, &v6[channel], sizeof(v6[channel]));
 }
 
 // readMonI6
 void readMonI6(uint8_t channel, int client_addr) {
-  uint8_t addresses[3] = {0x14, 0x16, 0x26};
-  uint8_t LTCaddress[6] = {0x26, 0x26, 0x16, 0x16, 0x14, 0x14};
-  uint8_t i6map[6] = {5, 2, 5, 2, 5, 2};
-
-  float i6scale = 0.010;
-  float acplscale = 8.2;
-  float ret = 0;
-
   if (channel > 5 || channel < 0) {
+    int ret = 0;
     error_log("Invalid readMonI6 channel value");
     printf("Invalid readMonI6 channel value\n");
 
@@ -1023,14 +1066,7 @@ void readMonI6(uint8_t channel, int client_addr) {
     return;
   }
 
-  uint8_t index = i6map[channel];
-  uint8_t channelLTC = (5 << 5) + index;
-  uint8_t address = LTCaddress[channel];
-
-  ret = i2c_ltc2497(address, channelLTC);
-  ret = ret / (i6scale * acplscale);
-
-  write(client_addr, &ret, sizeof(ret));
+  write(client_addr, &i6[channel], sizeof(v6[channel]));
 }
 
 void *command_execution() {
@@ -1728,7 +1764,7 @@ int initialize_txt(int pico) {
 // ----- Code to handle HV data acquisition & storage ----- //
 
 void *acquire_data(void *arguments) {
-  arg_struct *common = arguments;
+  hv_arg_struct *common = arguments;
   int pico = common->pico;
   float last_output[6]; // State for each channel's filter
   int fd[num_pipes];
@@ -1927,6 +1963,8 @@ void sigintHandler(int sig_num) {
     pthread_cancel(acquisition_thread_1);
   }
 
+  pthread_cancel(lv_acquisition_thread);
+
   pthread_cancel(command_execution_thread);
   pthread_cancel(socket_creation_thread);
 
@@ -2084,10 +2122,10 @@ int main( int argc, char **argv ) {
   }
 
   // ----- initialize pico 0 communications, etc ----- //
-  arg_struct args_0;
+  hv_arg_struct args_0;
   args_0.pico = 0;
 
-  arg_struct args_1;
+  hv_arg_struct args_1;
   args_1.pico = 1;
 
 
@@ -2122,6 +2160,9 @@ int main( int argc, char **argv ) {
   if (use_pico1 == 1) {
     pthread_create(&acquisition_thread_1, NULL, acquire_data, &args_1);
   }
+
+  // create lv data acquisition thread
+  pthread_create(&lv_acquisition_thread, NULL, lv_acquisition, NULL);
 
   // create statusing thread
   if (use_pico0 == 1) {
