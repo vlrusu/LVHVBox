@@ -1,4 +1,4 @@
-from PyQt6.QtWidgets import (
+from PyQt5.QtWidgets import (
     QApplication,
     QHBoxLayout,
     QPushButton,
@@ -18,9 +18,9 @@ import os
 import socket
 import time
 
-from PyQt6.QtGui import *
-from PyQt6.QtWidgets import *
-from PyQt6.QtCore import *
+from PyQt5.QtGui import *
+from PyQt5.QtWidgets import *
+from PyQt5.QtCore import *
 
 os.environ["DISPLAY"] = ':0'
 background_color='background-color: white;'
