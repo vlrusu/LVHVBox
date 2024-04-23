@@ -1,9 +1,12 @@
 #define TYPE_hv 142324360
 #define TYPE_lv 122414237
 #define TYPE_pico 131229678
+#define COMMAND_pcb_temp 315284341
+#define COMMAND_pico_current 151432448
 #define COMMAND_current_burst 624449367
 #define COMMAND_current_start 1269904329
 #define COMMAND_current_stop 553757001
+#define COMMAND_update_ped 255761248
 #define COMMAND_current_buffer_run 315399321
 #define COMMAND_trip 1079027224
 #define COMMAND_reset_trip 1029223363

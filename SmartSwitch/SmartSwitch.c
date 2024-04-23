@@ -56,12 +56,6 @@ const float adc_to_V  = 2.5 / pow(2, 15) * 1000;			// ADC full-scale voltage / A
 const float adc_to_uA = (2.5 / pow(2, 15)) / (100 * 101) * 1.E6;
 
 
-//const float adc_to_V  = 2.048 / pow(2, 15) * 1000;
-//const float adc_to_uA = (2.048 / pow(2, 15)) / (24.7 * 475) * 1.E6;
-
-int no_command_count = 0;
-
-
 uint32_t average_current_history_length = 2000;
 #define full_current_history_length 8000
 uint8_t current_buffer_run = 1;
@@ -120,7 +114,7 @@ void variable_init() {
 
 }
 
-void cdc_task(float channel_current_averaged[6], float channel_voltage[6], uint sm[6], uint16_t *burst_position, float trip_currents[6], uint8_t* trip_mask, uint8_t* trip_status, float average_current_history[6][average_current_history_length], uint16_t* average_store_position, uint32_t full_current_history[6][full_current_history_length], uint16_t* full_position, uint8_t* current_buffer_run, uint8_t* slow_read, int* before_trip_allowed)
+void cdc_task(float channel_current_averaged[6], float channel_voltage[6], uint sm[6], uint16_t *burst_position, float trip_currents[6], uint8_t* trip_mask, uint8_t* trip_status, float average_current_history[6][average_current_history_length], uint16_t* average_store_position, uint32_t full_current_history[6][full_current_history_length], uint16_t* full_position, uint8_t* current_buffer_run, uint8_t* slow_read, int* before_trip_allowed, uint sm_array[6])
 {
   if ( tud_cdc_available() )
     {
@@ -215,26 +209,6 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6], uint 
 
         *current_buffer_run = 0;
 
-  
-
-      /*
-      // currently not accounting for pedestal
-       for (int i=0; i<10; i++) {
-        if (ped_on == 1) {
-          temp_currents[i] = full_current_history[channel][*full_position + i] * adc_to_uA - ped_subtraction[channel];
-        } else {
-          temp_currents[i] = full_current_history[channel][*full_position + i] * adc_to_uA;
-        }
-       }
-        tud_cdc_write(temp_currents,sizeof(temp_currents));
-        tud_cdc_write_flush();
-
-        *full_position += 10;
-        if (*full_position >= full_current_history_length) {
-          *full_position = 0;
-        }
-        */
-
        int send_index;
 
        for (int i=0; i<10; i++) {
@@ -299,12 +273,49 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6], uint 
           tud_cdc_write_flush(); // tinyUSB formality
         }
 
+      } else if (receive_chars[0] == 98) { // Send value hv adc value //
+        uint16_t return_val = adc_read();
+     
+
+        tud_cdc_write(&return_val,sizeof(return_val));
+        tud_cdc_write_flush();
+
+      } else if (receive_chars[0] > 38 && receive_chars[0] < 45) {
+        if (ped_on == 1) {
+      gpio_put(all_pins.P1_0, 0); // put pedestal pin low
+      sleep_ms(200);
+
+      // clear rx fifos
+      for (uint32_t i=0; i<3; i++) {
+        pio_sm_clear_fifos(pio_0, sm_array[i]);
+        pio_sm_clear_fifos(pio_1, sm_array[i+3]);
       }
-    } else if (no_command_count > 10) {
-      board_init();
-      no_command_count = 0;
-    } else {
-      no_command_count += 1;
+
+      uint32_t pre_ped_subtraction[6] = {0, 0, 0, 0, 0, 0};
+
+      for (int ped_count=0; ped_count<5000; ped_count++) {
+
+        for (int i=0; i<3; i++) {
+          pre_ped_subtraction[i] += (uint16_t) pio_sm_get_blocking(pio_0, sm_array[i]);
+          pre_ped_subtraction[i+3] += (uint16_t) pio_sm_get_blocking(pio_1, sm_array[i+3]);
+        }
+      }
+
+
+      for (int i=0; i<6; i++) {
+        ped_subtraction[i] = (float) pre_ped_subtraction[i]/5000*adc_to_uA;
+      }
+
+      gpio_put(all_pins.P1_0, 1); // put pedestal pin high
+      
+      // update ped_subtraction_stored
+      if (*current_buffer_run == 1) {
+        memcpy(ped_subtraction_stored, ped_subtraction, sizeof(ped_subtraction));
+      }
+
+      sleep_ms(700);
+    }
+      }
     }
 }
 
@@ -334,7 +345,7 @@ void get_all_averaged_currents(PIO pio_0, PIO pio_1, uint sm[], float current_ar
   {
 
     if (pio_sm_is_rx_fifo_full(pio_0, sm[channel]) || pio_sm_is_rx_fifo_full(pio_0, sm[channel+3])) {
-      if (i>10) {
+      if (i>10 && *before_trip_allowed == 0) {
         slow_read = 1;
       }
     }
@@ -495,7 +506,7 @@ int main(){
   board_init(); // tinyUSB formality
   
   //float clkdiv = 34; // set clock divider for PIO
-  float clkdiv = 43;
+  float clkdiv = 45; // results in 81.967 kHz
   uint32_t pio_start_mask = -1; // mask to select which state machines in each PIO block are started
 
   adc_init();
@@ -593,52 +604,6 @@ sleep_ms(2000);
   {
 
 
-    // ----- Update pedestal subtraction value ----- //
-    // ped_on == 1
-
-    
-    if (ped_on == 1) {
-      gpio_put(all_pins.P1_0, 0); // put pedestal pin low
-      sleep_ms(200);
-
-      // clear rx fifos
-      for (uint32_t i=0; i<3; i++) {
-        pio_sm_clear_fifos(pio_0, sm_array[i]);
-        pio_sm_clear_fifos(pio_1, sm_array[i+3]);
-      }
-
-      
-      
-      uint32_t pre_ped_subtraction[6] = {0, 0, 0, 0, 0, 0};
-
-      for (int ped_count=0; ped_count<5000; ped_count++) {
-
-        for (int i=0; i<3; i++) {
-          pre_ped_subtraction[i] += (uint16_t) pio_sm_get_blocking(pio_0, sm_array[i]);
-          pre_ped_subtraction[i+3] += (uint16_t) pio_sm_get_blocking(pio_1, sm_array[i+3]);
-        }
-      }
-
-
-      for (int i=0; i<6; i++) {
-        ped_subtraction[i] = (float) pre_ped_subtraction[i]/5000*adc_to_uA;
-      }
-
-      gpio_put(all_pins.P1_0, 1); // put pedestal pin high
-      
-      // update ped_subtraction_stored
-      if (current_buffer_run == 1) {
-        memcpy(ped_subtraction_stored, ped_subtraction, sizeof(ped_subtraction));
-      }
-
-      sleep_ms(700);
-    }
-    
-
-
-
-
-
     // ----- Collect averaged current measurements ----- //
 
     for (int j=0; j<35; j++) {
@@ -671,7 +636,7 @@ sleep_ms(2000);
         
     
         // cdc_task reads in commands from PI via usb and responds appropriately
-        cdc_task(channel_current_averaged, channel_voltage, sm_array, &burst_position, trip_currents, &trip_mask, &trip_status, average_current_history, &average_store_position, full_current_array, &full_position, &current_buffer_run, &slow_read, &before_trip_allowed);
+        cdc_task(channel_current_averaged, channel_voltage, sm_array, &burst_position, trip_currents, &trip_mask, &trip_status, average_current_history, &average_store_position, full_current_array, &full_position, &current_buffer_run, &slow_read, &before_trip_allowed, sm_array);
         tud_task(); // tinyUSB formality
       }
 
@@ -681,7 +646,7 @@ sleep_ms(2000);
       sleep_ms(1); // delay is longer than ideal, but seems to be necessary, or voltage data will be polluted
 
 
-      cdc_task(channel_current_averaged, channel_voltage, sm_array, &burst_position, trip_currents, &trip_mask, &trip_status, average_current_history, &average_store_position, full_current_array, &full_position, &current_buffer_run, &slow_read, &before_trip_allowed);
+      cdc_task(channel_current_averaged, channel_voltage, sm_array, &burst_position, trip_currents, &trip_mask, &trip_status, average_current_history, &average_store_position, full_current_array, &full_position, &current_buffer_run, &slow_read, &before_trip_allowed, sm_array);
       tud_task();
 
       // clear rx fifos, otherwise data can be polluted by previous current measurements

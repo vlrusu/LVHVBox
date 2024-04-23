@@ -23,6 +23,8 @@ cmds = {'get_vhv',
     'disable_trip',
     'enable_trip',
     'trip_status',
+    'pcb_temp',
+    'pico_current',
     'set_trip',
     'powerOn',
     'powerOff',
@@ -250,6 +252,31 @@ def process_command(line):
             return_val = int(temp[0])
 
             print("Trip status: " + str(return_val))
+
+        elif keys[0] == "pcb_temp":
+        
+            command_pcb_temp = bitstring_to_bytes(command_dict["COMMAND_pcb_temp"])
+            type_pico = bitstring_to_bytes(command_dict["TYPE_pico"])
+            padding = bytearray(5)
+            command_string = command_pcb_temp + type_pico + padding
+
+            sock.send(command_string)
+            temp = sock.recv(1024)
+            return_val = round(process_float(temp),2)
+
+            print("PCB Temperature: " + str(return_val) + " C")
+
+        elif keys[0] == "pico_current":
+            command_pico_current = bitstring_to_bytes(command_dict["COMMAND_pico_current"])
+            type_pico = bitstring_to_bytes(command_dict["TYPE_pico"])
+            padding = bytearray(5)
+            command_string = command_pico_current + type_pico + padding
+            
+            sock.send(command_string)
+            temp = sock.recv(1024)
+            return_val = round(process_float(temp),2)
+
+            print("Pico Current: " + str(return_val) + " A")
         
         
         elif keys[0] == "get_slow_read":
@@ -293,6 +320,18 @@ def process_command(line):
             padding = bytearray(4)
             command_string = command_current_stop + type_pico + bits_channel + padding
 
+            sock.send(command_string)
+
+        elif keys[0] == "update_ped":
+            channel = int(keys[1])
+            assert 0 <= channel <= 11
+
+            command_update_ped = bitstring_to_bytes(command_dict["COMMAND_current_stop"])
+            type_pico = bitstring_to_bytes(command_dict["TYPE_pico"])
+            bits_channel = (channel+32).to_bytes(1, byteorder='big')
+            padding = bytearray(4)
+            command_string = command_update_ped + type_pico + bits_channel + padding
+            
             sock.send(command_string)
         
 

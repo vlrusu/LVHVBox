@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 
 # Open file and read data into numpy array
 
-filename = "nomod.txt"
+filename = "sw40_ped_nohv_0.txt"
     #filename = "full_currents_1705610740.txt"
 
 f = open(filename, "r")
@@ -41,7 +41,7 @@ data = np.array(data)
 # Separate time column from signal column
 
 #time = [(1./794.6) * i for i in range(len(data))]
-time = [(1./163400) * i for i in range(len(data))]
+time = [(1./82000) * i for i in range(len(data))]
 
 plt.scatter(time,data)
 plt.show()

@@ -94,6 +94,7 @@ float v48[6] = {0,0,0,0,0,0};
 float i48[6] = {0,0,0,0,0,0};
 float v6[6] = {0,0,0,0,0,0};
 float i6[6] = {0,0,0,0,0,0};
+float t48[6] = {0,0,0,0,0,0};
 
 // hv and lv mutexes
 pthread_mutex_t hvv0_mutex_lock;
@@ -104,6 +105,7 @@ pthread_mutex_t v48_mutex_lock;
 pthread_mutex_t i48_mutex_lock;
 pthread_mutex_t v6_mutex_lock;
 pthread_mutex_t i6_mutex_lock;
+
 
 // LV channel information
 uint8_t powerChMap[6] = {5, 6, 7, 2, 3, 4};
@@ -213,7 +215,7 @@ float i2c_ltc2497(int address, int channelLTC) {
 
   set_slave_addr(lv_i2c, address, 1);
 
-  msleep(150);
+  msleep(200);
 
   //----- WRITE BYTES -----
   block[0] = channelLTC;
@@ -228,7 +230,7 @@ float i2c_ltc2497(int address, int channelLTC) {
     return -1;
   }
 
-  msleep(150);
+  msleep(200);
 
   //----- READ BYTES -----
   length = 3;                                //<<< Number of bytes to read
@@ -423,13 +425,13 @@ void get_vhv(uint8_t channel, int client_addr) {
   float return_val = 0;
   
   if (0 <= channel && channel < 6 && use_pico0 == 1) {
-    pthread_mutex_lock(&hvv0_mutex_lock);
+    //pthread_mutex_lock(&hvv0_mutex_lock);
     return_val = voltages_0[channel];
-    pthread_mutex_unlock(&hvv0_mutex_lock);
+    //pthread_mutex_unlock(&hvv0_mutex_lock);
   } else if (5 < channel && channel < 12 && use_pico1 == 1) {
-    pthread_mutex_lock(&hvv1_mutex_lock);
+    //pthread_mutex_lock(&hvv1_mutex_lock);
     return_val = voltages_1[channel - 6];
-    pthread_mutex_unlock(&hvv1_mutex_lock);
+    //pthread_mutex_unlock(&hvv1_mutex_lock);
   } else {
     return_val = 0;
   }
@@ -444,13 +446,13 @@ void get_ihv(uint8_t channel, int client_addr) {
   float return_val = 0;
 
   if (0 <= channel && channel < 6 && use_pico0 == 1) {
-    pthread_mutex_lock(&hvi0_mutex_lock);
+    //pthread_mutex_lock(&hvi0_mutex_lock);
     return_val = currents_0[channel];
-    pthread_mutex_unlock(&hvi0_mutex_lock);
+    //pthread_mutex_unlock(&hvi0_mutex_lock);
   } else if (5 < channel && channel < 12 && use_pico1 == 1) {
-    pthread_mutex_lock(&hvi1_mutex_lock);
+    //pthread_mutex_lock(&hvi1_mutex_lock);
     return_val = currents_1[channel - 6];
-    pthread_mutex_unlock(&hvi1_mutex_lock);
+    //pthread_mutex_unlock(&hvi1_mutex_lock);
   } else {
     error_log("Invalid get_ihv channel value");
     printf("Invalid get_ihv channel value\n");
@@ -623,6 +625,35 @@ void stop_buffer(uint8_t channel, int client_addr) {
   }
 
   libusb_bulk_transfer(device_handle, 0x02, &stop_buffer, 1, 0, 0);
+
+  if (0 <= channel && channel < 6 && use_pico0 == 1) {
+    pthread_mutex_unlock(&usb0_mutex_lock);
+  } else if (5 < channel && channel < 12 && use_pico1 == 1) {
+    device_handle = device_handle_1;
+    pthread_mutex_unlock(&usb1_mutex_lock);
+  }
+}
+
+
+// update_ped
+void update_ped(uint8_t channel, int client_addr) {
+  uint8_t send_char = channel + 39;
+  struct libusb_device_handle *device_handle;
+
+  if (0 <= channel && channel < 6 && use_pico0 == 1) {
+    device_handle = device_handle_0;
+    pthread_mutex_lock(&usb0_mutex_lock);
+  } else if (5 < channel && channel < 12 && use_pico1 == 1) {
+    device_handle = device_handle_1;
+    pthread_mutex_lock(&usb1_mutex_lock);
+  } else {
+    error_log("Invalid update_ped channel value");
+    printf("Invalid update_ped channel value\n");
+
+    return;
+  }
+
+  libusb_bulk_transfer(device_handle, 0x02, &send_char, 1, 0, 0);
 
   if (0 <= channel && channel < 6 && use_pico0 == 1) {
     pthread_mutex_unlock(&usb0_mutex_lock);
@@ -868,6 +899,48 @@ void disable_ped(uint8_t channel, int client_addr) {
   
 }
 
+// pcb_temp
+void pcb_temp(int client_addr) {
+  uint8_t send_val = 98;
+  char *input_data;
+  input_data = (char *)malloc(2);
+  float return_val = 0;
+  uint16_t preval;
+
+  if (use_pico1 == 1) {
+    pthread_mutex_lock(&usb1_mutex_lock);
+    libusb_bulk_transfer(device_handle_1, 0x02, &send_val, 1, 0, 0);
+    libusb_bulk_transfer(device_handle_1, 0x82, input_data, sizeof(input_data), 0, 0);
+    pthread_mutex_unlock(&usb1_mutex_lock);
+
+    memcpy(&preval, input_data, 2);
+    return_val = preval*3.3/4096;
+    return_val = 1.8455 - return_val;
+    return_val /= 0.01123;
+  }
+  write(client_addr, &return_val, sizeof(return_val));
+}
+
+// pico_current
+void pico_current(int client_addr) {
+  uint8_t send_val = 98;
+  char *input_data;
+  input_data = (char *)malloc(2);
+  float return_val = 0;
+  uint16_t preval;
+
+  if (use_pico0 == 1) {
+    pthread_mutex_lock(&usb0_mutex_lock);
+    libusb_bulk_transfer(device_handle_0, 0x02, &send_val, 1, 0, 0);
+    libusb_bulk_transfer(device_handle_0, 0x82, input_data, sizeof(input_data), 0, 0);
+    pthread_mutex_unlock(&usb0_mutex_lock);
+
+
+    memcpy(&preval, input_data, 2);
+    return_val = preval*3.3/4096;
+  }
+  write(client_addr, &return_val, sizeof(return_val));
+}
 
 // trip_status
 void trip_status(uint8_t channel, int client_addr) {
@@ -986,6 +1059,27 @@ void updateI48() {
   }
 }
 
+// updateT48
+void updateT48() {
+  uint8_t LTCaddress[6] = {0x26, 0x26, 0x16, 0x16, 0x14, 0x14};
+  uint8_t t48map[6] = {8, 2, 8, 2, 8, 2};
+
+  float t48scale = 0.010;
+  float acplscale = 8.2;
+  float ret;
+
+  for (int channel=0; channel<6; channel++) {
+    ret = i2c_ltc2497(LTCaddress[channel], (5<<5)+t48map[channel]);
+
+    ret = ret / (t48scale * acplscale);
+
+    //pthread_mutex_lock(&t48_mutex_lock);
+    memcpy(&t48[channel], &ret, sizeof(ret));
+    //pthread_mutex_unlock(&i48_mutex_lock);
+
+  }
+}
+
 // updateV6
 void updateV6() {
   uint8_t v6map[6] = {4, 3, 4, 3, 4, 3};
@@ -1031,6 +1125,7 @@ void* lv_acquisition() {
     updateI48();
     updateV6();
     updateI6();
+    updateT48();
   }
 }
 
@@ -1852,6 +1947,14 @@ void *acquire_data(void *arguments) {
       { // trip status
         trip_status(char_parameter, client_addr);
       }
+      else if (current_command == COMMAND_pcb_temp)
+      {
+        pcb_temp(client_addr);
+      }
+      else if (current_command == COMMAND_pico_current)
+      {
+        pico_current(client_addr);
+      }
       else if (current_command == COMMAND_enable_ped)
       { // enable ped
         enable_ped(char_parameter, client_addr);
@@ -1868,6 +1971,11 @@ void *acquire_data(void *arguments) {
       {
         stop_buffer(char_parameter, client_addr);
       } 
+      else if (current_command == COMMAND_update_ped)
+      {
+        printf("hiiii\n");
+        update_ped(char_parameter, client_addr);
+      }
       else if (current_command == COMMAND_current_buffer_run) 
       {
         get_buffer_status(char_parameter, client_addr);
@@ -2031,14 +2139,15 @@ int main( int argc, char **argv ) {
   pthread_mutex_init(&usb0_mutex_lock, NULL);
   pthread_mutex_init(&usb1_mutex_lock, NULL);
 
-  pthread_mutex_init(&hvv0_mutex_lock, NULL);
-  pthread_mutex_init(&hvv1_mutex_lock, NULL);
-  pthread_mutex_init(&hvi0_mutex_lock, NULL);
-  pthread_mutex_init(&hvi1_mutex_lock, NULL);
+  //pthread_mutex_init(&hvv0_mutex_lock, NULL);
+  //pthread_mutex_init(&hvv1_mutex_lock, NULL);
+  //pthread_mutex_init(&hvi0_mutex_lock, NULL);
+  //pthread_mutex_init(&hvi1_mutex_lock, NULL);
   pthread_mutex_init(&v48_mutex_lock, NULL);
   pthread_mutex_init(&i48_mutex_lock, NULL);
   pthread_mutex_init(&v6_mutex_lock, NULL);
   pthread_mutex_init(&i6_mutex_lock, NULL);
+
 
   // initialize queues
   const char *pathname = "/home/mu2e/LVHVBox/CServer/build";
