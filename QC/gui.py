@@ -93,7 +93,7 @@ class Window(QMainWindow):
         type_hv = bitstring_to_bytes(self.command_dict["TYPE_hv"])
 
         for channel in range(12):
-            bits_channel = (channel+97).to_bytes(1, byteorder='big')
+            bits_channel = (channel).to_bytes(1, byteorder='big')
             padding = bytearray(4)
             command_string = command_get_vhv + type_hv + bits_channel + padding
 
@@ -107,7 +107,7 @@ class Window(QMainWindow):
         type_hv = bitstring_to_bytes(self.command_dict["TYPE_hv"])
 
         for channel in range(12):
-            bits_channel = (channel+97).to_bytes(1, byteorder='big')
+            bits_channel = (channel).to_bytes(1, byteorder='big')
             padding = bytearray(4)
             command_string = command_get_ihv + type_hv + bits_channel + padding
 
@@ -121,7 +121,7 @@ class Window(QMainWindow):
         type_lv = bitstring_to_bytes(self.command_dict["TYPE_lv"])
 
         for channel in range(6):
-            bits_channel = (channel+97).to_bytes(1, byteorder='big')
+            bits_channel = (channel).to_bytes(1, byteorder='big')
             padding = bytearray(4)
             command_string = command_readMonV48 + type_lv + bits_channel + padding
 
@@ -135,7 +135,7 @@ class Window(QMainWindow):
         type_lv = bitstring_to_bytes(self.command_dict["TYPE_lv"])
 
         for channel in range(6):
-            bits_channel = (channel+97).to_bytes(1, byteorder='big')
+            bits_channel = (channel).to_bytes(1, byteorder='big')
             padding = bytearray(4)
             command_string = command_readMonI48 + type_lv + bits_channel + padding
 
@@ -149,7 +149,7 @@ class Window(QMainWindow):
         type_lv = bitstring_to_bytes(self.command_dict["TYPE_lv"])
 
         for channel in range(6):
-            bits_channel = (channel+97).to_bytes(1, byteorder='big')
+            bits_channel = (channel).to_bytes(1, byteorder='big')
             padding = bytearray(4)
             command_string = command_readMonV6 + type_lv + bits_channel + padding
 
@@ -163,7 +163,7 @@ class Window(QMainWindow):
         type_lv = bitstring_to_bytes(self.command_dict["TYPE_lv"])
 
         for channel in range(6):
-            bits_channel = (channel+97).to_bytes(1, byteorder='big')
+            bits_channel = (channel).to_bytes(1, byteorder='big')
             padding = bytearray(4)
             command_string = command_readMonI6 + type_lv + bits_channel + padding
 

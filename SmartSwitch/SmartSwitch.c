@@ -62,7 +62,7 @@ uint8_t current_buffer_run = 1;
 uint16_t full_position = 0;
 int before_trip_allowed = 0;
 
-const int trip_requirement = 30;
+int trip_requirement[6] = {500, 500, 500, 500, 500, 500};
 int remaining_buffer_iterations = 4000;
 
 uint32_t full_current_array[6][full_current_history_length];
@@ -114,7 +114,7 @@ void variable_init() {
 
 }
 
-void cdc_task(float channel_current_averaged[6], float channel_voltage[6], uint sm[6], uint16_t *burst_position, float trip_currents[6], uint8_t* trip_mask, uint8_t* trip_status, float average_current_history[6][average_current_history_length], uint16_t* average_store_position, uint32_t full_current_history[6][full_current_history_length], uint16_t* full_position, uint8_t* current_buffer_run, uint8_t* slow_read, int* before_trip_allowed, uint sm_array[6])
+void cdc_task(float channel_current_averaged[6], float channel_voltage[6], uint sm[6], uint16_t *burst_position, float trip_currents[6], uint8_t* trip_mask, uint8_t* trip_status, float average_current_history[6][average_current_history_length], uint16_t* average_store_position, uint32_t full_current_history[6][full_current_history_length], uint16_t* full_position, uint8_t* current_buffer_run, uint8_t* slow_read, int* before_trip_allowed, uint sm_array[6], int trip_requirement[6])
 {
   if ( tud_cdc_available() )
     {
@@ -314,8 +314,20 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6], uint 
       }
 
       sleep_ms(700);
-    }
       }
+    } else if (receive_chars[0] > 44 && receive_chars[0] < 51) { // set new trip count requirement
+
+      // join receive_chars into a single 16 bit unsigned integer
+        uint16_t one = receive_chars[2] << 8;
+        uint16_t two = receive_chars[1] + one;
+        int intval = (int) two;
+
+        memcpy(&trip_requirement[receive_chars[0]-45], &intval, 4);
+    }
+    
+    
+    
+    
     }
 }
 
@@ -386,7 +398,7 @@ void get_all_averaged_currents(PIO pio_0, PIO pio_1, uint sm[], float current_ar
   // check if any trip counts have been exceeded
   int trip_required = 0;
   for (int channel=0; channel<6; channel++) {
-      if (num_trigger[channel] >= trip_requirement) {
+      if (num_trigger[channel] >= trip_requirement[channel]) {
           trip_required = 1;
 
           // set all num_triggers to zero
@@ -424,7 +436,7 @@ void get_all_averaged_currents(PIO pio_0, PIO pio_1, uint sm[], float current_ar
        float current_sums[6] = {0, 0, 0, 0, 0, 0};
        int read_index;
        for (int channel_index=0; channel_index<6; channel_index++) {
-        for (int current_index=0; current_index<trip_requirement; current_index ++) {
+        for (int current_index=0; current_index<25; current_index ++) {
           if (*full_position - current_index < 0) {
             read_index = full_current_history_length - current_index;
           } else {
@@ -636,7 +648,7 @@ sleep_ms(2000);
         
     
         // cdc_task reads in commands from PI via usb and responds appropriately
-        cdc_task(channel_current_averaged, channel_voltage, sm_array, &burst_position, trip_currents, &trip_mask, &trip_status, average_current_history, &average_store_position, full_current_array, &full_position, &current_buffer_run, &slow_read, &before_trip_allowed, sm_array);
+        cdc_task(channel_current_averaged, channel_voltage, sm_array, &burst_position, trip_currents, &trip_mask, &trip_status, average_current_history, &average_store_position, full_current_array, &full_position, &current_buffer_run, &slow_read, &before_trip_allowed, sm_array, trip_requirement);
         tud_task(); // tinyUSB formality
       }
 
@@ -646,7 +658,7 @@ sleep_ms(2000);
       sleep_ms(1); // delay is longer than ideal, but seems to be necessary, or voltage data will be polluted
 
 
-      cdc_task(channel_current_averaged, channel_voltage, sm_array, &burst_position, trip_currents, &trip_mask, &trip_status, average_current_history, &average_store_position, full_current_array, &full_position, &current_buffer_run, &slow_read, &before_trip_allowed, sm_array);
+      cdc_task(channel_current_averaged, channel_voltage, sm_array, &burst_position, trip_currents, &trip_mask, &trip_status, average_current_history, &average_store_position, full_current_array, &full_position, &current_buffer_run, &slow_read, &before_trip_allowed, sm_array, trip_requirement);
       tud_task();
 
       // clear rx fifos, otherwise data can be polluted by previous current measurements

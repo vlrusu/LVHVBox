@@ -119,7 +119,7 @@ def process_command(line):
 
             command_get_vhv = bitstring_to_bytes(command_dict["COMMAND_get_vhv"])
             type_hv = bitstring_to_bytes(command_dict["TYPE_hv"])
-            bits_channel = (channel+97).to_bytes(1, byteorder='big')
+            bits_channel = (channel).to_bytes(1, byteorder='big')
             padding = bytearray(4)
             command_string = command_get_vhv + type_hv + bits_channel + padding
 
@@ -137,7 +137,7 @@ def process_command(line):
 
             command_get_ihv = bitstring_to_bytes(command_dict["COMMAND_get_ihv"])
             type_hv = bitstring_to_bytes(command_dict["TYPE_hv"])
-            bits_channel = (channel+97).to_bytes(1, byteorder='big')
+            bits_channel = (channel).to_bytes(1, byteorder='big')
             padding = bytearray(4)
             command_string = command_get_ihv + type_hv + bits_channel + padding
 
@@ -154,7 +154,7 @@ def process_command(line):
 
             command_readMonV48 = bitstring_to_bytes(command_dict["COMMAND_readMonV48"])
             type_lv = bitstring_to_bytes(command_dict["TYPE_lv"])
-            bits_channel = (channel+97).to_bytes(1, byteorder='big')
+            bits_channel = (channel).to_bytes(1, byteorder='big')
             padding = bytearray(4)
             command_string = command_readMonV48 + type_lv + bits_channel + padding
 
@@ -171,7 +171,7 @@ def process_command(line):
 
             command_readMonI48 = bitstring_to_bytes(command_dict["COMMAND_readMonI48"])
             type_lv = bitstring_to_bytes(command_dict["TYPE_lv"])
-            bits_channel = (channel+97).to_bytes(1, byteorder='big')
+            bits_channel = (channel).to_bytes(1, byteorder='big')
             padding = bytearray(4)
             command_string = command_readMonI48 + type_lv + bits_channel + padding
 
@@ -189,7 +189,7 @@ def process_command(line):
 
             command_readMonV6 = bitstring_to_bytes(command_dict["COMMAND_readMonV6"])
             type_lv = bitstring_to_bytes(command_dict["TYPE_lv"])
-            bits_channel = (channel+97).to_bytes(1, byteorder='big')
+            bits_channel = (channel).to_bytes(1, byteorder='big')
             padding = bytearray(4)
             command_string = command_readMonV6 + type_lv + bits_channel + padding
 
@@ -207,7 +207,7 @@ def process_command(line):
 
             command_readMonI6 = bitstring_to_bytes(command_dict["COMMAND_readMonI6"])
             type_lv = bitstring_to_bytes(command_dict["TYPE_lv"])
-            bits_channel = (channel+97).to_bytes(1, byteorder='big')
+            bits_channel = (channel).to_bytes(1, byteorder='big')
             padding = bytearray(4)
             command_string = command_readMonI6 + type_lv + bits_channel + padding
 
@@ -225,7 +225,7 @@ def process_command(line):
 
             command_current_buffer_run = bitstring_to_bytes(command_dict["COMMAND_current_buffer_run"])
             type_pico = bitstring_to_bytes(command_dict["TYPE_pico"])
-            bits_channel = (channel+97).to_bytes(1, byteorder='big')
+            bits_channel = (channel).to_bytes(1, byteorder='big')
             padding = bytearray(4)
             command_string = command_current_buffer_run + type_pico + bits_channel + padding
 
@@ -242,7 +242,7 @@ def process_command(line):
 
             command_current_buffer_run = bitstring_to_bytes(command_dict["COMMAND_trip_status"])
             type_pico = bitstring_to_bytes(command_dict["TYPE_pico"])
-            bits_channel = (channel+97).to_bytes(1, byteorder='big')
+            bits_channel = (channel).to_bytes(1, byteorder='big')
             padding = bytearray(4)
             command_string = command_current_buffer_run + type_pico + bits_channel + padding
 
@@ -285,7 +285,7 @@ def process_command(line):
 
             command_get_slow_read = bitstring_to_bytes(command_dict["COMMAND_get_slow_read"])
             type_pico = bitstring_to_bytes(command_dict["TYPE_pico"])
-            bits_channel = (channel+97).to_bytes(1, byteorder='big')
+            bits_channel = (channel).to_bytes(1, byteorder='big')
             padding = bytearray(4)
             command_string = command_get_slow_read + type_pico + bits_channel + padding
 
@@ -303,7 +303,7 @@ def process_command(line):
 
             command_current_start = bitstring_to_bytes(command_dict["COMMAND_current_start"])
             type_pico = bitstring_to_bytes(command_dict["TYPE_pico"])
-            bits_channel = (channel+97).to_bytes(1, byteorder='big')
+            bits_channel = (channel).to_bytes(1, byteorder='big')
             padding = bytearray(4)
             command_string = command_current_start + type_pico + bits_channel + padding
 
@@ -316,19 +316,20 @@ def process_command(line):
 
             command_current_stop = bitstring_to_bytes(command_dict["COMMAND_current_stop"])
             type_pico = bitstring_to_bytes(command_dict["TYPE_pico"])
-            bits_channel = (channel+97).to_bytes(1, byteorder='big')
+            bits_channel = (channel).to_bytes(1, byteorder='big')
             padding = bytearray(4)
             command_string = command_current_stop + type_pico + bits_channel + padding
 
             sock.send(command_string)
 
         elif keys[0] == "update_ped":
+
             channel = int(keys[1])
             assert 0 <= channel <= 11
 
-            command_update_ped = bitstring_to_bytes(command_dict["COMMAND_current_stop"])
+            command_update_ped = bitstring_to_bytes(command_dict["COMMAND_update_ped"])
             type_pico = bitstring_to_bytes(command_dict["TYPE_pico"])
-            bits_channel = (channel+32).to_bytes(1, byteorder='big')
+            bits_channel = (channel).to_bytes(1, byteorder='big')
             padding = bytearray(4)
             command_string = command_update_ped + type_pico + bits_channel + padding
             
@@ -341,7 +342,7 @@ def process_command(line):
 
             command_down_hv = bitstring_to_bytes(command_dict["COMMAND_down_hv"])
             type_hv = bitstring_to_bytes(command_dict["TYPE_hv"])
-            bits_channel = (channel+97).to_bytes(1, byteorder='big')
+            bits_channel = (channel).to_bytes(1, byteorder='big')
             padding = bytearray(4)
             command_string = command_down_hv + type_hv + bits_channel + padding
 
@@ -354,7 +355,7 @@ def process_command(line):
 
             command_trip = bitstring_to_bytes(command_dict["COMMAND_trip"])
             type_pico = bitstring_to_bytes(command_dict["TYPE_pico"])
-            bits_channel = (channel+97).to_bytes(1, byteorder='big')
+            bits_channel = (channel).to_bytes(1, byteorder='big')
             padding = bytearray(4)
             command_string = command_trip + type_pico + bits_channel + padding
 
@@ -367,7 +368,7 @@ def process_command(line):
 
             command_reset_trip = bitstring_to_bytes(command_dict["COMMAND_reset_trip"])
             type_pico = bitstring_to_bytes(command_dict["TYPE_pico"])
-            bits_channel = (channel+97).to_bytes(1, byteorder='big')
+            bits_channel = (channel).to_bytes(1, byteorder='big')
             padding = bytearray(4)
             command_string = command_reset_trip + type_pico + bits_channel + padding
 
@@ -380,7 +381,7 @@ def process_command(line):
 
             command_disable_trip = bitstring_to_bytes(command_dict["COMMAND_disable_trip"])
             type_pico = bitstring_to_bytes(command_dict["TYPE_pico"])
-            bits_channel = (channel+97).to_bytes(1, byteorder='big')
+            bits_channel = (channel).to_bytes(1, byteorder='big')
             padding = bytearray(4)
             command_string = command_disable_trip + type_pico + bits_channel + padding
 
@@ -393,7 +394,7 @@ def process_command(line):
 
             command_enable_trip = bitstring_to_bytes(command_dict["COMMAND_enable_trip"])
             type_pico = bitstring_to_bytes(command_dict["TYPE_pico"])
-            bits_channel = (channel+97).to_bytes(1, byteorder='big')
+            bits_channel = (channel).to_bytes(1, byteorder='big')
             padding = bytearray(4)
             command_string = command_enable_trip + type_pico + bits_channel + padding
 
@@ -406,7 +407,7 @@ def process_command(line):
 
             command_enable_ped = bitstring_to_bytes(command_dict["COMMAND_enable_ped"])
             type_pico = bitstring_to_bytes(command_dict["TYPE_pico"])
-            bits_channel = (channel+97).to_bytes(1, byteorder='big')
+            bits_channel = (channel).to_bytes(1, byteorder='big')
             padding = bytearray(4)
             command_string = command_enable_ped + type_pico + bits_channel + padding
 
@@ -419,7 +420,7 @@ def process_command(line):
 
             command_disable_ped = bitstring_to_bytes(command_dict["COMMAND_disable_ped"])
             type_pico = bitstring_to_bytes(command_dict["TYPE_pico"])
-            bits_channel = (channel+97).to_bytes(1, byteorder='big')
+            bits_channel = (channel).to_bytes(1, byteorder='big')
             padding = bytearray(4)
             command_string = command_disable_ped + type_pico + bits_channel + padding
 
@@ -435,7 +436,7 @@ def process_command(line):
 
             command_powerOn = bitstring_to_bytes(command_dict["COMMAND_powerOn"])
             type_lv = bitstring_to_bytes(command_dict["TYPE_lv"])
-            bits_channel = (channel+97).to_bytes(1, byteorder='big')
+            bits_channel = (channel).to_bytes(1, byteorder='big')
             padding = bytearray(4)
             command_string = command_powerOn + type_lv + bits_channel + padding
 
@@ -451,7 +452,7 @@ def process_command(line):
     
             command_powerOff = bitstring_to_bytes(command_dict["COMMAND_powerOff"])
             type_lv = bitstring_to_bytes(command_dict["TYPE_lv"])
-            bits_channel = (channel+97).to_bytes(1, byteorder='big')
+            bits_channel = (channel).to_bytes(1, byteorder='big')
             padding = bytearray(4)
             command_string = command_powerOff + type_lv + bits_channel + padding
 
@@ -464,7 +465,7 @@ def process_command(line):
 
             command_enable_trip = bitstring_to_bytes(command_dict["COMMAND_enable_trip"])
             type_pico = bitstring_to_bytes(command_dict["TYPE_pico"])
-            bits_channel = (channel+97).to_bytes(1, byteorder='big')
+            bits_channel = (channel).to_bytes(1, byteorder='big')
             padding = bytearray(4)
             command_string = command_enable_trip + type_pico + bits_channel + padding
 
@@ -477,7 +478,7 @@ def process_command(line):
 
             command_disable_trip = bitstring_to_bytes(command_dict["COMMAND_disable_trip"])
             type_pico = bitstring_to_bytes(command_dict["TYPE_pico"])
-            bits_channel = (channel+97).to_bytes(1, byteorder='big')
+            bits_channel = (channel).to_bytes(1, byteorder='big')
             padding = bytearray(4)
             command_string = command_disable_trip + type_pico + bits_channel + padding
 
@@ -489,8 +490,22 @@ def process_command(line):
 
             command_set_trip = bitstring_to_bytes(command_dict["COMMAND_set_trip"])
             type_pico = bitstring_to_bytes(command_dict["TYPE_pico"])
-            bits_channel = (channel+97).to_bytes(1, byteorder='big')
+            bits_channel = (channel).to_bytes(1, byteorder='big')
             floatval = bytearray(struct.pack("f", float(keys[2])))
+            command_string = command_set_trip + type_pico + bits_channel + floatval
+
+            sock.send(command_string)
+        
+
+        elif keys[0] == "set_trip_count":
+            channel = int(keys[1])
+            assert 0 <= channel <= 11
+
+            command_set_trip = bitstring_to_bytes(command_dict["COMMAND_set_trip_count"])
+            type_pico = bitstring_to_bytes(command_dict["TYPE_pico"])
+            bits_channel = (channel).to_bytes(1, byteorder='big')
+            print("keys[2]: " + str(int(keys[2])))
+            floatval = bytearray(struct.pack("I", int(keys[2])))
             command_string = command_set_trip + type_pico + bits_channel + floatval
 
             sock.send(command_string)
@@ -502,7 +517,7 @@ def process_command(line):
 
             command_ramp_hv = bitstring_to_bytes(command_dict["COMMAND_ramp_hv"])
             type_hv = bitstring_to_bytes(command_dict["TYPE_hv"])
-            bits_channel = (channel+97).to_bytes(1, byteorder='big')
+            bits_channel = (channel).to_bytes(1, byteorder='big')
             floatval = bytearray(struct.pack("f", float(keys[2])))
             command_string = command_ramp_hv + type_hv + bits_channel + floatval
 
@@ -516,7 +531,7 @@ def process_command(line):
 
             command_current_burst = bitstring_to_bytes(command_dict["COMMAND_current_burst"])
             type_pico = bitstring_to_bytes(command_dict["TYPE_hv"])
-            bits_channel = (channel+97).to_bytes(1, byteorder='big')
+            bits_channel = (channel).to_bytes(1, byteorder='big')
             padding = bytearray(4)
             command_string = command_current_burst + type_pico + bits_channel + padding
 

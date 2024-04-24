@@ -410,6 +410,7 @@ int hv_initialization() {
 }
 
 void set_hv(int channel, float value) {
+  
   int idac = (int)(channel / 4);
   float alphas[12] = {0.9, 0.9, 0.885, 0.9, 0.9012, 0.9034, 0.9009, 0.9027, 0.8977, 0.9012, 0.9015, 1.};
 
@@ -637,6 +638,7 @@ void stop_buffer(uint8_t channel, int client_addr) {
 
 // update_ped
 void update_ped(uint8_t channel, int client_addr) {
+
   uint8_t send_char = channel + 39;
   struct libusb_device_handle *device_handle;
 
@@ -667,6 +669,8 @@ void update_ped(uint8_t channel, int client_addr) {
 // rampHV
 void ramp_hv(uint8_t channel, float voltage, int client_addr) {
   char *command_log = "Command_Log_File:../../Logs/command_log.log";
+
+  printf("hello: %f\n", voltages_0[0]);
 
   // log ramp_hv command
   char log_message[12];
@@ -1022,6 +1026,51 @@ void set_trip(uint8_t channel, float value, int client_addr) {
 
 }
 
+
+// set_trip_count
+void set_trip_count(uint8_t channel, float value, int client_addr) {
+  char *command_log = load_config("Command_Log_File");
+  
+  uint32_t preval;
+  memcpy(&preval, &value, 4);
+  uint16_t intval = (uint16_t) preval;
+  printf("intval: %u\n", intval);
+
+  uint8_t send_val[3];
+  send_val[0] = 45+channel;
+  memcpy(&send_val[1], &intval, 2);
+
+
+  uint16_t one = send_val[2] << 8;
+  uint16_t two = send_val[1] + one;
+
+  int new_requirement = (int) two;
+  printf("new requirement: %i\n", new_requirement);
+  printf("channel: %u\n", send_val[0]-45);
+
+
+  // log set_trip command
+  char log_message[13];
+  snprintf(log_message, 13, "set_trip_count: %u", channel);
+  write_log(command_log, log_message, 0, client_addr);
+
+  if (0 <= channel && channel < 6 && use_pico0 == 1) {
+    pthread_mutex_lock(&usb0_mutex_lock);
+    libusb_bulk_transfer(device_handle_0, 0x02, &send_val[0], sizeof(send_val), 0, 0);
+    pthread_mutex_unlock(&usb0_mutex_lock);
+  } else if (5 < channel && channel < 12 && use_pico1 == 1) {
+    pthread_mutex_lock(&usb1_mutex_lock);
+    libusb_bulk_transfer(device_handle_1, 0x02, &send_val[0], sizeof(send_val), 0, 0);
+    pthread_mutex_unlock(&usb1_mutex_lock);
+  } else {
+    error_log("Invalid set_trip channel value");
+    printf("Invalid set_trip channel value\n");
+
+    return;
+  }
+
+}
+
 // updateV48
 void updateV48() {
   uint8_t LTCaddress[6] = {0x26, 0x26, 0x16, 0x16, 0x14, 0x14};
@@ -1037,6 +1086,7 @@ void updateV48() {
     pthread_mutex_lock(&v48_mutex_lock);
     memcpy(&v48[channel], &ret, sizeof(ret));
     pthread_mutex_unlock(&v48_mutex_lock);
+
   }
 }
 
@@ -1125,7 +1175,7 @@ void* lv_acquisition() {
     updateI48();
     updateV6();
     updateI6();
-    updateT48();
+    //updateT48();
   }
 }
 
@@ -1201,7 +1251,7 @@ void *command_execution() {
     command check_command = parse_queue();
     current_command = check_command.command_name;
     current_type = check_command.command_type;
-    char_parameter = (uint8_t)check_command.char_parameter-97;
+    char_parameter = (uint8_t)check_command.char_parameter;
 
     float_parameter = check_command.float_parameter;
     client_addr = check_command.client_addr;
@@ -1316,7 +1366,7 @@ void *live_status(void *args) {
       // create command
       add_command.command_name = COMMAND_trip_status;
       add_command.command_type = TYPE_pico;
-      add_command.char_parameter = ichannel + 97;
+      add_command.char_parameter = ichannel;
       add_command.float_parameter = 0;
       add_command.client_addr = -9999;
 
@@ -1913,7 +1963,7 @@ void *acquire_data(void *arguments) {
     command check_command = parse_pico_queue();
     uint32_t current_command = check_command.command_name;
     uint32_t current_type = check_command.command_type;
-    uint8_t char_parameter = (uint8_t)check_command.char_parameter - 97;
+    uint8_t char_parameter = (uint8_t)check_command.char_parameter;
     float float_parameter = check_command.float_parameter;
     int client_addr = check_command.client_addr;
 
@@ -1942,6 +1992,10 @@ void *acquire_data(void *arguments) {
       else if (current_command == COMMAND_set_trip)
       { // set trip
         set_trip(char_parameter, float_parameter, client_addr);
+      }
+      else if (current_command == COMMAND_set_trip_count)
+      { // set trip count
+        set_trip_count(char_parameter, float_parameter, client_addr);
       }
       else if (current_command == COMMAND_trip_status)
       { // trip status
@@ -1973,7 +2027,6 @@ void *acquire_data(void *arguments) {
       } 
       else if (current_command == COMMAND_update_ped)
       {
-        printf("hiiii\n");
         update_ped(char_parameter, client_addr);
       }
       else if (current_command == COMMAND_current_buffer_run) 
