@@ -17,6 +17,8 @@
 #define COMMAND_set_trip_count 1011069207
 #define COMMAND_enable_ped 2168095
 #define COMMAND_disable_ped 910674499
+#define COMMAND_start_usb 710574291
+#define COMMAND_stop_usb 270672459
 #define COMMAND_get_slow_read 555731448
 #define COMMAND_get_vhv 1089429348
 #define COMMAND_get_ihv 640411686

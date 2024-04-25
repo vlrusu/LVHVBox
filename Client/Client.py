@@ -33,7 +33,9 @@ cmds = {'get_vhv',
     'readMonV6',
     'readMonI6',
     'enable_ped',
-    'disable_ped'}
+    'disable_ped',
+    'start_usb',
+    'stop_usb'}
 
 
 
@@ -524,15 +526,22 @@ def process_command(line):
             sock.send(command_string)
         
         elif keys[0] == "current_burst":
+            # send command to stop usb
+            command_stop_usb = bitstring_to_bytes(command_dict["COMMAND_stop_usb"])
+            type_pico = bitstring_to_bytes(command_dict["TYPE_pico"])
+            padding_0 = bytearray(5)
+            command_string = command_stop_usb + type_pico + padding_0
+            sock.send(command_string)
+
+            time.sleep(0.2)
  
 
             channel = int(keys[1])
             assert 0 <= channel <= 11
 
-            command_current_burst = bitstring_to_bytes(command_dict["COMMAND_current_burst"])
-            type_pico = bitstring_to_bytes(command_dict["TYPE_hv"])
-            bits_channel = (channel).to_bytes(1, byteorder='big')
             padding = bytearray(4)
+            command_current_burst = bitstring_to_bytes(command_dict["COMMAND_current_burst"])
+            bits_channel = (channel).to_bytes(1, byteorder='big')
             command_string = command_current_burst + type_pico + bits_channel + padding
 
             num_cycles = int(current_buffer_len/full_current_chunk)
@@ -551,18 +560,24 @@ def process_command(line):
                 temp = sock.recv(64)
                 
 
-                print("length of full currents: " + str(len(temp)))
 
                 for i in range(full_current_chunk):
                     byte_loop = []
                     for j in range(4):
                         byte_loop.append(temp[4*i+j])
-                    print("current index: " + str(byte_loop))
                     full_currents.append(process_float(byte_loop))
 
+
+            # send command to start usb
+            time.sleep(0.5)
+            command_start_usb = bitstring_to_bytes(command_dict["COMMAND_start_usb"])
+            type_pico = bitstring_to_bytes(command_dict["TYPE_pico"])
+            padding_0 = bytearray(5)
+            command_string = command_start_usb + type_pico + padding_0
+            sock.send(command_string)
             
-            print(full_currents)
-            print("length of full currents: " + str(len(full_currents)))
+            
+        
 
             # write into new file
             filename = "full_currents_" + str(int(time.time())) + ".txt"
@@ -570,6 +585,22 @@ def process_command(line):
             for i in full_currents:
                 f.write(str(i) + "\n")
             f.close()
+
+        elif keys[0] == "start_usb":
+            # send command to stop usb
+            command_start_usb = bitstring_to_bytes(command_dict["COMMAND_start_usb"])
+            type_pico = bitstring_to_bytes(command_dict["TYPE_pico"])
+            padding_0 = bytearray(5)
+            command_string = command_start_usb + type_pico + padding_0
+            sock.send(command_string)
+        
+        elif keys[0] == "stop_usb":
+            # send command to stop usb
+            command_stop_usb = bitstring_to_bytes(command_dict["COMMAND_stop_usb"])
+            type_pico = bitstring_to_bytes(command_dict["TYPE_pico"])
+            padding_0 = bytearray(5)
+            command_string = command_stop_usb + type_pico + padding_0
+            sock.send(command_string)
 
         else:
             print("Unknown command")

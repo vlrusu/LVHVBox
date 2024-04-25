@@ -62,7 +62,7 @@ uint8_t current_buffer_run = 1;
 uint16_t full_position = 0;
 int before_trip_allowed = 0;
 
-int trip_requirement[6] = {500, 500, 500, 500, 500, 500};
+int trip_requirement[6] = {100, 100, 100, 100, 100, 100};
 int remaining_buffer_iterations = 4000;
 
 uint32_t full_current_array[6][full_current_history_length];

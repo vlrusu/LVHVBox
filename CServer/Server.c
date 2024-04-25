@@ -975,6 +975,7 @@ void trip_status(uint8_t channel, int client_addr) {
       return_val = 0;
     }
   } else {
+    printf("Channel: %u\n", channel);
     error_log("Invalid trip_status channel value");
     printf("Invalid trip_status channel value\n");
 
@@ -1268,8 +1269,6 @@ void *command_execution() {
         ramp_hv(char_parameter, float_parameter, client_addr);
       } else if (current_command == COMMAND_down_hv) { // down_hv
         down_hv(char_parameter, client_addr);
-      } else if (current_command == COMMAND_current_burst) { // under TYPE_hv to increase speed
-        current_burst(char_parameter, client_addr);
       }
     }
 
@@ -1959,6 +1958,10 @@ void *acquire_data(void *arguments) {
   }
   msleep(200);
 
+
+  int pause_usb = 0; // tracks if pico is engaged in sending current burst
+  // if so, some other tasks are paused to speed up the burst
+
   while (1) {
     command check_command = parse_pico_queue();
     uint32_t current_command = check_command.command_name;
@@ -1966,6 +1969,7 @@ void *acquire_data(void *arguments) {
     uint8_t char_parameter = (uint8_t)check_command.char_parameter;
     float float_parameter = check_command.float_parameter;
     int client_addr = check_command.client_addr;
+
 
 
     // check if command is pico type, else do nothing
@@ -1999,6 +2003,7 @@ void *acquire_data(void *arguments) {
       }
       else if (current_command == COMMAND_trip_status)
       { // trip status
+        //printf("Char parameter: %u\n", char_parameter);
         trip_status(char_parameter, client_addr);
       }
       else if (current_command == COMMAND_pcb_temp)
@@ -2037,36 +2042,54 @@ void *acquire_data(void *arguments) {
       {
         get_slow_read(char_parameter, client_addr);
       }
+      else if (current_command == COMMAND_current_burst)
+      {
+        current_burst(char_parameter, client_addr);
+      }
+      else if (current_command == COMMAND_stop_usb)
+      {
+        pause_usb = 1;
+      }
+      else if (current_command == COMMAND_start_usb)
+      {
+        pause_usb = 0;
+      }
       
     }
 
-    
-    if (pico == 0 && use_pico0 == 1) {
-      int current_success_0 = request_averaged_currents(common->all_currents, 0);
-      int voltage_success_0 = request_voltages(0);
-    }
-    
 
-    if (pico == 1 && use_pico1 == 1) {
-      int current_success_1 = request_averaged_currents(common->all_currents, 1);
-      int voltage_success_1 = request_voltages(1);
-    }
-
-    // ----- Write/send voltages/currents -----
-    if (pico == 0 && use_pico0 == 1) {
-      int pipe_voltage_success = write_pipe_voltages(0, vfd, voltages_0);
-      int pipe_current_success = write_pipe_currents(fd, common->all_currents);
-
-      if (write_data_0 == 1) {
-        int current_write_success = write_currents_0(common->all_currents);
-        int voltage_write_success = write_voltages_0(voltages_0);
+    if (pause_usb == 0) {
+      if (pico == 0 && use_pico0 == 1) {
+        int current_success_0 = request_averaged_currents(common->all_currents, 0);
+        int voltage_success_0 = request_voltages(0);
       }
+      
+
+      if (pico == 1 && use_pico1 == 1) {
+        int current_success_1 = request_averaged_currents(common->all_currents, 1);
+        int voltage_success_1 = request_voltages(1);
+      }
+
+      // ----- Write/send voltages/currents -----
+      if (pico == 0 && use_pico0 == 1) {
+        int pipe_voltage_success = write_pipe_voltages(0, vfd, voltages_0);
+        int pipe_current_success = write_pipe_currents(fd, common->all_currents);
+
+        if (write_data_0 == 1) {
+
+          int current_write_success = write_currents_0(common->all_currents);
+          int voltage_write_success = write_voltages_0(voltages_0);
+        }
+      }
+
+      if (pico == 1 && use_pico1 == 1 && write_data_1 == 1) {
+        int current_write_success = write_currents_1(common->all_currents);
+        int voltage_write_success = write_voltages_1(voltages_1);
+      }
+    } else {
+      msleep(5);
     }
 
-    if (pico == 1 && use_pico1 == 1 && write_data_1 == 1) {
-      int current_write_success = write_currents_1(common->all_currents);
-      int voltage_write_success = write_voltages_1(voltages_1);
-    }
     
   }
 }
