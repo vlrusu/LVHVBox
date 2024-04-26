@@ -71,6 +71,8 @@ pthread_t lv_acquisition_thread;
 pthread_t command_execution_thread;
 pthread_t status_thread_0;
 pthread_t socket_creation_thread;
+pthread_t call_ped_thread_0;
+pthread_t call_ped_thread_1;
 
 pthread_mutex_t usb0_mutex_lock;
 pthread_mutex_t usb1_mutex_lock;
@@ -171,6 +173,9 @@ MCP* lvpgoodMCP;
 #define NSTEPS 200
 #define SPICS 0
 
+// HV vars
+const int ped_time = 600; // update pedestals every 10 minutes
+
 // ----- Variables for GUI connection -----
 const char *LIVE_STATUS_FILENAME = "../live_status.txt";
 char pipe_path_base[14] = "/tmp/data_pipe";
@@ -192,6 +197,7 @@ int pico_queue_id;
 int pico_msqid;
 
 command add_command;
+command call_ped_command;
 
 command parse_queue() {
   command return_command;
@@ -244,9 +250,14 @@ float i2c_ltc2497(int address, int channelLTC) {
     return -1;
   }
 
+  int val;
+  if ((block[0] & 0x80)) {
+    val = (int) (((block[0] & 0x3f) << 16) + (block[1] << 8) + (block[2] & 0xE0));
+  } else {
+    val = (int) (((~block[0] & 0x3f) << 16) + (~block[1] << 8) + (~block[2] & 0xE0));
+  }
 
-
-  uint32_t val = ((block[0] & 0x3f) << 16) + (block[1] << 8) + (block[2] & 0xE0);
+  
 
   return val * vref / max_reading;
 }
@@ -670,7 +681,53 @@ void update_ped(uint8_t channel, int client_addr) {
 void ramp_hv(uint8_t channel, float voltage, int client_addr) {
   char *command_log = "Command_Log_File:../../Logs/command_log.log";
 
-  printf("hello: %f\n", voltages_0[0]);
+  // log ramp_hv command
+  char log_message[12];
+  snprintf(log_message, 12, "ramp_hv: %u", channel);
+  write_log(command_log, log_message, 0, client_addr);
+
+  int idac = (int)(channel / 4);
+
+  // calculate number of steps for desired dv/dt
+  float delta_v;
+  float dvdt = 500;
+  float dt = 5E-2;
+  float current_value;
+
+  if (0<=channel && channel < 6) {
+    delta_v = voltage - voltages_0[channel];
+    current_value = voltages_0[channel];
+  } else if (6<=channel && channel < 12) {
+    delta_v = voltage - voltages_1[channel-6];
+    current_value = voltages_1[channel-6];
+  }
+
+  int nsteps = 50;
+
+
+
+  float increment = delta_v / nsteps;
+
+  if (0 <= channel && channel < 12) {
+    for (int itick=0; itick<nsteps; itick++) {
+      usleep(dt*1E6);
+      current_value += increment;
+
+      set_hv(channel, current_value);
+    }
+  } else {
+    error_log("Invalid ramp_hv channel value");
+    printf("Invalid ramp_hv channel value\n");
+
+    return;
+  }
+  
+
+
+
+ /*
+ char *command_log = "Command_Log_File:../../Logs/command_log.log";
+
 
   // log ramp_hv command
   char log_message[12];
@@ -694,9 +751,10 @@ void ramp_hv(uint8_t channel, float voltage, int client_addr) {
 
     return;
   }
+  */
 
-  
 }
+
 
 
 void down_hv(uint8_t channel, int client_addr) {
@@ -719,6 +777,7 @@ void down_hv(uint8_t channel, int client_addr) {
     return;
   }
 
+  
   int idac = (int)(channel / 4);
   float increment = current_voltage / NSTEPS;
 
@@ -729,6 +788,8 @@ void down_hv(uint8_t channel, int client_addr) {
   }
 
   set_hv(channel,0);
+  
+  
 
   
 }
@@ -829,6 +890,8 @@ void enable_trip(uint8_t channel, int client_addr) {
   char log_message[16];
   snprintf(log_message, 16, "enable_trip: %u", channel);
   write_log(command_log, log_message, 0, client_addr);
+
+  
 
   if (0 <= channel && channel < 6 && use_pico0 == 1) {
     pthread_mutex_lock(&usb0_mutex_lock);
@@ -1173,9 +1236,9 @@ void updateI6() {
 void* lv_acquisition() {
   while (1) {
     updateV48();
-    updateI48();
-    updateV6();
-    updateI6();
+    //updateI48();
+    //updateV6();
+    //updateI6();
     //updateT48();
   }
 }
@@ -1268,7 +1331,7 @@ void *command_execution() {
       } else if (current_command == COMMAND_ramp_hv) { // ramp_hv
         ramp_hv(char_parameter, float_parameter, client_addr);
       } else if (current_command == COMMAND_down_hv) { // down_hv
-        down_hv(char_parameter, client_addr);
+        ramp_hv(char_parameter, 0, client_addr);
       }
     }
 
@@ -1374,6 +1437,21 @@ void *live_status(void *args) {
 
     }
     sleep(2);
+  }
+}
+
+
+void *call_ped(void *args) {
+
+  while (1) {
+
+    sleep(ped_time);
+
+    call_ped_command.command_name = COMMAND_update_ped;
+    call_ped_command.command_type = TYPE_pico;
+    call_ped_command.client_addr = -9999;
+
+    msgsnd(pico_msqid, (void *)&call_ped_command, sizeof(call_ped_command), IPC_NOWAIT);
   }
 }
 
@@ -2167,10 +2245,12 @@ void sigintHandler(int sig_num) {
   if (use_pico0 == 1) {
     pthread_cancel(acquisition_thread_0);
     pthread_cancel(status_thread_0);
+    pthread_cancel(call_ped_thread_0);
   }
 
   if (use_pico1 == 1) {
     pthread_cancel(acquisition_thread_1);
+    pthread_cancel(call_ped_thread_1);
   }
 
   pthread_cancel(lv_acquisition_thread);
@@ -2205,6 +2285,9 @@ void sigintHandler(int sig_num) {
   free(hvMCP);
   free(lvpgoodMCP);
 } 
+
+
+
 
 
 
@@ -2387,6 +2470,14 @@ int main( int argc, char **argv ) {
   // create statusing thread
   if (use_pico0 == 1) {
     pthread_create(&status_thread_0, NULL, live_status, &args_0);
+  }
+
+  // create pedestal update threads
+  if (use_pico0 == 1) {
+    pthread_create(&call_ped_thread_0, NULL, call_ped, &args_0);
+  }
+  if (use_pico1 == 1) {
+    pthread_create(&call_ped_thread_1, NULL, call_ped, &args_1);
   }
 
   // create socket initialization thread

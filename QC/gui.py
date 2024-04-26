@@ -73,7 +73,7 @@ class Window(QMainWindow):
         self.table_update_timer = QTimer(self)
         self.table_update_timer.setSingleShot(False)
         self.table_update_timer.timeout.connect(self.update_data)
-        self.table_update_timer.start(5000)
+        self.table_update_timer.start(1000)
 
 
         self.display_setup()

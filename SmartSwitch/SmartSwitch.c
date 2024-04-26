@@ -47,7 +47,7 @@ uint8_t trip_mask = -1; // tracks which channels have trips enabled/disabled
 // tracks if any state machines are reading data faster than they're being read
 uint8_t slow_read = 0;
 
-uint8_t trip_status = 0; // no channels start out tripped
+uint8_t trip_status = -1; // no channels start out tripped
 
 uint16_t num_trigger[6] = {0, 0, 0, 0, 0, 0}; // increments/decrements based upon whether trip_currents are exceeded
 float trip_currents[6] = {10, 10, 10, 10, 10, 10}; // tripping threshold currents
@@ -370,8 +370,6 @@ void get_all_averaged_currents(PIO pio_0, PIO pio_1, uint sm[], float current_ar
     current_array[channel] += latest_current_0;
     current_array[channel+3] += latest_current_1;
 
-
-
     if ((latest_current_0*adc_to_uA > trip_currents[channel]) && ((trip_mask & (1 << channel))) && ((~trip_status & (1 << channel))) && *before_trip_allowed == 0) {
         num_trigger[channel] += 1;
     } else if (num_trigger[channel] > 0) {
@@ -414,23 +412,7 @@ void get_all_averaged_currents(PIO pio_0, PIO pio_1, uint sm[], float current_ar
         }
         
 
-        // only trip channel with greatest recent current
-        /*
-        int trip_channel_0;
-        float max_current = 0;
-        int max_channel = 0;
-        float present_current;
-        for (int channel_index=0; channel_index<6; channel_index++) {
-            for (int current_index=0; current_index<full_current_history_length; current_index++) {
-                present_current = full_current_array[channel_index][current_index]*adc_to_uA;
-                if (present_current > max_current && ((~trip_status & (1 << channel_index))) && present_current >= trip_currents[channel_index]) {
-                    memcpy(&max_current, &present_current, sizeof(present_current));
-                    memcpy(&max_channel, &channel_index, sizeof(channel_index));
-                }
-            }
-        }
-        */
-        
+  
 
        
        float current_sums[6] = {0, 0, 0, 0, 0, 0};
@@ -442,7 +424,7 @@ void get_all_averaged_currents(PIO pio_0, PIO pio_1, uint sm[], float current_ar
           } else {
             read_index = *full_position - current_index;
           }
-          current_sums[channel_index] += full_current_array[channel_index][read_index]*adc_to_uA;
+          current_sums[channel_index] += full_current_array[channel_index][read_index]*adc_to_uA - trip_currents[channel_index];
         }
        }
 
@@ -480,8 +462,6 @@ void get_all_averaged_currents(PIO pio_0, PIO pio_1, uint sm[], float current_ar
     }
 
 
-
-
  }
 
  
@@ -511,10 +491,9 @@ int main(){
   
   stdio_init_all();
 
-  set_sys_clock_khz(280000, true); // Overclocking just to be sure that pico keeps up with everything
-  // not aware of any real drawbacks, SmartSwitch can probably keep up even without overclocking
-  // So if it becomes an issue, overclocking is probably unecessary
+  set_sys_clock_khz(280000, true); // Overclocking is necessary to keep up with reading PIO
 
+  
   board_init(); // tinyUSB formality
   
   //float clkdiv = 34; // set clock divider for PIO
