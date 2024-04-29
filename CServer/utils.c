@@ -170,58 +170,43 @@ int error_log(const char *data) {
   return 0;
 }
 
-int write_log(char* filename, const char *data, int datatype, int client_addr) {
+int write_log(char* filename, const char *data, int client_addr) {
   char error_msg[100];
+
+  struct tm ts;
+  time_t now;
+  char date_buffer[80];
+  time(&now);
+  ts = *localtime(&now);
+  strftime(date_buffer, sizeof(date_buffer), "%a %Y-%m-%d %H:%M:%S", &ts);
   
-  /*
-  printf("sizeof filename: %i\n", sizeof(filename));
-
-  int current_index = 0;
-  while (filename[current_index] != '\n') {
-    current_index += 1;
-  }
-  
-
-  char file_string[current_index+1];
-  for (int i=0; i<26; i++) {
-    file_string[i] = filename[i];
-  }
-  printf("Final index: %i\n", current_index);
-  */
-
-
   char *file_string = "../../Logs/command_log.log";
   FILE *fp = fopen(file_string, "a");
   if (fp == NULL) {
-    sprintf(error_msg, "Error logging datatype %i", datatype);
+    sprintf(error_msg, "Logging Error");
     error_log(error_msg);
     printf(error_msg);
     return -1;
   }
 
   if (fprintf(fp, "%lu ", (unsigned long)time(NULL)) < 0) {
-    sprintf(error_msg, "Error writing logfile, datatype %i", datatype);
+    sprintf(error_msg, "Error writing logfile");
     error_log(error_msg);
     printf(error_msg);
 
     fclose(fp);
     return -1;
+  } else if (fprintf(fp, "%s ", date_buffer) < 0) {
+    ;
   } else if (fprintf(fp, data) < 0) {
-    sprintf(error_msg, "Error writing logfile, datatype %i", datatype);
+    sprintf(error_msg, "Error writing logfile");
     error_log(error_msg);
     printf(error_msg);
 
     fclose(fp);
     return -1;
-  } else if (fprintf(fp, " %i", datatype) < 0) {
-    sprintf(error_msg, "Error writing logfile, datatype %i", datatype);
-    error_log(error_msg);
-    printf(error_msg);
-
-    fclose(fp);
-    return -1;
-  } else if (fprintf(fp, " %i\n", client_addr) < 0) {
-    sprintf(error_msg, "Error writing logfile, datatype %i", datatype);
+  } else if (fprintf(fp, " Client #%i\n", client_addr) < 0) {
+    sprintf(error_msg, "Error writing logfile");
     error_log(error_msg);
     printf(error_msg);
 

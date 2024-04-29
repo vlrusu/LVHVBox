@@ -506,7 +506,6 @@ def process_command(line):
             command_set_trip = bitstring_to_bytes(command_dict["COMMAND_set_trip_count"])
             type_pico = bitstring_to_bytes(command_dict["TYPE_pico"])
             bits_channel = (channel).to_bytes(1, byteorder='big')
-            print("keys[2]: " + str(int(keys[2])))
             floatval = bytearray(struct.pack("I", int(keys[2])))
             command_string = command_set_trip + type_pico + bits_channel + floatval
 
@@ -593,6 +592,7 @@ def process_command(line):
             padding_0 = bytearray(5)
             command_string = command_start_usb + type_pico + padding_0
             sock.send(command_string)
+        
         
         elif keys[0] == "stop_usb":
             # send command to stop usb

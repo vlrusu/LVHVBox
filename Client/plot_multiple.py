@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 if __name__=="__main__":
     #filename = "full_currents_1728949092.txt"
     
-    filename = "temp0.txt"
+    filename = "temp0_1.txt"
     #filename = "full_currents_1705610740.txt"
 
     f = open(filename, "r")
@@ -25,7 +25,7 @@ if __name__=="__main__":
     
     
     
-    filename = "temp1.txt"
+    filename = "temp1_1.txt"
     #filename = "full_currents_1705610740.txt"
 
     f = open(filename, "r")
@@ -38,7 +38,7 @@ if __name__=="__main__":
     
     
     
-    
+    '''
     filename = "temp2.txt"
     #filename = "full_currents_1705610740.txt"
 
@@ -49,6 +49,7 @@ if __name__=="__main__":
     float_vals = [float(i) for i in lines]
     float_valch2_4s = [i for i in float_vals]
     float_vals_2 = np.array(float_vals)
+    '''
     
     
     
@@ -66,7 +67,7 @@ if __name__=="__main__":
 
     ch0 = plt.scatter(times, float_vals_0, s=10, label='Ch0')
     ch1 = plt.scatter(times, float_vals_1, s=10, label='Ch1')
-    ch2 = plt.scatter(times, float_vals_2, s=10, label='Ch2')
+    #ch2 = plt.scatter(times, float_vals_2, s=10, label='Ch2')
     
 
     plt.legend()
