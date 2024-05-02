@@ -125,11 +125,13 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6], uint 
 
       // determine response based upon Server command
       if (102 < receive_chars[0] && receive_chars[0] < 109) { // ----- Trip ----- //
-        uint8_t tripPin = all_pins.crowbarPins[receive_chars[0] - 103];\
+        uint8_t tripPin = all_pins.crowbarPins[receive_chars[0] - 103];
+      
+
+        if (*trip_mask & (1 << (receive_chars[0]-103))) {// store ped subtract values from time of trip
         *current_buffer_run = 0;
         *before_trip_allowed = 20;
 
-        if (*trip_mask & (1 << (receive_chars[0]-103))) {// store ped subtract values from time of trip
         memcpy(ped_subtraction_stored, ped_subtraction, sizeof(ped_subtraction));
           gpio_put(tripPin, 1);
           *trip_status = *trip_status | (1 << (receive_chars[0]-103));
@@ -144,11 +146,16 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6], uint 
 
         uint8_t tripPin = all_pins.crowbarPins[receive_chars[0] - 109]; // acquire proper crowbar pin
 
-        *trip_mask = *trip_mask & ~(1 << (receive_chars[0]-109));
-        gpio_put(tripPin, 0); // set relevant crowbar pin low
-        *trip_status = *trip_status & ~(1 << receive_chars[0] - 109); // store information that channel is no longer tripped
-        sleep_ms(250);
-        *trip_mask = *trip_mask | (1 << (receive_chars[0]-109));
+        if (*trip_mask & (1 << (receive_chars[0]-109))) {
+          *trip_mask = *trip_mask & ~(1 << (receive_chars[0]-109));
+          gpio_put(tripPin, 0); // set relevant crowbar pin low
+          *trip_status = *trip_status & ~(1 << receive_chars[0] - 109); // store information that channel is no longer tripped
+          sleep_ms(250);
+          *trip_mask = *trip_mask | (1 << (receive_chars[0]-109));
+        } else {
+          gpio_put(tripPin, 0); // set relevant crowbar pin low
+          *trip_status = *trip_status & ~(1 << receive_chars[0] - 109); // store information that channel is no longer tripped
+        }
       
       } else if (114 < receive_chars[0] && receive_chars[0] < 121) { // ----- Disable Trip ----- //
         *trip_mask = *trip_mask & ~(1 << (receive_chars[0]-115)); // store that channel is no longer capable of tripping

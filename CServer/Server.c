@@ -83,7 +83,7 @@ DAC8164 dac[3]; // HV DAQ objects
 
 // variables to store LV i2c connection info
 int lv_i2cbus;
-static int lv_i2c = 0;
+int lv_i2c = 0;
 
 // assorted values to be returned upon client request
 float voltages_0[6] = {0,0,0,0,0,0};
@@ -110,9 +110,16 @@ pthread_mutex_t i6_mutex_lock;
 
 
 // LV channel information
+
+uint8_t lv_mcp_reset;
+uint8_t lv_global_enable;
+uint8_t powerChMap[6];
+
+/*
 uint8_t powerChMap[6] = {5, 6, 7, 2, 3, 4};
 uint8_t lv_mcp_reset = 3;
 uint8_t lv_global_enable = 18;
+*/
 
 int current_datafile_time_0 = 0;
 int current_num_storages_0 = 0;
@@ -272,8 +279,7 @@ int powerOn(uint8_t channel, int client_addr) {
   write_log(command_log, log_message, client_addr);
 
 
-  uint8_t local_powerChMap[6] = {5, 6, 7, 2, 3, 4};
-
+  
   if (channel < 0 || channel > 6) {
     error_log("Invalid powerOn channel value");
     printf("Invalid powerOn channel value\n");
@@ -289,7 +295,8 @@ int powerOn(uint8_t channel, int client_addr) {
   
   if (channel == 6) {
     for (int i=0; i<6; i++) {
-      if (MCP_pinWrite(lvpgoodMCP, local_powerChMap[i], HIGH) == -1) {
+      printf("%u\n",powerChMap[i]);
+      if (MCP_pinWrite(lvpgoodMCP, powerChMap[i], HIGH) == -1) {
         //return -1;
 
         char error_msg[50];
@@ -302,7 +309,7 @@ int powerOn(uint8_t channel, int client_addr) {
 
     }
   } else {
-    if (MCP_pinWrite(lvpgoodMCP, local_powerChMap[channel], HIGH) == -1) {
+    if (MCP_pinWrite(lvpgoodMCP, powerChMap[channel], HIGH) == -1) {
       //return -1;
 
 
@@ -716,6 +723,34 @@ void update_ped(uint8_t channel, int client_addr) {
 
 // rampHV
 void ramp_hv(uint8_t channel, float voltage, int client_addr) {
+  
+  /*
+  printf("begin ramp\n");
+  int idac = (int)(channel / 4);
+  float increment = voltage / NSTEPS;
+  float current_value = 0;
+
+  if (0 <= channel && channel < 12) {
+    for (int itick=0; itick<NSTEPS; itick++) {
+      msleep(1);
+      current_value += increment;
+
+      set_hv(channel, current_value);
+    }
+  } else {
+    error_log("Invalid ramp_hv channel value");
+    printf("Invalid ramp_hv channel value\n");
+
+    return;
+  }
+  */
+  
+  
+  
+  
+  
+
+  
   // log command
   char *command_log = load_config("Command_Log_File");
   char log_message[50];
@@ -728,7 +763,7 @@ void ramp_hv(uint8_t channel, float voltage, int client_addr) {
   // calculate number of steps for desired dv/dt
   float delta_v;
   float dvdt = 150;
-  float dt = 5E-2;
+  float dt = 50E-3; // S
   float current_value;
 
   if (0<=channel && channel < 6) {
@@ -741,18 +776,25 @@ void ramp_hv(uint8_t channel, float voltage, int client_addr) {
 
 
 
+
   float total_time = fabs(delta_v)/dvdt;
-  int nsteps = total_time/dt;
+  int nsteps = (int) total_time/dt;
 
   float increment = delta_v / nsteps;
 
+  if (nsteps < 1) {
+    nsteps = 1;
+    increment = 0;
+  }
+
   if (0 <= channel && channel < 12) {
     for (int itick=0; itick<nsteps; itick++) {
-      usleep(dt*1E6);
+      msleep(dt*1E3);
       current_value += increment;
 
       set_hv(channel, current_value);
     }
+    set_hv(channel, voltage);
 
   } else {
     error_log("Invalid ramp_hv channel value");
@@ -760,38 +802,6 @@ void ramp_hv(uint8_t channel, float voltage, int client_addr) {
 
     return;
   }
-  
-
-
-
- /*
- char *command_log = "Command_Log_File:../../Logs/command_log.log";
-
-
-  // log ramp_hv command
-  char log_message[12];
-  snprintf(log_message, 12, "ramp_hv: %u", channel);
-  write_log(command_log, log_message, 0, client_addr);
-
-  int idac = (int)(channel / 4);
-  float increment = voltage / NSTEPS;
-  float current_value = 0;
-
-  if (0 <= channel && channel < 12) {
-    for (int itick=0; itick<NSTEPS; itick++) {
-      usleep(50000);
-      current_value += increment;
-
-      set_hv(channel, current_value);
-    }
-  } else {
-    error_log("Invalid ramp_hv channel value");
-    printf("Invalid ramp_hv channel value\n");
-
-    return;
-  }
-  */
-
 }
 
 
@@ -2190,12 +2200,15 @@ int lv_initialization() {
   sprintf(lv_i2cname, "/dev/i2c-%d", 3);
   lv_i2c = open_i2c_dev(lv_i2cbus, lv_i2cname, sizeof(lv_i2cname), 0);
 
+
   if (lv_i2c < 0) { // return -1 in case of not acquiring file
     error_log("lv_initialization i2c file not acquired");
     printf("lv_initialization i2c file not acquired");
 
     return -1;
   }
+
+ 
 
   return 0;
 }
@@ -2260,9 +2273,22 @@ void sigintHandler(int sig_num) {
 
 
 
-
-
 int main( int argc, char **argv ) {
+  // load variables from config.txt
+  lv_mcp_reset = atoi(load_config("lv_mcp_reset"));
+  lv_global_enable = atoi(load_config("lv_global_enable"));
+  printf("lv_mcp_reset: %u\n", lv_mcp_reset);
+  printf("lv_global_enable: %u\n", lv_global_enable);
+
+
+
+
+  char prepowerchmap[50];
+  memcpy(prepowerchmap, load_config("CServer_LV_powerChMap"), 6);
+  for (int i=0; i<6; i++) {powerChMap[i] = (uint8_t) (prepowerchmap[i] -= '0');}
+  
+  
+
   char error_msg[100];
 
   // initialize mutexes
@@ -2402,15 +2428,12 @@ int main( int argc, char **argv ) {
   hv_arg_struct args_1;
   args_1.pico = 1;
 
-
-
   if (libusb_init(NULL) != 0) {
     error_log("libusb_init failure");
     printf("libusb_init failure");
 
     return 0;
   }
-
 
 
   

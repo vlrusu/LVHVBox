@@ -6,6 +6,5 @@ Error_Log_File:../../Logs/error_log.log
 CServer_LV_powerChMap:567234
 lv_mcp_reset:3
 lv_global_enable:18
-lv_i2cbus:3
 
 CServer_socket_port:12000
