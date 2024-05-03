@@ -199,9 +199,13 @@ int queue_key;
 int queue_id;
 int msqid;
 
-int pico_queue_key;
-int pico_queue_id;
-int pico_msqid;
+int pico0_queue_key;
+int pico0_queue_id;
+int pico0_msqid;
+
+int pico1_queue_key;
+int pico1_queue_id;
+int pico1_msqid;
 
 command add_command;
 command call_ped_command;
@@ -213,10 +217,15 @@ command parse_queue() {
   return return_command;
 }
 
-command parse_pico_queue() {
+command parse_pico_queue(int pico) {
   command return_command;
   long msgtyp = 0;
-  msgrcv(pico_msqid, (void *)&return_command, 56, msgtyp, MSG_NOERROR | IPC_NOWAIT);
+
+  if (pico == 0) {
+    msgrcv(pico0_msqid, (void *)&return_command, 56, msgtyp, MSG_NOERROR | IPC_NOWAIT);
+  } else {
+    msgrcv(pico1_msqid, (void *)&return_command, 56, msgtyp, MSG_NOERROR | IPC_NOWAIT);
+  }
   return return_command;
 }
 
@@ -557,13 +566,16 @@ void get_slow_read(uint8_t channel, int client_addr) {
 void current_burst(uint8_t channel, int client_addr) {
 
   struct libusb_device_handle *device_handle;
+  uint8_t get_buffer;
 
   if (0 <= channel && channel < 6 && use_pico0 == 1) {
     device_handle = device_handle_0;
     pthread_mutex_lock(&usb0_mutex_lock);
+    get_buffer = 89 + channel;
   } else if (5 < channel && channel < 12 && use_pico1 == 1) {
     device_handle = device_handle_1;
     pthread_mutex_lock(&usb1_mutex_lock);
+    get_buffer = 83 + channel;
   } else {
     error_log("Invalid current_burst channel value");
     printf("Invalid current_burst channel value\n");
@@ -571,7 +583,7 @@ void current_burst(uint8_t channel, int client_addr) {
     return;
   }
 
-  uint8_t get_buffer = 89 + channel;
+  
   char *current_input_data;
   current_input_data = (char *)malloc(64);
   float current_array[16];
@@ -614,6 +626,7 @@ void stop_usb(int *pause_usb, int client_addr) {
   write_log(command_log, log_message, client_addr);
 
   *pause_usb = 1;
+
 }
 
 
@@ -977,9 +990,10 @@ void disable_ped(uint8_t channel, int client_addr) {
 void pcb_temp(int client_addr) {
   uint8_t send_val = 98;
   char *input_data;
-  input_data = (char *)malloc(2);
+  input_data = (char *)malloc(4);
   float return_val = 0;
-  uint16_t preval;
+
+  float temp_sum = 0;
 
   if (use_pico1 == 1) {
     pthread_mutex_lock(&usb1_mutex_lock);
@@ -987,11 +1001,14 @@ void pcb_temp(int client_addr) {
     libusb_bulk_transfer(device_handle_1, 0x82, input_data, sizeof(input_data), 0, 0);
     pthread_mutex_unlock(&usb1_mutex_lock);
 
-    memcpy(&preval, input_data, 2);
-    return_val = preval*3.3/4096;
+    memcpy(&return_val, input_data, 4);
+    return_val *= 3.3/4096;
     return_val = 1.8455 - return_val;
     return_val /= 0.01123;
   }
+
+
+
   write(client_addr, &return_val, sizeof(return_val));
 }
 
@@ -999,9 +1016,8 @@ void pcb_temp(int client_addr) {
 void pico_current(int client_addr) {
   uint8_t send_val = 98;
   char *input_data;
-  input_data = (char *)malloc(2);
+  input_data = (char *)malloc(4);
   float return_val = 0;
-  uint16_t preval;
 
   if (use_pico0 == 1) {
     pthread_mutex_lock(&usb0_mutex_lock);
@@ -1010,8 +1026,8 @@ void pico_current(int client_addr) {
     pthread_mutex_unlock(&usb0_mutex_lock);
 
 
-    memcpy(&preval, input_data, 2);
-    return_val = preval*3.3/4096;
+    memcpy(&return_val, input_data, 4);
+    return_val *= 3.3/4096;
   }
   write(client_addr, &return_val, sizeof(return_val));
 }
@@ -1389,8 +1405,10 @@ void *handle_client(void *args) {
       add_command.client_addr = inner_socket;
 
       // add command to linux kernel queue
-      if (add_command.command_type == TYPE_pico) {
-        msgsnd(pico_msqid, (void *)&add_command, sizeof(add_command), IPC_NOWAIT);
+      if (add_command.command_type == TYPE_pico && ((uint8_t) add_command.char_parameter < 6 | add_command.command_name == COMMAND_pcb_temp)) {
+        msgsnd(pico0_msqid, (void *)&add_command, sizeof(add_command), IPC_NOWAIT);
+      } else if (add_command.command_type == TYPE_pico) {
+        msgsnd(pico1_msqid, (void *)&add_command, sizeof(add_command), IPC_NOWAIT);
       } else if (add_command.command_type == TYPE_hv || add_command.command_type == TYPE_lv) {
         int snd_success = msgsnd(msqid, (void *)&add_command, sizeof(add_command), 0);
       }
@@ -1414,7 +1432,7 @@ void *live_status(void *args) {
       add_command.client_addr = -9999;
 
       // add command to queue
-      msgsnd(pico_msqid, (void *)&add_command, sizeof(add_command), IPC_NOWAIT);
+      msgsnd(pico0_msqid, (void *)&add_command, sizeof(add_command), IPC_NOWAIT);
 
     }
     sleep(2);
@@ -1432,7 +1450,8 @@ void *call_ped(void *args) {
     call_ped_command.command_type = TYPE_pico;
     call_ped_command.client_addr = -9999;
 
-    msgsnd(pico_msqid, (void *)&call_ped_command, sizeof(call_ped_command), IPC_NOWAIT);
+    msgsnd(pico0_msqid, (void *)&call_ped_command, sizeof(call_ped_command), IPC_NOWAIT);
+    msgsnd(pico1_msqid, (void *)&call_ped_command, sizeof(call_ped_command), IPC_NOWAIT);
   }
 }
 
@@ -2006,23 +2025,27 @@ void *acquire_data(void *arguments) {
     printf(error_msg);
   }
 
+
+
+
   if (pico == 0 && use_pico0 == 1) {
     int pipe_initialization_success = initialize_pipes(fd, vfd);
 
     if (write_data_0 == 1) {
-      int txt_init_success_0 = initialize_txt(0);
+      int txt_init_success_0 = initialize_txt(pico);
     }
-  } else if (pico == 1 && use_pico1 == 1 && write_data_1 == 1) {
-    int txt_init_success_1 = initialize_txt(1);
+  } else if (use_pico1 == 1 && write_data_1 == 1) {
+    int txt_init_success_1 = initialize_txt(pico);
   }
   msleep(200);
+
 
 
   int pause_usb = 0; // tracks if pico is engaged in sending current burst
   // if so, some other tasks are paused to speed up the burst
 
   while (1) {
-    command check_command = parse_pico_queue();
+    command check_command = parse_pico_queue(pico);
     uint32_t current_command = check_command.command_name;
     uint32_t current_type = check_command.command_type;
     uint8_t char_parameter = (uint8_t)check_command.char_parameter;
@@ -2032,9 +2055,9 @@ void *acquire_data(void *arguments) {
 
 
     // check if command is pico type, else do nothing
+
     if (current_type == TYPE_pico)
     {
-
       // select proper hv function
       if (current_command == COMMAND_trip)
       { // trip
@@ -2062,9 +2085,8 @@ void *acquire_data(void *arguments) {
       }
       else if (current_command == COMMAND_trip_status)
       { // trip status
-        //printf("Char parameter: %u\n", char_parameter);
         trip_status(char_parameter, client_addr);
-      }
+      }     
       else if (current_command == COMMAND_pcb_temp)
       {
         pcb_temp(client_addr);
@@ -2121,10 +2143,7 @@ void *acquire_data(void *arguments) {
       if (pico == 0 && use_pico0 == 1) {
         int current_success_0 = request_averaged_currents(common->all_currents, 0);
         int voltage_success_0 = request_voltages(0);
-      }
-      
-
-      if (pico == 1 && use_pico1 == 1) {
+      } else if (use_pico1 == 1) {
         int current_success_1 = request_averaged_currents(common->all_currents, 1);
         int voltage_success_1 = request_voltages(1);
       }
@@ -2139,17 +2158,16 @@ void *acquire_data(void *arguments) {
           int current_write_success = write_currents_0(common->all_currents);
           int voltage_write_success = write_voltages_0(voltages_0);
         }
-      }
-
-      if (pico == 1 && use_pico1 == 1 && write_data_1 == 1) {
+      } else if (use_pico1 == 1 && write_data_1 == 1) {
         int current_write_success = write_currents_1(common->all_currents);
         int voltage_write_success = write_voltages_1(voltages_1);
       }
-    } else {
-      msleep(5);
+
     }
 
-    
+
+    msleep(5);
+
   }
 }
 
@@ -2225,12 +2243,15 @@ void sigintHandler(int sig_num) {
 
 
   sleep(0.1);
+
+
   
   if (use_pico0 == 1) {
     pthread_cancel(acquisition_thread_0);
     pthread_cancel(status_thread_0);
     pthread_cancel(call_ped_thread_0);
   }
+
 
   if (use_pico1 == 1) {
     pthread_cancel(acquisition_thread_1);
@@ -2311,9 +2332,13 @@ int main( int argc, char **argv ) {
   queue_key = ftok(pathname, queue_id);
   msqid = msgget(queue_key, IPC_CREAT);
 
-  pico_queue_id = 1;
-  pico_queue_key = ftok(pathname, pico_queue_id);
-  pico_msqid = msgget(pico_queue_key, IPC_CREAT);
+  pico0_queue_id = 1;
+  pico0_queue_key = ftok(pathname, pico0_queue_id);
+  pico0_msqid = msgget(pico0_queue_key, IPC_CREAT);
+
+  pico1_queue_id = 1;
+  pico1_queue_key = ftok(pathname, pico0_queue_id);
+  pico1_msqid = msgget(pico0_queue_key, IPC_CREAT);
 
 
 
@@ -2454,6 +2479,7 @@ int main( int argc, char **argv ) {
   if (use_pico0 == 1) {
     pthread_create(&acquisition_thread_0, NULL, acquire_data, &args_0);
   }
+
   if (use_pico1 == 1) {
     pthread_create(&acquisition_thread_1, NULL, acquire_data, &args_1);
   }

@@ -281,7 +281,12 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6], uint 
         }
 
       } else if (receive_chars[0] == 98) { // Send value hv adc value //
-        uint16_t return_val = adc_read();
+        float return_val = 0;
+        
+        for (int i=0; i<50; i++) {
+          return_val += (float) adc_read();
+        }
+        return_val /= 50;
      
 
         tud_cdc_write(&return_val,sizeof(return_val));

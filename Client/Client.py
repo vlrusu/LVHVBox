@@ -525,17 +525,19 @@ def process_command(line):
             sock.send(command_string)
         
         elif keys[0] == "current_burst":
+            channel = int(keys[1])
+
             # send command to stop usb
             command_stop_usb = bitstring_to_bytes(command_dict["COMMAND_stop_usb"])
             type_pico = bitstring_to_bytes(command_dict["TYPE_pico"])
-            padding_0 = bytearray(5)
-            command_string = command_stop_usb + type_pico + padding_0
+            padding_0 = bytearray(4)
+            bits_channel = (channel).to_bytes(1, byteorder='big')
+            command_string = command_stop_usb + type_pico + bits_channel + padding_0
             sock.send(command_string)
 
-            time.sleep(0.2)
+            time.sleep(0.5)
  
 
-            channel = int(keys[1])
             assert 0 <= channel <= 11
 
             padding = bytearray(4)
@@ -556,6 +558,7 @@ def process_command(line):
                 
                 
                 sock.send(command_string)
+                
                 temp = sock.recv(64)
                 
 
@@ -571,8 +574,9 @@ def process_command(line):
             time.sleep(0.5)
             command_start_usb = bitstring_to_bytes(command_dict["COMMAND_start_usb"])
             type_pico = bitstring_to_bytes(command_dict["TYPE_pico"])
-            padding_0 = bytearray(5)
-            command_string = command_start_usb + type_pico + padding_0
+            padding_0 = bytearray(4)
+            bits_channel = (channel).to_bytes(1, byteorder='big')
+            command_string = command_start_usb + type_pico + bits_channel + padding_0
             sock.send(command_string)
             
             
@@ -589,8 +593,11 @@ def process_command(line):
             # send command to stop usb
             command_start_usb = bitstring_to_bytes(command_dict["COMMAND_start_usb"])
             type_pico = bitstring_to_bytes(command_dict["TYPE_pico"])
-            padding_0 = bytearray(5)
-            command_string = command_start_usb + type_pico + padding_0
+            padding_0 = bytearray(4)
+
+            channel = int(keys[1])
+            bits_channel = (channel).to_bytes(1, byteorder='big')
+            command_string = command_start_usb + type_pico + bits_channel + padding_0
             sock.send(command_string)
         
         
@@ -598,8 +605,11 @@ def process_command(line):
             # send command to stop usb
             command_stop_usb = bitstring_to_bytes(command_dict["COMMAND_stop_usb"])
             type_pico = bitstring_to_bytes(command_dict["TYPE_pico"])
-            padding_0 = bytearray(5)
-            command_string = command_stop_usb + type_pico + padding_0
+            padding_0 = bytearray(4)
+
+            channel = int(keys[1])
+            bits_channel = (channel).to_bytes(1, byteorder='big')
+            command_string = command_stop_usb + type_pico + bits_channel + padding_0
             sock.send(command_string)
 
         else:
