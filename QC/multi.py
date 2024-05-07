@@ -9,14 +9,11 @@ import time
 pipe_path = "/tmp/data_pipe"
 v_pipe_path = "/tmp/vdata_pipe"  # Second pipe
 
-SPIKE_THRESHOLD = 20.
+SPIKE_THRESHOLD = 20.0
 
 plot_channels = [0, 1, 2, 3, 4, 5]
 
 data_length = 3300
-
-
-
 
 
 # Create the named pipes if they don't exist
@@ -24,7 +21,6 @@ for channel in plot_channels:
     for path in [pipe_path + str(channel), v_pipe_path + str(channel)]:
         if not os.path.exists(path):
             os.mkfifo(path)
-
 
 
 class DataReceiver(QtCore.QObject):
@@ -35,7 +31,7 @@ class DataReceiver(QtCore.QObject):
         self.pipe_path = pipe_path
 
     def run(self):
-        with open(self.pipe_path, 'r') as pipe:
+        with open(self.pipe_path, "r") as pipe:
             while True:
                 line = pipe.readline()
                 # if (self.pipe_path == v_pipe_path):
@@ -48,7 +44,7 @@ class DataReceiver(QtCore.QObject):
 class App(QtWidgets.QMainWindow):
     def __init__(self, channel=0, parent=None):
         super(App, self).__init__(parent)
-        self.setWindowTitle('Current (uA) channel ' + str(channel))
+        self.setWindowTitle("Current (uA) channel " + str(channel))
         self.setGeometry(100, 100, 800, 500)
 
         self.channel = channel
@@ -66,12 +62,9 @@ class App(QtWidgets.QMainWindow):
         self.label = QtWidgets.QLabel(self)
         self.label.setGeometry(10, 10, 100, 20)  # Adjust the geometry as per your needs
         top_layout.addWidget(self.label)
-        
+
         layout.addLayout(top_layout)
-        
 
-
-        
         self.plotWidget = pg.PlotWidget()
         self.plotWidget.setLabel("bottom", "Time (S)")
         self.plotWidget.setLabel("left", "Current (uA)")
@@ -83,96 +76,88 @@ class App(QtWidgets.QMainWindow):
         # Histogram plot
         self.histogramWidget = pg.PlotWidget()
         self.histogramWidget.setLabel("bottom", "Time (hours)")
-        layout.addWidget(self.histogramWidget,stretch=1)  # This adds the histogram plot below the main plot
+        layout.addWidget(
+            self.histogramWidget, stretch=1
+        )  # This adds the histogram plot below the main plot
 
         # Set up some sample histogram data (you can replace this with your actual data)
-        self.histogram = pg.BarGraphItem(x=np.arange(72)-0.5, height=self.spikesPerHour, width=1, brush='b')
+        self.histogram = pg.BarGraphItem(
+            x=np.arange(72) - 0.5, height=self.spikesPerHour, width=1, brush="b"
+        )
         self.histogramWidget.addItem(self.histogram)
         # Set custom x-axis labels
-        x=np.arange(72,step=10)
-        reversed_x = -1*x[::-1]
-        custom_labels = [(i, '{}'.format(j)) for i, j in zip(x, reversed_x)]
-        
-        self.histogramWidget.getAxis('bottom').setTicks([custom_labels])
-        
-        
-#        self.secondaryCurve = self.secondaryPlotWidget.plot()
+        x = np.arange(72, step=10)
+        reversed_x = -1 * x[::-1]
+        custom_labels = [(i, "{}".format(j)) for i, j in zip(x, reversed_x)]
+
+        self.histogramWidget.getAxis("bottom").setTicks([custom_labels])
+
+        #        self.secondaryCurve = self.secondaryPlotWidget.plot()
 
         # Set up a timer to update this plot once a minute
         self.secondaryTimer = QtCore.QTimer(self)
         self.secondaryTimer.timeout.connect(self.update_hourly_count)
         self.secondaryTimer.start(20 * 1000)  # Every 20,000 ms or 20s
 
-
         # Set up a timer to update to reset the spike plot
         self.thirdTimer = QtCore.QTimer(self)
         self.thirdTimer.timeout.connect(self.reset_hourly_count)
         self.thirdTimer.start(3600 * 1000)  # Every 300,000 ms or 5 minute
-        
-        
+
         central_widget = QtWidgets.QWidget()
         central_widget.setLayout(layout)
         self.setCentralWidget(central_widget)
 
-#        self.label = pg.TextItem(anchor=(1, 0))
-#        self.plotWidget.addItem(self.label)
-
-
+        #        self.label = pg.TextItem(anchor=(1, 0))
+        #        self.plotWidget.addItem(self.label)
 
         self.data = np.array([])
         self.xlabels = np.array([])
         self.times = np.array([])
 
-        
         self.curve = self.plotWidget.plot()
-        
+
         # To check whether the plot should update or pause
         self.paused = False
 
         self.viewBox = self.plotWidget.getViewBox()
         self.viewBox.setMouseMode(self.viewBox.RectMode)
 
-
         # Set default pen color
-        self.defaultPen = pg.mkPen(color='b')
-        self.alertPen = pg.mkPen(color='r')
+        self.defaultPen = pg.mkPen(color="b")
+        self.alertPen = pg.mkPen(color="r")
 
         # Check for trigger every second
         self.timer = QtCore.QTimer(self)
         self.timer.timeout.connect(self.check_file_for_trigger)
         self.timer.start(1000)  # Every 1000 ms or 1 second
 
-
-
     def update_hourly_count(self):
         self.spikesPerHour[-1] = self.spikesPerHour[-1] + self.currentHourSpikes
         self.histogram.setOpts(height=self.spikesPerHour)
 
-
-
     def reset_hourly_count(self):
 
         self.spikesPerHour[-1] = self.spikesPerHour[-1] + self.currentHourSpikes
-        self.spikesPerHour = np.roll(self.spikesPerHour, -1)  # Shift data to make space for new hour
+        self.spikesPerHour = np.roll(
+            self.spikesPerHour, -1
+        )  # Shift data to make space for new hour
         self.currentHourSpikes = 0
-
-        
 
     def check_file_for_trigger(self):
         # Define the path of the file that contains the number.
         # Modify this path as needed.
         trigger_file_path = "../CServer/live_status.txt"
-        
-        
-        with open(trigger_file_path, 'r') as f:
+
+        with open(trigger_file_path, "r") as f:
             content = f.readline().split()
         if content[self.channel] == "1":
-            self.plotWidget.getViewBox().setBackgroundColor('r')
-#                self.curve.setPen(self.alertPen)  # Set curve color to red
+            self.plotWidget.getViewBox().setBackgroundColor("r")
+        #                self.curve.setPen(self.alertPen)  # Set curve color to red
         else:
-            self.plotWidget.getViewBox().setBackgroundColor('k')                
-#                self.curve.setPen(self.defaultPen)  # Reset curve color to default
-        
+            self.plotWidget.getViewBox().setBackgroundColor("k")
+
+    #                self.curve.setPen(self.defaultPen)  # Reset curve color to default
 
     def toggle_pause(self):
         """Toggle between paused and running state."""
@@ -186,35 +171,27 @@ class App(QtWidgets.QMainWindow):
 
         if self.paused:  # Check if paused
             return
-        
 
         thissample = float(value[self.channel])
         self.data = np.append(self.data, thissample)[-data_length:]
 
-
         self.times = np.append(self.times, time.time())[-data_length:]
         self.xlabels = self.times - self.times[0]
-        
+
         if thissample > SPIKE_THRESHOLD:
             self.currentHourSpikes += 1
 
-    
         self.curve.setData(self.xlabels, self.data)
-
-       
-
-
-        
 
     def update_label(self, value):
         """Update the label with the data from the second pipe."""
-#        print(value[self.channel])
+        #        print(value[self.channel])
 
         if len(value) == 6:
 
             self.label.setText(value[self.channel])
-    #        self.label.setPos(self.plotWidget.viewRange()[0][1], self.plotWidget.viewRange()[1][0])
 
+    #        self.label.setPos(self.plotWidget.viewRange()[0][1], self.plotWidget.viewRange()[1][0])
 
 
 def start_one(channel):
@@ -223,32 +200,28 @@ def start_one(channel):
     mainWindow1 = App(channel)
     mainWindow1.show()
 
-
-
     receiver = DataReceiver(pipe_path + str(channel))
     thread = QtCore.QThread()
     receiver.moveToThread(thread)
 
-    
-   # For second pipe
+    # For second pipe
     receiver2 = DataReceiver(v_pipe_path + str(channel))
     thread2 = QtCore.QThread()
     receiver2.moveToThread(thread2)
-    
+
     receiver2.newData.connect(mainWindow1.update_label)
 
     thread2.started.connect(receiver2.run)
     thread2.start()
-    
-    
+
     receiver.newData.connect(mainWindow1.update_plot)
 
     thread.started.connect(receiver.run)
     thread.start()
 
-    if (sys.flags.interactive != 1) or not hasattr(QtCore, 'PYQT_VERSION'):
+    if (sys.flags.interactive != 1) or not hasattr(QtCore, "PYQT_VERSION"):
         sys.exit(app.exec())
-    
+
 
 if __name__ == "__main__":
     pool = mp.Pool(processes=len(plot_channels))
