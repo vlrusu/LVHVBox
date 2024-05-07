@@ -303,13 +303,13 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6], uint 
         pio_sm_clear_fifos(pio_1, sm_array[i+3]);
       }
 
-      uint32_t pre_ped_subtraction[6] = {0, 0, 0, 0, 0, 0};
+      int32_t pre_ped_subtraction[6] = {0, 0, 0, 0, 0, 0};
 
       for (int ped_count=0; ped_count<5000; ped_count++) {
 
         for (int i=0; i<3; i++) {
-          pre_ped_subtraction[i] += (uint16_t) pio_sm_get_blocking(pio_0, sm_array[i]);
-          pre_ped_subtraction[i+3] += (uint16_t) pio_sm_get_blocking(pio_1, sm_array[i+3]);
+          pre_ped_subtraction[i] += (int16_t) pio_sm_get_blocking(pio_0, sm_array[i]);
+          pre_ped_subtraction[i+3] += (int16_t) pio_sm_get_blocking(pio_1, sm_array[i+3]);
         }
       }
 
