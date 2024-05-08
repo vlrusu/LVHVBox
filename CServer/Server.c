@@ -304,7 +304,6 @@ int powerOn(uint8_t channel, int client_addr) {
   
   if (channel == 6) {
     for (int i=0; i<6; i++) {
-      printf("%u\n",powerChMap[i]);
       if (MCP_pinWrite(lvpgoodMCP, powerChMap[i], HIGH) == -1) {
         //return -1;
 
