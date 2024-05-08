@@ -47,7 +47,7 @@ uint8_t trip_mask = -1; // tracks which channels have trips enabled/disabled
 // tracks if any state machines are reading data faster than they're being read
 uint8_t slow_read = 0;
 
-uint8_t trip_status = -1; // no channels start out tripped
+uint8_t trip_status = -1; // all channels start out tripped
 
 uint16_t num_trigger[6] = {0, 0, 0, 0, 0, 0}; // increments/decrements based upon whether trip_currents are exceeded
 float trip_currents[6] = {10, 10, 10, 10, 10, 10}; // tripping threshold currents
@@ -594,7 +594,7 @@ pio_enable_sm_mask_in_sync(pio_1, pio_start_mask);
 
 for (uint8_t i=0; i<6; i++) // ensure that all crowbar pins are initially off
 {
-  gpio_put(all_pins.crowbarPins[i],0);
+  gpio_put(all_pins.crowbarPins[i],1);
 }
 
 gpio_put(all_pins.P1_0, 1); // put pedestal pin high
