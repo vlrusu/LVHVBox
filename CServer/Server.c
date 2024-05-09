@@ -801,10 +801,10 @@ void ramp_hv(uint8_t channel, float voltage, int client_addr) {
 
   if (0 <= channel && channel < 12) {
     for (int itick=0; itick<nsteps; itick++) {
-      msleep(dt*1E3);
       current_value += increment;
 
       set_hv(channel, current_value);
+      msleep(dt*1E3);
     }
     set_hv(channel, voltage);
 
