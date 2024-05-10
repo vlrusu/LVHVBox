@@ -22,7 +22,7 @@ Command = namedtuple(
 
 
 commands = [
-    Command("current_buffer_run", "pico", "Current buffer status, {:,}"),
+    Command("current_buffer_run", "pico", "Current buffer status, {:}"),
     Command("current_burst", "pico"),  # TODO
     Command("current_start", "pico"),
     Command("current_stop", "pico"),
@@ -32,7 +32,7 @@ commands = [
     Command("enable_ped", "pico"),
     Command("enable_trip", "pico"),
     Command("get_ihv", "hv", "{:.2f} uA"),
-    Command("get_slow_read", "pico", "Slow read {:,}"),
+    Command("get_slow_read", "pico", "Slow read {:}"),
     Command("get_vhv", "hv", "{:.2f} V"),
     Command("powerOff", "lv"),
     Command("powerOn", "lv"),
@@ -47,7 +47,7 @@ commands = [
     Command("start_usb", "pico"),
     Command("stop_usb", "pico"),
     Command("trip", "pico"),
-    Command("trip_status", "pico", "Trip status, {:,}"),
+    Command("trip_status", "pico", "Trip status {:}"),
     Command("update_ped", "pico"),
     Command("pcb_temp", "pico", "PCB Temperature, {:.2f} C", is_channel_cmd=False),
     Command("pico_current", "pico", "Pico Current, {:.2f} A", is_channel_cmd=False),
@@ -56,7 +56,7 @@ commands = [
 
 # there are 12 (0-11) hv and 6 (0-5) lv channels.  issuing a command with idx
 # -1 will issue the command for all channels in sequence.
-n_channels = {"pico": 12, "hv": 12, "lv": 6}
+n_channels = {"pico": 12, "hv": 12, "lv": 7}
 
 
 if "libedit" in readline.__doc__:
@@ -142,9 +142,9 @@ def create_command_string_default():
 # interpret number from format_string provided and print it
 def process_response(number, format_str):
     if "{:.2f}" in format_str:
-        number = round(process_float(temp), 2)
-    elif "{:,}" in format_str:
-        number = int(temp[0])
+        number = round(process_float(number), 2)
+    elif "{:}" in format_str:
+        number = int(number[0])
     print(format_str.format(number))
 
 
@@ -186,7 +186,9 @@ def execute_command(sock, command, channel, val):
     send_command(sock, command, channel, val)
     if command.cmd_output_str_format:
         cmd_output = sock.recv(1024)
-        process_response(cmd_output, cmd_output_str_format)
+        if channel is not None:
+            fmt = f"Channel {channel} " + command.cmd_output_str_format
+        process_response(cmd_output, fmt)
 
 
 # parse user input and issue a command
@@ -213,16 +215,15 @@ def process_command(line):
         # channel = -1 if len(keys) != 2 else int(keys[1])
         # in_val = None if len(keys) != 3 else keys[2]
         if channel == -1:  # Handle all channels
+            if command.name == "powerOff":
+                execute_command(sock, command, 6, in_val)
+                return
             for channel in range(n_channels[command.type_key]):
                 execute_command(sock, command, channel, in_val)
         else:
             execute_command(sock, command, channel, in_val)
     else:
         execute_command(sock, command)
-
-    if command.cmd_output_str_format:
-        cmd_output = sock.recv(1024)
-        process_response(cmd_output, cmd_output_str_format)
 
 
 """
