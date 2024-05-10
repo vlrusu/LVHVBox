@@ -382,13 +382,13 @@ void get_all_averaged_currents(PIO pio_0, PIO pio_1, uint sm[], float current_ar
     current_array[channel] += latest_current_0;
     current_array[channel+3] += latest_current_1;
 
-    if ((latest_current_0*adc_to_uA > trip_currents[channel]) && ((trip_mask & (1 << channel))) && ((~trip_status & (1 << channel))) && *before_trip_allowed == 0) {
+    if ((latest_current_0*adc_to_uA > trip_currents[channel]-ped_subtraction[channel]) && ((trip_mask & (1 << channel))) && ((~trip_status & (1 << channel))) && *before_trip_allowed == 0) {
         num_trigger[channel] += 1;
     } else if (num_trigger[channel] > 0) {
       num_trigger[channel] -= 1;
     }
 
-    if ((latest_current_1*adc_to_uA > trip_currents[channel+3]) && ((trip_mask & (1 << channel+3))) && ((~trip_status & (1 << channel+3))) && *before_trip_allowed == 0) {
+    if ((latest_current_1*adc_to_uA > trip_currents[channel+3]-ped_subtraction[channel]) && ((trip_mask & (1 << channel+3))) && ((~trip_status & (1 << channel+3))) && *before_trip_allowed == 0) {
       num_trigger[channel+3] += 1;
     } else if (num_trigger[channel+3] > 0) {
       num_trigger[channel+3] -= 1;
