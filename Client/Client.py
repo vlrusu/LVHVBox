@@ -9,10 +9,19 @@ from collections import namedtuple
 HISTORY_REQUEST_MAX = 100
 current_buffer_len = 8000  # must be divisible by 10
 full_current_chunk = 10
+COMMAND_BYTE_LENGTH = 13
 
 parser = argparse.ArgumentParser()
 
-commands = {
+
+Command = namedtuple(
+    "Command",
+    "name type_key cmd_output_str_format in_val_type is_channel_cmd",
+    defaults=[None, float, True],
+)
+
+
+commands = [
     Command("current_buffer_run", "pico", "Current buffer status, {:,}"),
     Command("current_burst", "pico"),  # TODO
     Command("current_start", "pico"),
@@ -42,18 +51,12 @@ commands = {
     Command("update_ped", "pico"),
     Command("pcb_temp", "pico", "PCB Temperature, {:.2f} C", is_channel_cmd=False),
     Command("pico_current", "pico", "Pico Current, {:.2f} A", is_channel_cmd=False),
-}
+]
 
 
 # there are 12 (0-11) hv and 6 (0-5) lv channels.  issuing a command with idx
 # -1 will issue the command for all channels in sequence.
 n_channels = {"pico": 12, "hv": 12, "lv": 6}
-
-Command = namedtuple(
-    "Command",
-    "name type_key cmd_output_str_format in_val_type is_channel_cmd",
-    defaults=[None, float, True],
-)
 
 
 if "libedit" in readline.__doc__:
@@ -147,14 +150,18 @@ def process_response(number, format_str):
 
 # ship it. socket.send(command_string)
 def send_command(sock, command, channel=None, val=None):
+    command_dict = read_commands()
     command_bytes = bitstring_to_bytes(command_dict["COMMAND_" + command.name])
     type_bytes = bitstring_to_bytes(command_dict["TYPE_" + command.type_key])
     command_string = command_bytes + type_bytes
-    channel_bytes = channel.to_bytes(1, byteorder="big") if channel else None
-    val_bytes = bytearray(struct.pack("f", float(val))) if val else None
+    channel_bytes = channel.to_bytes(1, byteorder="big") if channel else bytearray(1)
+    val_bytes = bytearray(struct.pack("f", float(val))) if val else bytearray(4)
     command_string += channel_bytes + val_bytes
-    padding = bytearray(9 - len(command_string))
-    command_string += padding
+    assert (
+        len(command_string) == COMMAND_BYTE_LENGTH
+    ), f"Invalid command byte length.{command_string} {len(command_string)}"
+    # padding = bytearray(COMMAND_BYTE_LENGTH - len(command_string))
+    # command_string += padding
     sock.send(command_string)
 
 
@@ -185,16 +192,27 @@ def execute_command(sock, command, channel, val):
 # parse user input and issue a command
 def process_command(line):
     keys = line.split(" ")  # command <channel> <input_value>
-    command = commands.get(keys[0])
+
+    command = next((c for c in commands if c.name == keys[0]), None)
 
     if command is None:
         print("Unknown command")
         return
 
     if command.is_channel_cmd:
-        channel = int(keys[1]) if int(keys[1]) else -1
-        in_val = keys[2] if keys[2] else None
-        if channel == "-1":  # Handle all channels
+        channel = None
+        in_val = None
+        try:
+            channel = int(keys[1])
+        except IndexError:
+            channel = -1
+        try:
+            in_val = keys[2]
+        except IndexError:
+            in_val = None
+        # channel = -1 if len(keys) != 2 else int(keys[1])
+        # in_val = None if len(keys) != 3 else keys[2]
+        if channel == -1:  # Handle all channels
             for channel in range(n_channels[command.type_key]):
                 execute_command(sock, command, channel, in_val)
         else:
