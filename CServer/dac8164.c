@@ -88,7 +88,7 @@ void DAC8164_write(DAC8164 *self, uint32_t data)
     sprintf(error_msg, "dac8164_write _sync_pin fail: %u", self->_sync_pin);
     error_log(error_msg);
   }
-  msleep(DAC8164DELAY/1000);
+  msleep(DAC8164DELAY);
 
   for (int i=23;i>=0;i--){
     uint8_t thisbit;
