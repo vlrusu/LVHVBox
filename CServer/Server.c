@@ -737,34 +737,7 @@ void update_ped(uint8_t channel, int client_addr) {
 
 
 // rampHV
-void ramp_hv(uint8_t channel, float voltage, int client_addr) {
-  
-  /*
-  printf("begin ramp\n");
-  int idac = (int)(channel / 4);
-  float increment = voltage / NSTEPS;
-  float current_value = 0;
-
-  if (0 <= channel && channel < 12) {
-    for (int itick=0; itick<NSTEPS; itick++) {
-      msleep(1);
-      current_value += increment;
-
-      set_hv(channel, current_value);
-    }
-  } else {
-    error_log("Invalid ramp_hv channel value");
-    printf("Invalid ramp_hv channel value\n");
-
-    return;
-  }
-  */
-  
-  
-  
-  
-
-  
+void ramp_hv(uint8_t channel, float voltage, int client_addr) {  
   // log command
   char *command_log = load_config("Command_Log_File");
   char log_message[50];
@@ -790,8 +763,6 @@ void ramp_hv(uint8_t channel, float voltage, int client_addr) {
 
   if (0 <= channel && channel < 12) {
     while (abs(digvalue_difference) >= dac_step) {
-      digvalue_difference = final_digvalue - digvalue;
-      
       if (digvalue_difference > 0) {
         digvalue += dac_step;
         DAC8164_writeChannel(&dac[idac], channel, digvalue);
@@ -800,7 +771,7 @@ void ramp_hv(uint8_t channel, float voltage, int client_addr) {
         DAC8164_writeChannel(&dac[idac], channel, digvalue);
       }
 
-      
+      digvalue_difference = final_digvalue - digvalue;
     }
 
     DAC8164_writeChannel(&dac[idac], channel, final_digvalue);
