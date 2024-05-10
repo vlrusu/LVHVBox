@@ -120,6 +120,60 @@ def create_command_string_default():
     pass
 
 
+def safe_command_execution(func):
+    def wrapper(sock, command_tuple, *args, **kwargs):
+        try:
+            return func(sock, command_tuple, *args, **kwargs)
+        except ValueError as e:
+            print("Bad Input:", e)
+        except AssertionError:
+            print("Channel number is out of allowed range")
+
+    return wrapper
+
+
+@safe_command_execution
+def execute_command_on_channel(sock, command_tuple, channel):
+    send_command(sock, *command_tuple[:2], channel)
+    if command_tuple[2]:
+        process_response(sock, f"Channel {channel} {command_tuple[2]}")
+
+
+def process_command(line):
+    commands = {
+        "get_vhv": ("COMMAND_get_vhv", "TYPE_hv", "{:.2f} V", True),
+        "get_ihv": ("COMMAND_get_ihv", "TYPE_hv", "{:.2f} uA", True),
+        "reset_trip": ("COMMAND_reset_trip", "TYPE_pico", None, True),
+        "powerOn": ("COMMAND_powerOn", "TYPE_lv", None, True),
+        "pcb_temp": (
+            "COMMAND_pcb_temp",
+            "TYPE_pico",
+            "PCB Temperature: {:.2f} C",
+            False,
+        ),
+    }
+
+    keys = line.split(" ")
+    command = keys[0]
+    command_tuple = commands.get(command)
+
+    if command_tuple is None:
+        print("Unknown command")
+        return
+
+    if command_tuple[3]:  # If the command requires a channel
+        if len(keys) > 1 and keys[1] == "-1":  # Handle all channels
+            for channel in range(12):  # Assuming channels 0-11
+                execute_command_on_channel(sock, command_tuple, channel)
+        else:
+            channel = int(keys[1]) if len(keys) > 1 else 6
+            execute_command_on_channel(sock, command_tuple, channel)
+    else:
+        send_command(sock, *command_tuple[:2])  # Commands without a channel
+        if command_tuple[2]:
+            process_response(sock, command_tuple[2])
+
+
 def process_command(line):
     command_dict = read_commands()
 
@@ -127,7 +181,6 @@ def process_command(line):
 
     try:
         if keys[0] == "get_vhv":
-
             channel = int(keys[1])
             assert 0 <= channel <= 11
 
@@ -144,7 +197,6 @@ def process_command(line):
             print("Channel " + str(channel) + " voltage: " + str(return_val) + " V")
 
         elif keys[0] == "get_ihv":
-
             channel = int(keys[1])
             assert 0 <= channel <= 11
 
@@ -271,7 +323,6 @@ def process_command(line):
             print("Trip status: " + str(return_val))
 
         elif keys[0] == "pcb_temp":
-
             command_pcb_temp = bitstring_to_bytes(command_dict["COMMAND_pcb_temp"])
             type_pico = bitstring_to_bytes(command_dict["TYPE_pico"])
             padding = bytearray(5)
@@ -345,7 +396,6 @@ def process_command(line):
             sock.send(command_string)
 
         elif keys[0] == "update_ped":
-
             channel = int(keys[1])
             assert 0 <= channel <= 11
 
