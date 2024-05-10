@@ -12,7 +12,7 @@
 #include "MCP23S08.h"
 #include "utils.h"
 
-#define DAC8164DELAY 2
+#define DAC8164DELAY 2E-3 // in mS
 
 
 int DAC8164_setup(DAC8164 *self, MCP *MCP, uint8_t sync, int sclk, uint8_t sdi, int enable_pin, uint8_t ldac_pin)
@@ -88,7 +88,7 @@ void DAC8164_write(DAC8164 *self, uint32_t data)
     sprintf(error_msg, "dac8164_write _sync_pin fail: %u", self->_sync_pin);
     error_log(error_msg);
   }
-  //delayMicroseconds(DAC8164DELAY);
+  msleep(DAC8164DELAY/1000);
 
   for (int i=23;i>=0;i--){
     uint8_t thisbit;
@@ -102,17 +102,17 @@ void DAC8164_write(DAC8164 *self, uint32_t data)
       sprintf(error_msg, "dac8164_write _sdi_pin fail: %u", self->_sdi_pin);
       error_log(error_msg);
     }
-    //delayMicroseconds(DAC8164DELAY);
+    msleep(DAC8164DELAY);
     if (MCP_pinWrite(self->_MCP, self->_sclk_pin, 1) == -1) {
       sprintf(error_msg, "dac8164_write _sclk_pin on fail: %u", self->_sclk_pin);
       error_log(error_msg);
     }
-    //delayMicroseconds(DAC8164DELAY);
+    msleep(DAC8164DELAY);
     if (MCP_pinWrite(self->_MCP, self->_sclk_pin, 0) == -1) {
       sprintf(error_msg, "dac8164_write _sclk_pin off fail: %u", self->_sclk_pin);
       error_log(error_msg);
     }
-    //delayMicroseconds(DAC8164DELAY);
+    msleep(DAC8164DELAY);
   }
 
   if (MCP_pinWrite(self->_MCP, self->_sync_pin, 1) == -1) {

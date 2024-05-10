@@ -788,16 +788,13 @@ void ramp_hv(uint8_t channel, float voltage, int client_addr) {
 
 
 
-
+  
   float total_time = fabs(delta_v)/dvdt;
   int nsteps = (int) total_time/dt;
 
   float increment = delta_v / nsteps;
 
-  if (nsteps < 1) {
-    nsteps = 1;
-    increment = 0;
-  }
+  
 
   if (0 <= channel && channel < 12) {
     for (int itick=0; itick<nsteps; itick++) {
@@ -806,6 +803,7 @@ void ramp_hv(uint8_t channel, float voltage, int client_addr) {
       set_hv(channel, current_value);
       msleep(dt*1E3);
     }
+    msleep(20);
     set_hv(channel, voltage);
 
   } else {
@@ -814,6 +812,7 @@ void ramp_hv(uint8_t channel, float voltage, int client_addr) {
 
     return;
   }
+  
 }
 
 
