@@ -144,6 +144,9 @@ FILE *fp_V_0;
 char *filename_V_1;
 FILE *fp_V_1;
 
+// controls ramping speed
+const int dac_step = 10;
+
 
 
 
@@ -760,7 +763,6 @@ void ramp_hv(uint8_t channel, float voltage, int client_addr) {
   
   
   
-  
 
   
   // log command
@@ -771,40 +773,37 @@ void ramp_hv(uint8_t channel, float voltage, int client_addr) {
 
 
   int idac = (int)(channel / 4);
-
-  // calculate number of steps for desired dv/dt
-  float delta_v;
-  float dvdt = 150;
-  float dt = 50E-3; // S
+  float alphas[12] = {0.9, 0.9, 0.885, 0.9, 0.9012, 0.9034, 0.9009, 0.9027, 0.8977, 0.9012, 0.9015, 1.};
   float current_value;
+  uint32_t digvalue;
+  int digvalue_difference;
+  uint32_t final_digvalue = ((int)(alphas[channel] * 16383. * (voltage / 1631.3))) & 0x3FFF;
 
   if (0<=channel && channel < 6) {
-    delta_v = voltage - voltages_0[channel];
     current_value = voltages_0[channel];
   } else if (6<=channel && channel < 12) {
-    delta_v = voltage - voltages_1[channel-6];
     current_value = voltages_1[channel-6];
   }
 
-
-
-  
-  float total_time = fabs(delta_v)/dvdt;
-  int nsteps = (int) total_time/dt;
-
-  float increment = delta_v / nsteps;
-
-  
+  // calculate current digvalue
+  digvalue = ((int)(alphas[channel] * 16383. * (current_value / 1631.3))) & 0x3FFF;
 
   if (0 <= channel && channel < 12) {
-    for (int itick=0; itick<nsteps; itick++) {
-      current_value += increment;
+    while (abs(digvalue_difference) >= dac_step) {
+      digvalue_difference = final_digvalue - digvalue;
+      
+      if (digvalue_difference > 0) {
+        digvalue += dac_step;
+        DAC8164_writeChannel(&dac[idac], channel, digvalue);
+      } else if (digvalue_difference < 0) {
+        digvalue -= dac_step;
+        DAC8164_writeChannel(&dac[idac], channel, digvalue);
+      }
 
-      set_hv(channel, current_value);
-      msleep(dt*1E3);
+      
     }
-    msleep(20);
-    set_hv(channel, voltage);
+
+    DAC8164_writeChannel(&dac[idac], channel, final_digvalue);
 
   } else {
     error_log("Invalid ramp_hv channel value");
