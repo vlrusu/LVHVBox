@@ -4,40 +4,56 @@ import readline
 import socket
 import time
 import struct
+from collections import namedtuple
 
 HISTORY_REQUEST_MAX = 100
 current_buffer_len = 8000  # must be divisible by 10
 full_current_chunk = 10
 
 parser = argparse.ArgumentParser()
-cmds = {
-    "get_vhv",
-    "get_ihv",
-    "current_burst",
-    "current_start",
-    "current_stop",
-    "current_buffer_run",
-    "ramp_hv",
-    "down_hv",
-    "trip",
-    "reset_trip",
-    "disable_trip",
-    "enable_trip",
-    "trip_status",
-    "pcb_temp",
-    "pico_current",
-    "set_trip",
-    "powerOn",
-    "powerOff",
-    "readMonV48",
-    "readMonI48",
-    "readMonV6",
-    "readMonI6",
-    "enable_ped",
-    "disable_ped",
-    "start_usb",
-    "stop_usb",
+
+commands = {
+    Command("current_buffer_run", "pico", "Current buffer status, {:,}"),
+    Command("current_burst", "pico"),  # TODO
+    Command("current_start", "pico"),
+    Command("current_stop", "pico"),
+    Command("disable_ped", "pico"),
+    Command("disable_trip", "pico"),
+    Command("down_hv", "hv"),
+    Command("enable_ped", "pico"),
+    Command("enable_trip", "pico"),
+    Command("get_ihv", "hv", "{:.2f} uA"),
+    Command("get_slow_read", "pico", "Slow read {:,}"),
+    Command("get_vhv", "hv", "{:.2f} V"),
+    Command("powerOff", "lv"),
+    Command("powerOn", "lv"),
+    Command("ramp_hv", "hv"),
+    Command("readMonI48", "lv", "{:.2f} A"),
+    Command("readMonI6", "lv", "{:.2f} A"),
+    Command("readMonV48", "lv", "{:.2f} V"),
+    Command("readMonV6", "lv", "{:.2f} V"),
+    Command("reset_trip", "pico"),
+    Command("set_trip", "pico"),
+    Command("set_trip_count", "pico", in_val_type=int),
+    Command("start_usb", "pico"),
+    Command("stop_usb", "pico"),
+    Command("trip", "pico"),
+    Command("trip_status", "pico", "Trip status, {:,}"),
+    Command("update_ped", "pico"),
+    Command("pcb_temp", "pico", "PCB Temperature, {:.2f} C", is_channel_cmd=False),
+    Command("pico_current", "pico", "Pico Current, {:.2f} A", is_channel_cmd=False),
 }
+
+
+# there are 12 (0-11) hv and 6 (0-5) lv channels.  issuing a command with idx
+# -1 will issue the command for all channels in sequence.
+n_channels = {"pico": 12, "hv": 12, "lv": 6}
+
+Command = namedtuple(
+    "Command",
+    "name type_key cmd_output_str_format in_val_type is_channel_cmd",
+    defaults=[None, float, True],
+)
 
 
 if "libedit" in readline.__doc__:
@@ -102,7 +118,7 @@ def bitstring_to_bytes(s):
 
 
 def completer(text, state):
-    options = [x for x in cmds if x.startswith(text)]
+    options = [x.name for x in commands if x.name.startswith(text)]
     try:
         return options[state]
     except IndexError:
@@ -120,10 +136,33 @@ def create_command_string_default():
     pass
 
 
+# interpret number from format_string provided and print it
+def process_response(number, format_str):
+    if "{:.2f}" in format_str:
+        number = round(process_float(temp), 2)
+    elif "{:,}" in format_str:
+        number = int(temp[0])
+    print(format_str.format(number))
+
+
+# ship it. socket.send(command_string)
+def send_command(sock, command, channel=None, val=None):
+    command_bytes = bitstring_to_bytes(command_dict["COMMAND_" + command.name])
+    type_bytes = bitstring_to_bytes(command_dict["TYPE_" + command.type_key])
+    command_string = command_bytes + type_bytes
+    channel_bytes = channel.to_bytes(1, byteorder="big") if channel else None
+    val_bytes = bytearray(struct.pack("f", float(val))) if val else None
+    command_string += channel_bytes + val_bytes
+    padding = bytearray(9 - len(command_string))
+    command_string += padding
+    sock.send(command_string)
+
+
+# wrap command execution in a try except to keep it clean
 def safe_command_execution(func):
-    def wrapper(sock, command_tuple, *args, **kwargs):
+    def wrapper(sock, command, channel=None, val=None):
         try:
-            return func(sock, command_tuple, *args, **kwargs)
+            return func(sock, command, channel, val)
         except ValueError as e:
             print("Bad Input:", e)
         except AssertionError:
@@ -132,549 +171,99 @@ def safe_command_execution(func):
     return wrapper
 
 
+# sanity check -> send command -> process response
 @safe_command_execution
-def execute_command_on_channel(sock, command_tuple, channel):
-    send_command(sock, *command_tuple[:2], channel)
-    if command_tuple[2]:
-        process_response(sock, f"Channel {channel} {command_tuple[2]}")
+def execute_command(sock, command, channel, val):
+    if channel is not None:
+        assert -1 <= channel < n_channels[command.type_key]
+    send_command(sock, command, channel, val)
+    if command.cmd_output_str_format:
+        cmd_output = sock.recv(1024)
+        process_response(cmd_output, cmd_output_str_format)
 
 
+# parse user input and issue a command
 def process_command(line):
-    commands = {
-        "get_vhv": ("COMMAND_get_vhv", "TYPE_hv", "{:.2f} V", True),
-        "get_ihv": ("COMMAND_get_ihv", "TYPE_hv", "{:.2f} uA", True),
-        "reset_trip": ("COMMAND_reset_trip", "TYPE_pico", None, True),
-        "powerOn": ("COMMAND_powerOn", "TYPE_lv", None, True),
-        "pcb_temp": (
-            "COMMAND_pcb_temp",
-            "TYPE_pico",
-            "PCB Temperature: {:.2f} C",
-            False,
-        ),
-    }
+    keys = line.split(" ")  # command <channel> <input_value>
+    command = commands.get(keys[0])
 
-    keys = line.split(" ")
-    command = keys[0]
-    command_tuple = commands.get(command)
-
-    if command_tuple is None:
+    if command is None:
         print("Unknown command")
         return
 
-    if command_tuple[3]:  # If the command requires a channel
-        if len(keys) > 1 and keys[1] == "-1":  # Handle all channels
-            for channel in range(12):  # Assuming channels 0-11
-                execute_command_on_channel(sock, command_tuple, channel)
+    if command.is_channel_cmd:
+        channel = int(keys[1]) if int(keys[1]) else -1
+        in_val = keys[2] if keys[2] else None
+        if channel == "-1":  # Handle all channels
+            for channel in range(n_channels[command.type_key]):
+                execute_command(sock, command, channel, in_val)
         else:
-            channel = int(keys[1]) if len(keys) > 1 else 6
-            execute_command_on_channel(sock, command_tuple, channel)
+            execute_command(sock, command, channel, in_val)
     else:
-        send_command(sock, *command_tuple[:2])  # Commands without a channel
-        if command_tuple[2]:
-            process_response(sock, command_tuple[2])
+        execute_command(sock, command)
+
+    if command.cmd_output_str_format:
+        cmd_output = sock.recv(1024)
+        process_response(cmd_output, cmd_output_str_format)
 
 
-def process_command(line):
-    command_dict = read_commands()
+"""
+    elif keys[0] == "current_burst":
+        channel = int(keys[1])
 
-    keys = line.split(" ")
+        # send command to stop usb
+        command_stop_usb = bitstring_to_bytes(command_dict["COMMAND_stop_usb"])
+        type_pico = bitstring_to_bytes(command_dict["TYPE_pico"])
+        padding_0 = bytearray(4)
+        bits_channel = (channel).to_bytes(1, byteorder="big")
+        command_string = command_stop_usb + type_pico + bits_channel + padding_0
+        sock.send(command_string)
 
-    try:
-        if keys[0] == "get_vhv":
-            channel = int(keys[1])
-            assert 0 <= channel <= 11
+        time.sleep(0.5)
 
-            command_get_vhv = bitstring_to_bytes(command_dict["COMMAND_get_vhv"])
-            type_hv = bitstring_to_bytes(command_dict["TYPE_hv"])
-            bits_channel = (channel).to_bytes(1, byteorder="big")
-            padding = bytearray(4)
-            command_string = command_get_vhv + type_hv + bits_channel + padding
+        assert 0 <= channel <= 11
 
-            sock.send(command_string)
+        padding = bytearray(4)
+        command_current_burst = bitstring_to_bytes(
+            command_dict["COMMAND_current_burst"]
+        )
+        bits_channel = (channel).to_bytes(1, byteorder="big")
+        command_string = command_current_burst + type_pico + bits_channel + padding
 
-            temp = sock.recv(1024)
-            return_val = round(process_float(temp), 2)
-            print("Channel " + str(channel) + " voltage: " + str(return_val) + " V")
+        num_cycles = int(current_buffer_len / full_current_chunk)
+        full_currents = []
 
-        elif keys[0] == "get_ihv":
-            channel = int(keys[1])
-            assert 0 <= channel <= 11
-
-            command_get_ihv = bitstring_to_bytes(command_dict["COMMAND_get_ihv"])
-            type_hv = bitstring_to_bytes(command_dict["TYPE_hv"])
-            bits_channel = (channel).to_bytes(1, byteorder="big")
-            padding = bytearray(4)
-            command_string = command_get_ihv + type_hv + bits_channel + padding
-
-            sock.send(command_string)
-            temp = sock.recv(1024)
-            return_val = round(process_float(temp), 2)
-
-            print("Channel " + str(channel) + " current: " + str(return_val) + " uA")
-
-        elif keys[0] == "readMonV48":
-            channel = int(keys[1])
-            assert 0 <= channel <= 5
-
-            command_readMonV48 = bitstring_to_bytes(command_dict["COMMAND_readMonV48"])
-            type_lv = bitstring_to_bytes(command_dict["TYPE_lv"])
-            bits_channel = (channel).to_bytes(1, byteorder="big")
-            padding = bytearray(4)
-            command_string = command_readMonV48 + type_lv + bits_channel + padding
+        for cycle in range(num_cycles):
+            print("cycle: " + str(cycle))
+            # time.sleep(0.2) # put into config.txt later
+            # sock.send(bytes(command_string,"utf-8"))
 
             sock.send(command_string)
 
-            temp = sock.recv(1024)
-            return_val = round(process_float(temp), 2)
-
-            print("Channel " + str(channel) + " voltage: " + str(return_val) + " V")
-
-        elif keys[0] == "readMonI48":
-            channel = int(keys[1])
-            assert 0 <= channel <= 5
-
-            command_readMonI48 = bitstring_to_bytes(command_dict["COMMAND_readMonI48"])
-            type_lv = bitstring_to_bytes(command_dict["TYPE_lv"])
-            bits_channel = (channel).to_bytes(1, byteorder="big")
-            padding = bytearray(4)
-            command_string = command_readMonI48 + type_lv + bits_channel + padding
-
-            sock.send(command_string)
-
-            temp = sock.recv(1024)
-            return_val = round(process_float(temp), 2)
-
-            print("Channel " + str(channel) + " current: " + str(return_val) + " A")
-
-        elif keys[0] == "readMonV6":
-            channel = int(keys[1])
-            assert 0 <= channel <= 5
-
-            command_readMonV6 = bitstring_to_bytes(command_dict["COMMAND_readMonV6"])
-            type_lv = bitstring_to_bytes(command_dict["TYPE_lv"])
-            bits_channel = (channel).to_bytes(1, byteorder="big")
-            padding = bytearray(4)
-            command_string = command_readMonV6 + type_lv + bits_channel + padding
-
-            sock.send(command_string)
-
-            temp = sock.recv(1024)
-            return_val = round(process_float(temp), 2)
-
-            print("Channel " + str(channel) + " voltage: " + str(return_val) + " V")
-
-        elif keys[0] == "readMonI6":
-            channel = int(keys[1])
-            assert 0 <= channel <= 5
-
-            command_readMonI6 = bitstring_to_bytes(command_dict["COMMAND_readMonI6"])
-            type_lv = bitstring_to_bytes(command_dict["TYPE_lv"])
-            bits_channel = (channel).to_bytes(1, byteorder="big")
-            padding = bytearray(4)
-            command_string = command_readMonI6 + type_lv + bits_channel + padding
-
-            sock.send(command_string)
-
-            temp = sock.recv(1024)
-            return_val = round(process_float(temp), 2)
-
-            print("Channel " + str(channel) + " current: " + str(return_val) + " A")
-
-        elif keys[0] == "current_buffer_run":
-            channel = int(keys[1])
-            assert 0 <= channel <= 11
-
-            command_current_buffer_run = bitstring_to_bytes(
-                command_dict["COMMAND_current_buffer_run"]
-            )
-            type_pico = bitstring_to_bytes(command_dict["TYPE_pico"])
-            bits_channel = (channel).to_bytes(1, byteorder="big")
-            padding = bytearray(4)
-            command_string = (
-                command_current_buffer_run + type_pico + bits_channel + padding
-            )
-
-            sock.send(command_string)
-
-            temp = sock.recv(1024)
-            return_val = int(temp[0])
-
-            print("Current buffer status: " + str(return_val))
-
-        elif keys[0] == "trip_status":
-            channel = int(keys[1])
-            assert 0 <= channel <= 11
-
-            command_current_buffer_run = bitstring_to_bytes(
-                command_dict["COMMAND_trip_status"]
-            )
-            type_pico = bitstring_to_bytes(command_dict["TYPE_pico"])
-            bits_channel = (channel).to_bytes(1, byteorder="big")
-            padding = bytearray(4)
-            command_string = (
-                command_current_buffer_run + type_pico + bits_channel + padding
-            )
-
-            sock.send(command_string)
-
-            temp = sock.recv(1024)
-            return_val = int(temp[0])
-
-            print("Trip status: " + str(return_val))
-
-        elif keys[0] == "pcb_temp":
-            command_pcb_temp = bitstring_to_bytes(command_dict["COMMAND_pcb_temp"])
-            type_pico = bitstring_to_bytes(command_dict["TYPE_pico"])
-            padding = bytearray(5)
-            command_string = command_pcb_temp + type_pico + padding
-
-            sock.send(command_string)
-            temp = sock.recv(1024)
-            return_val = round(process_float(temp), 2)
-
-            print("PCB Temperature: " + str(return_val) + " C")
-
-        elif keys[0] == "pico_current":
-            command_pico_current = bitstring_to_bytes(
-                command_dict["COMMAND_pico_current"]
-            )
-            type_pico = bitstring_to_bytes(command_dict["TYPE_pico"])
-            padding = bytearray(5)
-            command_string = command_pico_current + type_pico + padding
-
-            sock.send(command_string)
-            temp = sock.recv(1024)
-            return_val = round(process_float(temp), 2)
-
-            print("Pico Current: " + str(return_val) + " A")
-
-        elif keys[0] == "get_slow_read":
-            channel = int(keys[1])
-            assert 0 <= channel <= 11
-
-            command_get_slow_read = bitstring_to_bytes(
-                command_dict["COMMAND_get_slow_read"]
-            )
-            type_pico = bitstring_to_bytes(command_dict["TYPE_pico"])
-            bits_channel = (channel).to_bytes(1, byteorder="big")
-            padding = bytearray(4)
-            command_string = command_get_slow_read + type_pico + bits_channel + padding
-
-            sock.send(command_string)
-
-            temp = sock.recv(1024)
-            return_val = int(temp[0])
-
-            print("Slow read: " + str(return_val))
-
-        elif keys[0] == "current_start":
-            channel = int(keys[1])
-            assert 0 <= channel <= 11
-
-            command_current_start = bitstring_to_bytes(
-                command_dict["COMMAND_current_start"]
-            )
-            type_pico = bitstring_to_bytes(command_dict["TYPE_pico"])
-            bits_channel = (channel).to_bytes(1, byteorder="big")
-            padding = bytearray(4)
-            command_string = command_current_start + type_pico + bits_channel + padding
-
-            sock.send(command_string)
-
-        elif keys[0] == "current_stop":
-            channel = int(keys[1])
-            assert 0 <= channel <= 11
-
-            command_current_stop = bitstring_to_bytes(
-                command_dict["COMMAND_current_stop"]
-            )
-            type_pico = bitstring_to_bytes(command_dict["TYPE_pico"])
-            bits_channel = (channel).to_bytes(1, byteorder="big")
-            padding = bytearray(4)
-            command_string = command_current_stop + type_pico + bits_channel + padding
-
-            sock.send(command_string)
-
-        elif keys[0] == "update_ped":
-            channel = int(keys[1])
-            assert 0 <= channel <= 11
-
-            command_update_ped = bitstring_to_bytes(command_dict["COMMAND_update_ped"])
-            type_pico = bitstring_to_bytes(command_dict["TYPE_pico"])
-            bits_channel = (channel).to_bytes(1, byteorder="big")
-            padding = bytearray(4)
-            command_string = command_update_ped + type_pico + bits_channel + padding
-
-            sock.send(command_string)
-
-        elif keys[0] == "down_hv":
-            channel = int(keys[1])
-            assert 0 <= channel <= 11
-
-            command_down_hv = bitstring_to_bytes(command_dict["COMMAND_down_hv"])
-            type_hv = bitstring_to_bytes(command_dict["TYPE_hv"])
-            bits_channel = (channel).to_bytes(1, byteorder="big")
-            padding = bytearray(4)
-            command_string = command_down_hv + type_hv + bits_channel + padding
-
-            sock.send(command_string)
-
-        elif keys[0] == "trip":
-            channel = int(keys[1])
-            assert 0 <= channel <= 11
-
-            command_trip = bitstring_to_bytes(command_dict["COMMAND_trip"])
-            type_pico = bitstring_to_bytes(command_dict["TYPE_pico"])
-            bits_channel = (channel).to_bytes(1, byteorder="big")
-            padding = bytearray(4)
-            command_string = command_trip + type_pico + bits_channel + padding
-
-            sock.send(command_string)
-
-        elif keys[0] == "reset_trip":
-            channel = int(keys[1])
-            assert 0 <= channel <= 11
-
-            command_reset_trip = bitstring_to_bytes(command_dict["COMMAND_reset_trip"])
-            type_pico = bitstring_to_bytes(command_dict["TYPE_pico"])
-            bits_channel = (channel).to_bytes(1, byteorder="big")
-            padding = bytearray(4)
-            command_string = command_reset_trip + type_pico + bits_channel + padding
-
-            sock.send(command_string)
-
-        elif keys[0] == "disable_trip":
-            channel = int(keys[1])
-            assert 0 <= channel <= 11
-
-            command_disable_trip = bitstring_to_bytes(
-                command_dict["COMMAND_disable_trip"]
-            )
-            type_pico = bitstring_to_bytes(command_dict["TYPE_pico"])
-            bits_channel = (channel).to_bytes(1, byteorder="big")
-            padding = bytearray(4)
-            command_string = command_disable_trip + type_pico + bits_channel + padding
-
-            sock.send(command_string)
-
-        elif keys[0] == "enable_trip":
-            channel = int(keys[1])
-            assert 0 <= channel <= 11
-
-            command_enable_trip = bitstring_to_bytes(
-                command_dict["COMMAND_enable_trip"]
-            )
-            type_pico = bitstring_to_bytes(command_dict["TYPE_pico"])
-            bits_channel = (channel).to_bytes(1, byteorder="big")
-            padding = bytearray(4)
-            command_string = command_enable_trip + type_pico + bits_channel + padding
-
-            sock.send(command_string)
-
-        elif keys[0] == "enable_ped":
-            channel = int(keys[1])
-            assert 0 <= channel <= 11
-
-            command_enable_ped = bitstring_to_bytes(command_dict["COMMAND_enable_ped"])
-            type_pico = bitstring_to_bytes(command_dict["TYPE_pico"])
-            bits_channel = (channel).to_bytes(1, byteorder="big")
-            padding = bytearray(4)
-            command_string = command_enable_ped + type_pico + bits_channel + padding
-
-            sock.send(command_string)
-
-        elif keys[0] == "disable_ped":
-            channel = int(keys[1])
-            assert 0 <= channel <= 11
-
-            command_disable_ped = bitstring_to_bytes(
-                command_dict["COMMAND_disable_ped"]
-            )
-            type_pico = bitstring_to_bytes(command_dict["TYPE_pico"])
-            bits_channel = (channel).to_bytes(1, byteorder="big")
-            padding = bytearray(4)
-            command_string = command_disable_ped + type_pico + bits_channel + padding
-
-            sock.send(command_string)
-
-        elif keys[0] == "powerOn":
-            if len(keys) == 2:
-                channel = int(keys[1])
-                assert 0 <= channel <= 5
-            else:
-                channel = 6
-
-            command_powerOn = bitstring_to_bytes(command_dict["COMMAND_powerOn"])
-            type_lv = bitstring_to_bytes(command_dict["TYPE_lv"])
-            bits_channel = (channel).to_bytes(1, byteorder="big")
-            padding = bytearray(4)
-            command_string = command_powerOn + type_lv + bits_channel + padding
-
-            sock.send(command_string)
-
-        elif keys[0] == "powerOff":
-            if len(keys) == 2:
-                channel = int(keys[1])
-                assert 0 <= channel <= 5
-            else:
-                channel = 6
-
-            command_powerOff = bitstring_to_bytes(command_dict["COMMAND_powerOff"])
-            type_lv = bitstring_to_bytes(command_dict["TYPE_lv"])
-            bits_channel = (channel).to_bytes(1, byteorder="big")
-            padding = bytearray(4)
-            command_string = command_powerOff + type_lv + bits_channel + padding
-
-            sock.send(command_string)
-
-        elif keys[0] == "enable_trip":
-            channel = int(keys[1])
-            assert 0 <= channel <= 11
-
-            command_enable_trip = bitstring_to_bytes(
-                command_dict["COMMAND_enable_trip"]
-            )
-            type_pico = bitstring_to_bytes(command_dict["TYPE_pico"])
-            bits_channel = (channel).to_bytes(1, byteorder="big")
-            padding = bytearray(4)
-            command_string = command_enable_trip + type_pico + bits_channel + padding
-
-            sock.send(command_string)
-
-        elif keys[0] == "disable_trip":
-            channel = int(keys[1])
-            assert 0 <= channel <= 11
-
-            command_disable_trip = bitstring_to_bytes(
-                command_dict["COMMAND_disable_trip"]
-            )
-            type_pico = bitstring_to_bytes(command_dict["TYPE_pico"])
-            bits_channel = (channel).to_bytes(1, byteorder="big")
-            padding = bytearray(4)
-            command_string = command_disable_trip + type_pico + bits_channel + padding
-
-            sock.send(command_string)
-
-        elif keys[0] == "set_trip":
-            channel = int(keys[1])
-            assert 0 <= channel <= 11
-
-            command_set_trip = bitstring_to_bytes(command_dict["COMMAND_set_trip"])
-            type_pico = bitstring_to_bytes(command_dict["TYPE_pico"])
-            bits_channel = (channel).to_bytes(1, byteorder="big")
-            floatval = bytearray(struct.pack("f", float(keys[2])))
-            command_string = command_set_trip + type_pico + bits_channel + floatval
-
-            sock.send(command_string)
-
-        elif keys[0] == "set_trip_count":
-            channel = int(keys[1])
-            assert 0 <= channel <= 11
-
-            command_set_trip = bitstring_to_bytes(
-                command_dict["COMMAND_set_trip_count"]
-            )
-            type_pico = bitstring_to_bytes(command_dict["TYPE_pico"])
-            bits_channel = (channel).to_bytes(1, byteorder="big")
-            floatval = bytearray(struct.pack("I", int(keys[2])))
-            command_string = command_set_trip + type_pico + bits_channel + floatval
-
-            sock.send(command_string)
-
-        elif keys[0] == "ramp_hv":
-            channel = int(keys[1])
-            assert 0 <= channel <= 11
-
-            command_ramp_hv = bitstring_to_bytes(command_dict["COMMAND_ramp_hv"])
-            type_hv = bitstring_to_bytes(command_dict["TYPE_hv"])
-            bits_channel = (channel).to_bytes(1, byteorder="big")
-            floatval = bytearray(struct.pack("f", float(keys[2])))
-            command_string = command_ramp_hv + type_hv + bits_channel + floatval
-
-            sock.send(command_string)
-
-        elif keys[0] == "current_burst":
-            channel = int(keys[1])
-
-            # send command to stop usb
-            command_stop_usb = bitstring_to_bytes(command_dict["COMMAND_stop_usb"])
-            type_pico = bitstring_to_bytes(command_dict["TYPE_pico"])
-            padding_0 = bytearray(4)
-            bits_channel = (channel).to_bytes(1, byteorder="big")
-            command_string = command_stop_usb + type_pico + bits_channel + padding_0
-            sock.send(command_string)
-
-            time.sleep(0.5)
-
-            assert 0 <= channel <= 11
-
-            padding = bytearray(4)
-            command_current_burst = bitstring_to_bytes(
-                command_dict["COMMAND_current_burst"]
-            )
-            bits_channel = (channel).to_bytes(1, byteorder="big")
-            command_string = command_current_burst + type_pico + bits_channel + padding
-
-            num_cycles = int(current_buffer_len / full_current_chunk)
-            full_currents = []
-
-            for cycle in range(num_cycles):
-                print("cycle: " + str(cycle))
-                # time.sleep(0.2) # put into config.txt later
-                # sock.send(bytes(command_string,"utf-8"))
-
-                sock.send(command_string)
-
-                temp = sock.recv(64)
-
-                for i in range(full_current_chunk):
-                    byte_loop = []
-                    for j in range(4):
-                        byte_loop.append(temp[4 * i + j])
-                    full_currents.append(process_float(byte_loop))
-
-            # send command to start usb
-            time.sleep(0.5)
-            command_start_usb = bitstring_to_bytes(command_dict["COMMAND_start_usb"])
-            type_pico = bitstring_to_bytes(command_dict["TYPE_pico"])
-            padding_0 = bytearray(4)
-            bits_channel = (channel).to_bytes(1, byteorder="big")
-            command_string = command_start_usb + type_pico + bits_channel + padding_0
-            sock.send(command_string)
-
-            # write into new file
-            filename = "full_currents_" + str(int(time.time())) + ".txt"
-            f = open(filename, "w")
-            for i in full_currents:
-                f.write(str(i) + "\n")
-            f.close()
-
-        elif keys[0] == "start_usb":
-            # send command to stop usb
-            command_start_usb = bitstring_to_bytes(command_dict["COMMAND_start_usb"])
-            type_pico = bitstring_to_bytes(command_dict["TYPE_pico"])
-            padding_0 = bytearray(4)
-
-            channel = int(keys[1])
-            bits_channel = (channel).to_bytes(1, byteorder="big")
-            command_string = command_start_usb + type_pico + bits_channel + padding_0
-            sock.send(command_string)
-
-        elif keys[0] == "stop_usb":
-            # send command to stop usb
-            command_stop_usb = bitstring_to_bytes(command_dict["COMMAND_stop_usb"])
-            type_pico = bitstring_to_bytes(command_dict["TYPE_pico"])
-            padding_0 = bytearray(4)
-
-            channel = int(keys[1])
-            bits_channel = (channel).to_bytes(1, byteorder="big")
-            command_string = command_stop_usb + type_pico + bits_channel + padding_0
-            sock.send(command_string)
-
-        else:
-            print("Unknown command")
-    except ValueError as e:
-        print(("Bad Input:", e))
+            temp = sock.recv(64)
+
+            for i in range(full_current_chunk):
+                byte_loop = []
+                for j in range(4):
+                    byte_loop.append(temp[4 * i + j])
+                full_currents.append(process_float(byte_loop))
+
+        # send command to start usb
+        time.sleep(0.5)
+        command_start_usb = bitstring_to_bytes(command_dict["COMMAND_start_usb"])
+        type_pico = bitstring_to_bytes(command_dict["TYPE_pico"])
+        padding_0 = bytearray(4)
+        bits_channel = (channel).to_bytes(1, byteorder="big")
+        command_string = command_start_usb + type_pico + bits_channel + padding_0
+        sock.send(command_string)
+
+        # write into new file
+        filename = "full_currents_" + str(int(time.time())) + ".txt"
+        f = open(filename, "w")
+        for i in full_currents:
+            f.write(str(i) + "\n")
+        f.close()
+"""
 
 
 if __name__ == "__main__":
