@@ -104,16 +104,19 @@ void DAC8164_write(DAC8164 *self, uint32_t data)
       error_log(error_msg);
     }
     usleep(DAC8164DELAY);
+
     if (MCP_pinWrite(self->_MCP, self->_sclk_pin, 1) == -1) {
       sprintf(error_msg, "dac8164_write _sclk_pin on fail: %u", self->_sclk_pin);
       error_log(error_msg);
     }
     usleep(DAC8164DELAY);
+
     if (MCP_pinWrite(self->_MCP, self->_sclk_pin, 0) == -1) {
       sprintf(error_msg, "dac8164_write _sclk_pin off fail: %u", self->_sclk_pin);
       error_log(error_msg);
     }
     usleep(DAC8164DELAY);
+    
   }
 
   if (MCP_pinWrite(self->_MCP, self->_sync_pin, 1) == -1) {
