@@ -150,6 +150,7 @@ const int dac_step = 5;
 
 
 
+
 #define full_current_history_length 8000
 
 typedef struct
@@ -760,7 +761,7 @@ void ramp_hv(uint8_t channel, float voltage, int client_addr) {
 
   // calculate current digvalue
   digvalue = ((int)(alphas[channel] * 16383. * (current_value / 1631.3))) & 0x3FFF;
-
+  
   int single_count = 0;
   int single_num = 500;
   if (0 <= channel && channel < 12) {
@@ -781,6 +782,7 @@ void ramp_hv(uint8_t channel, float voltage, int client_addr) {
         } else {
           digvalue -= dac_step;
         }
+
         DAC8164_writeChannel(&dac[idac], channel, digvalue);
       }
 
