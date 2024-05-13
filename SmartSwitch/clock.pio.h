@@ -16,16 +16,16 @@
 #define clock_wrap 7
 
 static const uint16_t clock_program_instructions[] = {
-            //     .wrap_target
-    0xf031, //  0: set    x, 17           side 1     
-    0xf001, //  1: set    pins, 1         side 1     
-    0xe001, //  2: set    pins, 1         side 0     
-    0xe000, //  3: set    pins, 0         side 0     
-    0xe001, //  4: set    pins, 1         side 0     
-    0xa042, //  5: nop                    side 0     
-    0x0043, //  6: jmp    x--, 3          side 0     
-    0x1000, //  7: jmp    0               side 1     
-            //     .wrap
+    //     .wrap_target
+    0xf031,  //  0: set    x, 17           side 1
+    0xf001,  //  1: set    pins, 1         side 1
+    0xe001,  //  2: set    pins, 1         side 0
+    0xe000,  //  3: set    pins, 0         side 0
+    0xe001,  //  4: set    pins, 1         side 0
+    0xa042,  //  5: nop                    side 0
+    0x0043,  //  6: jmp    x--, 3          side 0
+    0x1000,  //  7: jmp    0               side 1
+             //     .wrap
 };
 
 #if !PICO_NO_HARDWARE
@@ -36,33 +36,35 @@ static const struct pio_program clock_program = {
 };
 
 static inline pio_sm_config clock_program_get_default_config(uint offset) {
-    pio_sm_config c = pio_get_default_sm_config();
-    sm_config_set_wrap(&c, offset + clock_wrap_target, offset + clock_wrap);
-    sm_config_set_sideset(&c, 1, false, false);
-    return c;
+  pio_sm_config c = pio_get_default_sm_config();
+  sm_config_set_wrap(&c, offset + clock_wrap_target, offset + clock_wrap);
+  sm_config_set_sideset(&c, 1, false, false);
+  return c;
 }
 
-void clock_0_program_init(PIO pio, uint sm, uint offset, uint csPin_0, uint sclk_0, float div) {
-    pio_sm_config c = clock_program_get_default_config(offset);
-    pio_gpio_init(pio, csPin_0);
-    pio_gpio_init(pio, sclk_0);
-    sm_config_set_sideset_pins(&c, csPin_0);
-    sm_config_set_set_pins(&c, sclk_0, 1);
-    pio_sm_set_consecutive_pindirs(pio, sm, csPin_0, 1, true);
-    pio_sm_set_consecutive_pindirs(pio, sm, sclk_0, 1, true);
-    sm_config_set_clkdiv(&c, div);
-    pio_sm_init(pio, sm, offset, &c);
+void clock_0_program_init(PIO pio, uint sm, uint offset, uint csPin_0,
+                          uint sclk_0, float div) {
+  pio_sm_config c = clock_program_get_default_config(offset);
+  pio_gpio_init(pio, csPin_0);
+  pio_gpio_init(pio, sclk_0);
+  sm_config_set_sideset_pins(&c, csPin_0);
+  sm_config_set_set_pins(&c, sclk_0, 1);
+  pio_sm_set_consecutive_pindirs(pio, sm, csPin_0, 1, true);
+  pio_sm_set_consecutive_pindirs(pio, sm, sclk_0, 1, true);
+  sm_config_set_clkdiv(&c, div);
+  pio_sm_init(pio, sm, offset, &c);
 }
-void clock_1_program_init(PIO pio, uint sm, uint offset, uint csPin_1, uint sclk_1, float div) {
-    pio_sm_config c = clock_program_get_default_config(offset);
-    pio_gpio_init(pio, csPin_1);
-    pio_gpio_init(pio, sclk_1);
-    sm_config_set_sideset_pins(&c, csPin_1);
-    sm_config_set_set_pins(&c, sclk_1, 1);
-    pio_sm_set_consecutive_pindirs(pio, sm, csPin_1, 1, true);
-    pio_sm_set_consecutive_pindirs(pio, sm, sclk_1, 1, true);
-    sm_config_set_clkdiv(&c, div);
-    pio_sm_init(pio, sm, offset, &c);
+void clock_1_program_init(PIO pio, uint sm, uint offset, uint csPin_1,
+                          uint sclk_1, float div) {
+  pio_sm_config c = clock_program_get_default_config(offset);
+  pio_gpio_init(pio, csPin_1);
+  pio_gpio_init(pio, sclk_1);
+  sm_config_set_sideset_pins(&c, csPin_1);
+  sm_config_set_set_pins(&c, sclk_1, 1);
+  pio_sm_set_consecutive_pindirs(pio, sm, csPin_1, 1, true);
+  pio_sm_set_consecutive_pindirs(pio, sm, sclk_1, 1, true);
+  sm_config_set_clkdiv(&c, div);
+  pio_sm_init(pio, sm, offset, &c);
 }
 
 #endif
