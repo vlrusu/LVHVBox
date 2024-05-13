@@ -12,6 +12,7 @@
 #include "hardware/gpio.h"
 #include "hardware/pio.h"
 #include "hardware/sync.h"
+#include "pico/multicore.h"
 #include "pico/platform.h"
 #include "pico/stdlib.h"
 #include "pico/types.h"
@@ -21,6 +22,8 @@
 // Channel count
 #define nAdc 6  // Number of SmartSwitches
 #define mChn 6  // Number of channels for trip processing
+
+#define FLAG_VALUE 123
 
 struct Pins {
   uint8_t crowbarPins[mChn];
@@ -37,7 +40,7 @@ PIO pio_0 = pio0;  // pio block 0 reference
 PIO pio_1 = pio1;  // pio block 1 reference
 
 uint8_t trip_mask = -1;  // tracks which channels have trips enabled/disabled
-// all channels start out with trips enabled
+// all channels start out with trips enabled. -1 --> 11111111.
 
 // tracks if any state machines are reading data faster than they're being read
 uint8_t slow_read = 0;
@@ -111,6 +114,7 @@ void variable_init() {
   all_pins.enablePin = 7;  // enable pin for MUX
 }
 
+// Get commands from server and do stuff
 void cdc_task(float channel_current_averaged[6], float channel_voltage[6],
               uint sm[6], uint16_t* burst_position, float trip_currents[6],
               uint8_t* trip_mask, uint8_t* trip_status,
@@ -131,17 +135,23 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6],
 
   // determine response based upon Server command
   if (102 < receive_chars[0] &&
-      receive_chars[0] < 109) {  // ----- Trip ----- //
+      receive_chars[0] < 109) {  // ----- Trip a channel ----- //
     uint8_t tripPin = all_pins.crowbarPins[receive_chars[0] - 103];
 
-    if (*trip_mask &
-        (1 << (receive_chars[0] -
-               103))) {  // store ped subtract values from time of trip
+    // IF trip is enabled for this channel, then trip it, and store ped
+    // subtract values from time of trip.
+    if (*trip_mask & (1 << (receive_chars[0] - 103))) {
+      // stop buffering current measurements bc we want to capture trips
       *current_buffer_run = 0;
+
+      // Wait some number of get_all_averaged_currents calls before another
+      // trip is allowed bc there is xtalk. Time between calls is ~3.5 ms.
       *before_trip_allowed = 20;
 
-      memcpy(ped_subtraction_stored, ped_subtraction, sizeof(ped_subtraction));
+      // trip it
       gpio_put(tripPin, 1);
+
+      // update global trip status
       *trip_status = *trip_status | (1 << (receive_chars[0] - 103));
 
       // store ped subtract values from time of trip
@@ -223,14 +233,13 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6],
     }
     tud_cdc_write_flush();  // flushes write buffer, data will not actually be
                             // sent without this command
-  } else if (receive_chars[0] == 87) {  // ----- start current buffer ----- //
+  } else if (receive_chars[0] == 87) {  // ----- Start current buffer ----- //
     *current_buffer_run = 1;
     remaining_buffer_iterations = floor(full_current_history_length / 2);
-  } else if (receive_chars[0] == 88) {  // ----- stop current buffer ----- //
+  } else if (receive_chars[0] == 88) {  // ----- Stop current buffer ----- //
     *current_buffer_run = 0;
   } else if (receive_chars[0] > 88 &&
-             receive_chars[0] <
-                 95) {  // ----- Send chunk of current buffer ----- //
+             receive_chars[0] < 95) {  // - Send chunk of current buffer - //
     float temp_currents[10];
     int channel = receive_chars[0] - 89;
 
@@ -262,20 +271,23 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6],
     if (*full_position >= full_current_history_length) {
       *full_position -= full_current_history_length;
     }
-  } else if (receive_chars[0] == 97) {  // send value of slow_read to server
+  } else if (receive_chars[0] ==
+             97) {  // ----- Send value of slow_read to server ----- //
     tud_cdc_write(&*slow_read, sizeof(&*slow_read));
     tud_cdc_write_flush();
-  } else if (receive_chars[0] == 95) {  // Send current buffer status ----- //
+  } else if (receive_chars[0] ==
+             95) {  // ----- Send current buffer status ----- //
     tud_cdc_write(&*current_buffer_run, sizeof(&*current_buffer_run));
     tud_cdc_write_flush();  // flushes write buffer, data will not actually be
                             // sent without this command
-  } else if (receive_chars[0] == 96) {  // move full position forward 10 //
+  } else if (receive_chars[0] ==
+             96) {  // ----- Move full position forward 10 //
     *full_position += 10;
     if (*full_position >= full_current_history_length) {
       *full_position -= full_current_history_length;
     }
   } else if (receive_chars[0] ==
-             72) {  // Send chunk of average currents ----- //
+             72) {  // ----- Send chunk of avg currents ----- //
     // check if data needs to be sent
     if (*average_store_position > 1) {
       for (uint8_t time_index = 0; time_index < 2; time_index++) {
@@ -302,7 +314,7 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6],
       tud_cdc_write(&none_var, sizeof(&none_var));
       tud_cdc_write_flush();  // tinyUSB formality
     }
-  } else if (receive_chars[0] == 98) {  // Send value hv adc value //
+  } else if (receive_chars[0] == 98) {  // ---- Send value hv adc value ---- //
     float return_val = 0;
 
     for (int i = 0; i < 50; i++) {
@@ -312,8 +324,11 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6],
 
     tud_cdc_write(&return_val, sizeof(return_val));
     tud_cdc_write_flush();
-  } else if (receive_chars[0] > 38 && receive_chars[0] < 45) {
-    if (ped_on != 1) return;
+  } else if (receive_chars[0] > 38 &&
+             receive_chars[0] < 45) {  // ----- Record ped sup ----- //
+    if (ped_on != 1) {
+      return;
+    }
 
     gpio_put(all_pins.P1_0, 0);  // put pedestal pin low
     sleep_ms(200);
@@ -348,8 +363,7 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6],
 
     sleep_ms(700);
   } else if (receive_chars[0] > 44 &&
-             receive_chars[0] < 51) {  // set new trip count requirement
-
+             receive_chars[0] < 51) {  // - Set new trip count requirement - //
     // join receive_chars into a single 16 bit unsigned integer
     uint16_t one = receive_chars[2] << 8;
     uint16_t two = receive_chars[1] + one;
@@ -508,6 +522,19 @@ void get_all_averaged_currents(
   }
 }
 
+void core1_entry() {
+  multicore_fifo_push_blocking(FLAG_VALUE);
+
+  uint32_t g = multicore_fifo_pop_blocking();
+
+  if (g != FLAG_VALUE)
+    printf("Hmm, that's not right on core 1!\n");
+  else
+    printf("Its all gone well on core 1!");
+
+  while (1) tight_loop_contents();
+}
+
 //******************************************************************************
 // Standard loop function, called repeatedly
 int main() {
@@ -614,11 +641,22 @@ int main() {
 
   tud_init(BOARD_TUD_RHPORT);  // tinyUSB formality
 
+  // multi-core testing stuff
+  multicore_launch_core1(core1_entry);
+
+  uint32_t g = multicore_fifo_pop_blocking();
+
+  if (g != FLAG_VALUE)
+    printf("Hmm, that's not right on core 0!\n");
+  else {
+    multicore_fifo_push_blocking(FLAG_VALUE);
+    printf("It's all gone well on core 0!");
+  }
+  // end multi-core testing
+
   while (true)  // DAQ & USB communication Loop, runs forever
   {
     // ----- Collect averaged current measurements ----- //
-
-    for (int j = 0; j < 35; j++) {
       gpio_put(all_pins.enablePin, 0);  // set mux to current
       sleep_ms(1);  // delay is longer than ideal, but seems to be necessary, or
                     // current data will be polluted
@@ -632,9 +670,8 @@ int main() {
       // acquire averaged current values
       for (uint32_t i = 0; i < 1000; i++) {
         get_all_averaged_currents(
-            pio_0, pio_1, sm_array, channel_current_averaged,
-            full_current_array, &full_position, &current_buffer_run,
-            &remaining_buffer_iterations,
+            pio_0, pio_1, sm_array, channel_current_averaged, full_current_array,
+            &full_position, &current_buffer_run, &remaining_buffer_iterations,
             &before_trip_allowed);  // get average of 200 full speed current
                                     // measurements
 
@@ -697,7 +734,6 @@ int main() {
 
       gpio_put(all_pins.enablePin, 0);  // set mux to current
       sleep_ms(1);
-    }
   }
   return 0;
 }
