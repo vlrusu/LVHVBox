@@ -145,7 +145,7 @@ char *filename_V_1;
 FILE *fp_V_1;
 
 // controls ramping speed
-const int dac_step = 10;
+const int dac_step = 5;
 
 
 
@@ -761,13 +761,26 @@ void ramp_hv(uint8_t channel, float voltage, int client_addr) {
   // calculate current digvalue
   digvalue = ((int)(alphas[channel] * 16383. * (current_value / 1631.3))) & 0x3FFF;
 
+  int single_count = 0;
+  int single_num = 500;
   if (0 <= channel && channel < 12) {
     while (abs(digvalue_difference) >= dac_step) {
       if (digvalue_difference > 0) {
-        digvalue += dac_step;
+        if (single_count < single_num) {
+          single_count += 1;
+          digvalue += 1;
+        } else {
+          digvalue += dac_step;
+        }
+          
         DAC8164_writeChannel(&dac[idac], channel, digvalue);
       } else if (digvalue_difference < 0) {
-        digvalue -= dac_step;
+        if (single_count < single_num) {
+          single_count += 1;
+          digvalue -= 1;
+        } else {
+          digvalue -= dac_step;
+        }
         DAC8164_writeChannel(&dac[idac], channel, digvalue);
       }
 
