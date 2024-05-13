@@ -12,6 +12,7 @@
 #include "hardware/gpio.h"
 #include "hardware/pio.h"
 #include "hardware/sync.h"
+#include "pico/multicore.h"
 #include "pico/platform.h"
 #include "pico/stdlib.h"
 #include "pico/types.h"
@@ -21,6 +22,9 @@
 // Channel count
 #define nAdc 6  // Number of SmartSwitches
 #define mChn 6  // Number of channels for trip processing
+
+// multi-core first test:
+#define FLAG_VALUE 123
 
 struct Pins {
   uint8_t crowbarPins[mChn];
@@ -526,6 +530,19 @@ void get_all_averaged_currents(
   }
 }
 
+void core1_entry() {
+  multicore_fifo_push_blocking(FLAG_VALUE);
+
+  uint32_t g = multicore_fifo_pop_blocking();
+
+  if (g != FLAG_VALUE)
+    printf("Hmm, that's not right on core 1!\n");
+  else
+    printf("Its all gone well on core 1!");
+
+  while (1) tight_loop_contents();
+}
+
 //******************************************************************************
 // Standard loop function, called repeatedly
 int main() {
@@ -632,6 +649,8 @@ int main() {
 
   tud_init(BOARD_TUD_RHPORT);  // tinyUSB formality
 
+  multicore_launch_core1(some_function_pointer);
+
   while (true)  // DAQ & USB communication Loop, runs forever
   {
     // ----- Collect averaged current measurements ----- //
@@ -712,5 +731,6 @@ int main() {
     gpio_put(all_pins.enablePin, 0);  // set mux to current
     sleep_ms(1);
   }
+
   return 0;
 }
