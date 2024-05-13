@@ -23,7 +23,10 @@
 #define nAdc 6  // Number of SmartSwitches
 #define mChn 6  // Number of channels for trip processing
 
+// multi-core testing
 #define FLAG_VALUE 123
+uint8_t core0_read = 0;
+uint8_t core1_read = 0;
 
 struct Pins {
   uint8_t crowbarPins[mChn];
@@ -523,16 +526,17 @@ void get_all_averaged_currents(
 }
 
 void core1_entry() {
-  multicore_fifo_push_blocking(FLAG_VALUE);
+  multicore_fifo_push_blocking(FLAG_VALUE);  // send the flag to core 0
 
-  uint32_t g = multicore_fifo_pop_blocking();
+  uint32_t g =
+      multicore_fifo_pop_blocking();  // wait til core 0 sends us a number
 
-  if (g != FLAG_VALUE)
-    printf("Hmm, that's not right on core 1!\n");
-  else
-    printf("Its all gone well on core 1!");
-
-  while (1) tight_loop_contents();
+  if (g == FLAG_VALUE) {  // it's the number we're expecting!
+    core1_read = 1;       // set the success flag and print it
+  }
+  tud_cdc_write(&core1_read, sizeof(&core1_read));
+  tud_cdc_write_flush();
+  while (1) tight_loop_contents();  // idle forever
 }
 
 //******************************************************************************
@@ -641,25 +645,32 @@ int main() {
 
   tud_init(BOARD_TUD_RHPORT);  // tinyUSB formality
 
+  /*
   // multi-core testing stuff
-  multicore_launch_core1(core1_entry);
+  multicore_launch_core1(core1_entry); // launch second core and its func
 
-  uint32_t g = multicore_fifo_pop_blocking();
+  while ( true ) {
+    tud_task();
 
-  if (g != FLAG_VALUE)
-    printf("Hmm, that's not right on core 0!\n");
-  else {
-    multicore_fifo_push_blocking(FLAG_VALUE);
-    printf("It's all gone well on core 0!");
+    uint32_t g = multicore_fifo_pop_blocking(); // wait for core 2 to give us a
+  number
+
+    if (g == FLAG_VALUE) { // it's the value we expect!
+      core0_read = 2; // success flag!
+      multicore_fifo_push_blocking(FLAG_VALUE); // send it back!
+    }
+    tud_cdc_write(&core0_read, sizeof(&core0_read)); // print our success flag
+    tud_cdc_write_flush();
   }
   // end multi-core testing
+  */
 
   while (true)  // DAQ & USB communication Loop, runs forever
   {
     // ----- Collect averaged current measurements ----- //
-      gpio_put(all_pins.enablePin, 0);  // set mux to current
-      sleep_ms(1);  // delay is longer than ideal, but seems to be necessary, or
-                    // current data will be polluted
+    gpio_put(all_pins.enablePin, 0);  // set mux to current
+    sleep_ms(1);  // delay is longer than ideal, but seems to be necessary, or
+                  // current data will be polluted
 
       // clear rx fifos
       for (uint32_t i = 0; i < 3; i++) {
