@@ -23,7 +23,7 @@ Command = namedtuple(
 
 commands = [
     Command("current_buffer_run", "pico", "Current buffer status, {:}"),
-    Command("current_burst", "pico"),  # TODO
+    Command("current_burst", "pico"),  # Not like the others. Handled differently.
     Command("current_start", "pico"),
     Command("current_stop", "pico"),
     Command("disable_ped", "pico"),
@@ -191,6 +191,61 @@ def execute_command(sock, command, channel, val):
         process_response(cmd_output, fmt)
 
 
+def current_burst(keys):
+    channel = int(keys[1])
+
+    # send command to stop usb
+    command_stop_usb = bitstring_to_bytes(command_dict["COMMAND_stop_usb"])
+    type_pico = bitstring_to_bytes(command_dict["TYPE_pico"])
+    padding_0 = bytearray(4)
+    bits_channel = (channel).to_bytes(1, byteorder="big")
+    command_string = command_stop_usb + type_pico + bits_channel + padding_0
+    sock.send(command_string)
+
+    time.sleep(0.5)
+
+    assert 0 <= channel <= 11
+
+    padding = bytearray(4)
+    command_current_burst = bitstring_to_bytes(command_dict["COMMAND_current_burst"])
+    bits_channel = (channel).to_bytes(1, byteorder="big")
+    command_string = command_current_burst + type_pico + bits_channel + padding
+
+    num_cycles = int(current_buffer_len / full_current_chunk)
+    full_currents = []
+
+    for cycle in range(num_cycles):
+        print("cycle: " + str(cycle))
+        # time.sleep(0.2) # put into config.txt later
+        # sock.send(bytes(command_string,"utf-8"))
+
+        sock.send(command_string)
+
+        temp = sock.recv(64)
+
+        for i in range(full_current_chunk):
+            byte_loop = []
+            for j in range(4):
+                byte_loop.append(temp[4 * i + j])
+            full_currents.append(process_float(byte_loop))
+
+    # send command to start usb
+    time.sleep(0.5)
+    command_start_usb = bitstring_to_bytes(command_dict["COMMAND_start_usb"])
+    type_pico = bitstring_to_bytes(command_dict["TYPE_pico"])
+    padding_0 = bytearray(4)
+    bits_channel = (channel).to_bytes(1, byteorder="big")
+    command_string = command_start_usb + type_pico + bits_channel + padding_0
+    sock.send(command_string)
+
+    # write into new file
+    filename = "full_currents_" + str(int(time.time())) + ".txt"
+    f = open(filename, "w")
+    for i in full_currents:
+        f.write(str(i) + "\n")
+    f.close()
+
+
 # parse user input and issue a command
 def process_command(line):
     keys = line.split(" ")  # command <channel> <input_value>
@@ -200,6 +255,9 @@ def process_command(line):
     if command is None:
         print("Unknown command")
         return
+
+    if command.name is "current_burst":
+        return current_burst(keys)
 
     if command.is_channel_cmd:
         channel = None
@@ -215,6 +273,8 @@ def process_command(line):
         # channel = -1 if len(keys) != 2 else int(keys[1])
         # in_val = None if len(keys) != 3 else keys[2]
         if channel == -1:  # Handle all channels
+            # Server expects special channel arg for powering off all channels.
+            # This works, or we could change how the server works.
             if command.name == "powerOff":
                 execute_command(sock, command, 6, in_val)
                 return
@@ -224,65 +284,6 @@ def process_command(line):
             execute_command(sock, command, channel, in_val)
     else:
         execute_command(sock, command)
-
-
-"""
-    elif keys[0] == "current_burst":
-        channel = int(keys[1])
-
-        # send command to stop usb
-        command_stop_usb = bitstring_to_bytes(command_dict["COMMAND_stop_usb"])
-        type_pico = bitstring_to_bytes(command_dict["TYPE_pico"])
-        padding_0 = bytearray(4)
-        bits_channel = (channel).to_bytes(1, byteorder="big")
-        command_string = command_stop_usb + type_pico + bits_channel + padding_0
-        sock.send(command_string)
-
-        time.sleep(0.5)
-
-        assert 0 <= channel <= 11
-
-        padding = bytearray(4)
-        command_current_burst = bitstring_to_bytes(
-            command_dict["COMMAND_current_burst"]
-        )
-        bits_channel = (channel).to_bytes(1, byteorder="big")
-        command_string = command_current_burst + type_pico + bits_channel + padding
-
-        num_cycles = int(current_buffer_len / full_current_chunk)
-        full_currents = []
-
-        for cycle in range(num_cycles):
-            print("cycle: " + str(cycle))
-            # time.sleep(0.2) # put into config.txt later
-            # sock.send(bytes(command_string,"utf-8"))
-
-            sock.send(command_string)
-
-            temp = sock.recv(64)
-
-            for i in range(full_current_chunk):
-                byte_loop = []
-                for j in range(4):
-                    byte_loop.append(temp[4 * i + j])
-                full_currents.append(process_float(byte_loop))
-
-        # send command to start usb
-        time.sleep(0.5)
-        command_start_usb = bitstring_to_bytes(command_dict["COMMAND_start_usb"])
-        type_pico = bitstring_to_bytes(command_dict["TYPE_pico"])
-        padding_0 = bytearray(4)
-        bits_channel = (channel).to_bytes(1, byteorder="big")
-        command_string = command_start_usb + type_pico + bits_channel + padding_0
-        sock.send(command_string)
-
-        # write into new file
-        filename = "full_currents_" + str(int(time.time())) + ".txt"
-        f = open(filename, "w")
-        for i in full_currents:
-            f.write(str(i) + "\n")
-        f.close()
-"""
 
 
 if __name__ == "__main__":
