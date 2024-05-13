@@ -31,7 +31,8 @@
 #define IODIR (0x00)
 
 /**
- * @brief IPOL Input Polarity Register (0 = Normal (default)(low reads as 0), 1 = Inverted (low reads as 1))
+ * @brief IPOL Input Polarity Register (0 = Normal (default)(low reads as 0), 1
+ * = Inverted (low reads as 1))
  *
  */
 #define IPOLA (0x01)
@@ -43,14 +44,16 @@
 #define GPINTEN (0x02)
 
 /**
- * @brief Default Compare Register for Interrupt on Change. Opposite of what is here will trigger an interrupt (default = 0)
+ * @brief Default Compare Register for Interrupt on Change. Opposite of what is
+ * here will trigger an interrupt (default = 0)
  *
  */
 #define DEFVAL (0x03)
 
 /**
  * @brief Interrupt on Change Control Register
- * 1 = pin is compared to DEFVAL, 0 = pin is compared to previous state (default)
+ * 1 = pin is compared to DEFVAL, 0 = pin is compared to previous state
+ * (default)
  */
 #define INTCON (0x04)
 
@@ -86,7 +89,8 @@
 
 /**
  * @brief Output Latch Register
- * 1 = Latch High, 0 = Latch Low (default) Reading Returns Latch State, Not Port Value!
+ * 1 = Latch High, 0 = Latch Low (default) Reading Returns Latch State, Not Port
+ * Value!
  */
 #define OLAT (0xA)
 
@@ -114,50 +118,45 @@
 
 #define IOCON_INIT (IOCON_HAEN)
 
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-#include <stdint.h>
 
-
-extern uint8_t spi_bpw; // bits per word
-extern uint32_t spi_speed; // 40MHz
+extern uint8_t spi_bpw;     // bits per word
+extern uint32_t spi_speed;  // 40MHz
 extern uint16_t spi_delay;
 
-extern int  spiFds; //SPI file descriptor 
-
+extern int spiFds;  // SPI file descriptor
 
 /**
  *
  */
-typedef struct
-{
-    uint8_t _address;
-    uint8_t _outputCache;
-    uint8_t _pullupCache;
-    uint8_t _invertCache;
-    uint8_t _modeCache;
+typedef struct {
+  uint8_t _address;
+  uint8_t _outputCache;
+  uint8_t _pullupCache;
+  uint8_t _invertCache;
+  uint8_t _modeCache;
 } MCP;
 
 int MCP_setup(MCP *mcp, uint8_t address);
 
 /**
  * @brief byteWrite, mostly internal use
- * 
- * @param mcp 
+ *
+ * @param mcp
  */
-int MCP_byteWrite(MCP *mcp, uint8_t, uint8_t); 
-int MCP_pinMode(MCP *mcp, uint8_t, uint8_t);   
+int MCP_byteWrite(MCP *mcp, uint8_t, uint8_t);
+int MCP_pinMode(MCP *mcp, uint8_t, uint8_t);
 
-int MCP_pullupMode(MCP *mcp, uint8_t, uint8_t); 
+int MCP_pullupMode(MCP *mcp, uint8_t, uint8_t);
 
-int MCP_pinWrite(MCP *mcp, uint8_t, uint8_t); 
+int MCP_pinWrite(MCP *mcp, uint8_t, uint8_t);
 
-uint8_t MCP_pinRead(MCP *mcp, uint8_t);  
+uint8_t MCP_pinRead(MCP *mcp, uint8_t);
 
 uint16_t MCP_pinReadAll(MCP *mcp);
 
-
 void lv_spi_pin_init();
 
-
-#endif // MCP23S08
+#endif  // MCP23S08

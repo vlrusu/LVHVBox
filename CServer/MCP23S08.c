@@ -9,38 +9,41 @@
  *
  */
 
-#include "MCP23S08.h" // Header files for this class
+#include "MCP23S08.h"  // Header files for this class
 
-#include <sys/ioctl.h>
 #include <linux/spi/spidev.h>
+#include <sys/ioctl.h>
+
 #include "gpio.h"
 #include "utils.h"
 
-
-
 #define MCPDELAY 1
 
-// Control byte and configuration register information - Control Byte: "0100 A2 A1 A0 R/W" -- W=0
+// Control byte and configuration register information - Control Byte: "0100 A2
+// A1 A0 R/W" -- W=0
 
-#define OPCODEW (0b01000000) // Opcode for MCP23S17 with LSB (bit0) set to write (0), address OR'd in later, bits 1-3
-#define OPCODER (0b01000001) // Opcode for MCP23S17 with LSB (bit0) set to read (1), address OR'd in later, bits 1-3
+#define OPCODEW \
+  (0b01000000)  // Opcode for MCP23S17 with LSB (bit0) set to write (0), address
+                // OR'd in later, bits 1-3
+#define OPCODER \
+  (0b01000001)  // Opcode for MCP23S17 with LSB (bit0) set to read (1), address
+                // OR'd in later, bits 1-3
 
-
-int MCP_setup(MCP* mcp, uint8_t address)
-{
+int MCP_setup(MCP *mcp, uint8_t address) {
   mcp->_address = address;
 
   if (MCP_byteWrite(mcp, IOCON, IOCON_INIT) == -1) {
     error_log("MCP_byteWrite failure 0 inside MCP_setup");
     printf("MCP_byteWrite failure 0 inside MCP_setup");
 
-    return  -1;
+    return -1;
   }
 
-  mcp->_modeCache = 0xFF;   // Default I/O mode is all input, 0xFFFF
-  mcp->_outputCache = 0x00; // Default output state is all off, 0x0000
-  mcp->_pullupCache = 0x00; // Default pull-up state is all off, 0x0000
-  mcp->_invertCache = 0x00; // Default input inversion state is not inverted, 0x0000
+  mcp->_modeCache = 0xFF;    // Default I/O mode is all input, 0xFFFF
+  mcp->_outputCache = 0x00;  // Default output state is all off, 0x0000
+  mcp->_pullupCache = 0x00;  // Default pull-up state is all off, 0x0000
+  mcp->_invertCache =
+      0x00;  // Default input inversion state is not inverted, 0x0000
 
   if (MCP_byteWrite(mcp, IODIR, mcp->_modeCache) == -1) {
     error_log("MCP_byteWrite failure 1 inside MCP_setup");
@@ -57,8 +60,8 @@ int MCP_setup(MCP* mcp, uint8_t address)
   return 0;
 };
 
-int MCP_byteWrite(MCP *mcp, uint8_t reg, uint8_t value)
-{ // Accept the register and byte
+int MCP_byteWrite(MCP *mcp, uint8_t reg,
+                  uint8_t value) {  // Accept the register and byte
 
   uint8_t tx_buf[3];
   tx_buf[0] = OPCODEW | (mcp->_address << 1);
@@ -75,7 +78,6 @@ int MCP_byteWrite(MCP *mcp, uint8_t reg, uint8_t value)
   spi.speed_hz = spi_speed;
   spi.bits_per_word = spi_bpw;
 
-
   // do the SPI transaction
   if ((ioctl(spiFds, SPI_IOC_MESSAGE(1), &spi) < 0)) {
     error_log("mcp23s08_write_reg: Error during SPI transaction.");
@@ -84,16 +86,13 @@ int MCP_byteWrite(MCP *mcp, uint8_t reg, uint8_t value)
     return -1;
   }
 
-  return 0; // return value for succesful execution
-
+  return 0;  // return value for succesful execution
 }
-
-
 
 // MODE SETTING FUNCTIONS - BY PIN
 
-int MCP_pinMode(MCP *mcp, uint8_t pin, uint8_t mode)
-{ // Accept the pin # and I/O mode
+int MCP_pinMode(MCP *mcp, uint8_t pin,
+                uint8_t mode) {  // Accept the pin # and I/O mode
 
   if (pin > 16) {
     // create and store error message
@@ -106,20 +105,20 @@ int MCP_pinMode(MCP *mcp, uint8_t pin, uint8_t mode)
 
     return -1;
   }
-  if (mode == MCP_INPUT)
-  {                                // Determine the mode before changing the bit state in the mode cache
-    mcp->_modeCache |= 1 << (pin); // Since input = "HIGH", OR in a 1 in the appropriate place
-  }
-  else
-  {
-    mcp->_modeCache &= ~(1 << (pin)); // If not, the mode must be output, so and in a 0 in the appropriate place
+  if (mode == MCP_INPUT) {  // Determine the mode before changing the bit state
+                            // in the mode cache
+    mcp->_modeCache |=
+        1 << (pin);  // Since input = "HIGH", OR in a 1 in the appropriate place
+  } else {
+    mcp->_modeCache &= ~(1 << (pin));  // If not, the mode must be output, so
+                                       // and in a 0 in the appropriate place
   }
 
   if (MCP_byteWrite(mcp, IODIR, mcp->_modeCache) == -1) {
     error_log("MCP_byteWrite failure inside MCP_pinMode");
     printf("MCP_byteWrite failure inside MCP_pinMode");
 
-    return -1; // return -1 upon bytewrite failure
+    return -1;  // return -1 upon bytewrite failure
   }
 
   return 0;
@@ -127,11 +126,8 @@ int MCP_pinMode(MCP *mcp, uint8_t pin, uint8_t mode)
 
 // WRITE FUNCTIONS
 
-int MCP_pinWrite(MCP *mcp, uint8_t pin, uint8_t value)
-{
-
-  if (pin > 16)
-  {
+int MCP_pinWrite(MCP *mcp, uint8_t pin, uint8_t value) {
+  if (pin > 16) {
     // create and store error message
     char error_msg[50];
     sprintf(error_msg, "MCP_pinWrite, pin out of bounds: %u", pin);
@@ -142,14 +138,13 @@ int MCP_pinWrite(MCP *mcp, uint8_t pin, uint8_t value)
 
     return -1;
   }
- 
 
   if (value) {
     mcp->_outputCache |= 1 << (pin);
   } else {
     mcp->_outputCache &= ~(1 << (pin));
   }
-  
+
   if (MCP_byteWrite(mcp, GPIO, mcp->_outputCache) == -1) {
     error_log("MCP_byteWrite failure inside MCP_pinWrite");
     printf("MCP_byteWrite failure inside MCP_pinWrite");

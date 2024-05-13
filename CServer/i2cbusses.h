@@ -25,10 +25,10 @@
 #include <unistd.h>
 
 struct i2c_adap {
-	int nr;
-	char *name;
-	const char *funcs;
-	const char *algo;
+  int nr;
+  char *name;
+  const char *funcs;
+  const char *algo;
 };
 
 struct i2c_adap *gather_i2c_busses(void);
@@ -39,6 +39,6 @@ int parse_i2c_address(const char *address_arg);
 int open_i2c_dev(int i2cbus, char *filename, size_t size, int quiet);
 int set_slave_addr(int file, int address, int force);
 
-#define MISSING_FUNC_FMT	"Error: Adapter does not have %s capability\n"
+#define MISSING_FUNC_FMT "Error: Adapter does not have %s capability\n"
 
 #endif
