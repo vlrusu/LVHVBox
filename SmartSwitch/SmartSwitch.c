@@ -649,7 +649,7 @@ int main() {
 
   tud_init(BOARD_TUD_RHPORT);  // tinyUSB formality
 
-  multicore_launch_core1(some_function_pointer);
+  multicore_launch_core1(core1_entry);
 
   while (true)  // DAQ & USB communication Loop, runs forever
   {
