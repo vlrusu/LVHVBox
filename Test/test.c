@@ -1,11 +1,11 @@
 #include <libusb-1.0/libusb.h>
 #include <stdio.h>
 
-#define VENDOR_ID 0x2E8A
-#define PRODUCT_ID 0x000A
+#define VENDOR_ID 0xcaf0
+#define PRODUCT_ID 0x4003
 #define CDC_INTERFACE 0
-#define CDC_ENDPOINT_IN 0x81
-#define CDC_ENDPOINT_OUT 0x01
+#define CDC_ENDPOINT_IN 0x82
+#define CDC_ENDPOINT_OUT 0x02
 #define TIMEOUT 1000
 
 int main() {
@@ -26,6 +26,9 @@ int main() {
     libusb_exit(ctx);
     return 1;
   }
+
+  // Enable auto kernel driver detachment
+  libusb_set_auto_detach_kernel_driver(handle, 1);
 
   if (libusb_claim_interface(handle, CDC_INTERFACE) < 0) {
     fprintf(stderr, "Failed to claim interface\n");
