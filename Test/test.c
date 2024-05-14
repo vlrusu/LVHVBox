@@ -3,8 +3,9 @@
 
 #define VENDOR_ID 0x2E8A
 #define PRODUCT_ID 0x000A
-#define BULK_IN_ENDPOINT 0x81
-#define BULK_OUT_ENDPOINT 0x01
+#define CDC_INTERFACE 0
+#define CDC_ENDPOINT_IN 0x81
+#define CDC_ENDPOINT_OUT 0x01
 #define TIMEOUT 1000
 
 int main() {
@@ -26,26 +27,28 @@ int main() {
     return 1;
   }
 
-  if (libusb_claim_interface(handle, 0) < 0) {
+  if (libusb_claim_interface(handle, CDC_INTERFACE) < 0) {
     fprintf(stderr, "Failed to claim interface\n");
     libusb_close(handle);
     libusb_exit(ctx);
     return 1;
   }
 
-  if (libusb_bulk_transfer(handle, BULK_OUT_ENDPOINT, &data_out,
+  // Send data
+  if (libusb_bulk_transfer(handle, CDC_ENDPOINT_OUT, &data_out,
                            sizeof(data_out), &transferred, TIMEOUT) < 0) {
     fprintf(stderr, "Failed to send data\n");
   }
 
-  if (libusb_bulk_transfer(handle, BULK_IN_ENDPOINT, &data_in, sizeof(data_in),
+  // Receive data
+  if (libusb_bulk_transfer(handle, CDC_ENDPOINT_IN, &data_in, sizeof(data_in),
                            &transferred, TIMEOUT) < 0) {
     fprintf(stderr, "Failed to receive data\n");
   } else {
     printf("Received: %d\n", data_in);
   }
 
-  libusb_release_interface(handle, 0);
+  libusb_release_interface(handle, CDC_INTERFACE);
   libusb_close(handle);
   libusb_exit(ctx);
 
