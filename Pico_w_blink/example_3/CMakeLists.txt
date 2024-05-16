@@ -11,10 +11,8 @@ project(picow_blink C CXX ASM)
 
 pico_sdk_init()
 
-add_executable(picow_blink picow_blink.c usb_descriptors.c) #msc_disk.c)
-
-pico_set_program_name(picow_blink "picow_blink")
-pico_set_program_version(picow_blink "0.1")
+#add_executable(picow_blink picow_blink.c usb_descriptors.c msc_disk.c)
+add_executable(picow_blink picow_blink.c usb_descriptors.c)
 
 target_include_directories(picow_blink PUBLIC ${CMAKE_CURRENT_LIST_DIR} )
 
@@ -24,9 +22,6 @@ target_link_libraries(picow_blink
         hardware_adc hardware_pio tinyusb_device tinyusb_board
         )
 
-# These are alternatives to communicating via tinyusb
-#pico_enable_stdio_usb(picow_blink 0)
-#pico_enable_stdio_uart(picow_blink 0)
 
 # create map/bin/hex file etc.
 pico_add_extra_outputs(picow_blink)

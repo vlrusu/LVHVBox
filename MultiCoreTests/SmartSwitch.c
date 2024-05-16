@@ -4,7 +4,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "pico/cyw43_arch.h"
 #include "bsp/board.h"
 #include "channel.pio.h"
 #include "clock.pio.h"
@@ -130,11 +129,16 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6],
               int trip_requirement[6]) {
   if (!tud_cdc_available()) return;
 
-    cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
-    sleep_ms(250);
-    cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);
-    sleep_ms(250);
+  // ----- Multicore test ----- //
+  uint32_t g = multicore_fifo_pop_blocking(); // wait for core 2 to give us a number
 
+  if (g == FLAG_VALUE) { // it's the value we expect!
+    core0_read = 2; // success flag!
+    multicore_fifo_push_blocking(FLAG_VALUE); // send it back!
+  }
+  tud_cdc_write(&core0_read, sizeof(&core0_read)); // print our success flag
+  tud_cdc_write_flush();
+  // ----- End multicore test ----- //
 
   // read in commands from Server on Pi
   uint8_t receive_chars[5];
@@ -284,7 +288,7 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6],
   } else if (receive_chars[0] ==
              97) {  // ----- Send value of slow_read to server ----- //
     tud_cdc_write(&*slow_read, sizeof(&*slow_read));
-    tud_cdc_write_flush();
+readMonI6     tud_cdc_write_flush();
   } else if (receive_chars[0] ==
              95) {  // ----- Send current buffer status ----- //
     tud_cdc_write(&*current_buffer_run, sizeof(&*current_buffer_run));
@@ -533,17 +537,16 @@ void get_all_averaged_currents(
 }
 
 void core1_entry() {
-  multicore_fifo_push_blocking(FLAG_VALUE);  // send the flag to core 0
+  multicore_fifo_push_blocking(FLAG_VALUE); // send the flag to core 0
 
-  uint32_t g =
-      multicore_fifo_pop_blocking();  // wait til core 0 sends us a number
+  uint32_t g = multicore_fifo_pop_blocking(); // wait til core 0 sends us a number
 
-  if (g == FLAG_VALUE) {  // it's the number we're expecting!
-    core1_read = 1;       // set the success flag and print it
+  if (g == FLAG_VALUE) { // it's the number we're expecting!
+    core1_read = 1; // set the success flag and print it
   }
-  tud_cdc_write(&core1_read, sizeof(&core1_read));
+  tud_cdc_write(&core1_read, sizeof(&core1_read)); 
   tud_cdc_write_flush();
-  while (1) tight_loop_contents();  // idle forever
+  //while (1) tight_loop_contents(); // idle forever
 }
 
 //******************************************************************************
@@ -552,10 +555,6 @@ int main() {
 #define PICO_XOSC_STARTUP_DELAY_MULTIPLIER 64
 
   stdio_init_all();
-
-  if (cyw43_arch_init()) {
-    return -1;
-  }
 
   set_sys_clock_khz(
       280000, true);  // Overclocking is necessary to keep up with reading PIO
@@ -663,8 +662,7 @@ int main() {
   while ( true ) {
     tud_task();
 
-    uint32_t g = multicore_fifo_pop_blocking(); // wait for core 2 to give us a
-  number
+    uint32_t g = multicore_fifo_pop_blocking(); // wait for core 2 to give us a number
 
     if (g == FLAG_VALUE) { // it's the value we expect!
       core0_read = 2; // success flag!
@@ -676,87 +674,84 @@ int main() {
   // end multi-core testing
   */
 
+  multicore_launch_core1(core1_entry); // launch second core and its func
+
   while (true)  // DAQ & USB communication Loop, runs forever
   {
-
     // ----- Collect averaged current measurements ----- //
     gpio_put(all_pins.enablePin, 0);  // set mux to current
     sleep_ms(1);  // delay is longer than ideal, but seems to be necessary, or
                   // current data will be polluted
 
-      // clear rx fifos
-      for (uint32_t i = 0; i < 3; i++) {
-        pio_sm_clear_fifos(pio_0, sm_array[i]);
-        pio_sm_clear_fifos(pio_1, sm_array[i + 3]);
-      }
+    // clear rx fifos
+    for (uint32_t i = 0; i < 3; i++) {
+      pio_sm_clear_fifos(pio_0, sm_array[i]);
+      pio_sm_clear_fifos(pio_1, sm_array[i + 3]);
+    }
 
-      // acquire averaged current values
-      for (uint32_t i = 0; i < 1000; i++) {
-        get_all_averaged_currents(
-            pio_0, pio_1, sm_array, channel_current_averaged, full_current_array,
-            &full_position, &current_buffer_run, &remaining_buffer_iterations,
-            &before_trip_allowed);  // get average of 200 full speed current
-                                    // measurements
-
-        // store averaged currents
-        if (average_store_position <
-            1999)  // check that current buffer size has not been exceeded
-        {
-          for (uint8_t i = 0; i < 6; i++) {
-            average_current_history[i][average_store_position] =
-                channel_current_averaged[i];
-          }
-          average_store_position +=
-              1;  // increment pointer to current storage position
-        } else {  // begin overwriting current data, starting
-          average_store_position =
-              0;  // set pointer to beginning of current storage buffer
-          for (uint8_t i = 0; i < 6; i++) {
-            memset(average_current_history[i], 0,
-                   sizeof(average_current_history[i]));
-          }
+    // acquire averaged current values
+    for (uint32_t i = 0; i < 1000; i++) {
+      get_all_averaged_currents(
+          pio_0, pio_1, sm_array, channel_current_averaged, full_current_array,
+          &full_position, &current_buffer_run, &remaining_buffer_iterations,
+          &before_trip_allowed);  // get average of 200 full speed current
+                                  // measurements
+      // store averaged currents
+      if (average_store_position < 1999) { // check current buf sz not exceeded
+        for (uint8_t i = 0; i < 6; i++) {
+          average_current_history[i][average_store_position] =
+              channel_current_averaged[i];
         }
-
-        // cdc_task reads in commands from PI via usb and responds appropriately
-        cdc_task(channel_current_averaged, channel_voltage, sm_array,
-                 &burst_position, trip_currents, &trip_mask, &trip_status,
-                 average_current_history, &average_store_position,
-                 full_current_array, &full_position, &current_buffer_run,
-                 &slow_read, &before_trip_allowed, sm_array, trip_requirement);
-        tud_task();  // tinyUSB formality
+        // increment pointer to current storage position
+        average_store_position += 1;  
+      } else {  // begin overwriting current data, starting
+        // set pointer to beginning of current storage buffer
+        average_store_position = 0;
+        for (uint8_t i = 0; i < 6; i++) {
+          memset(average_current_history[i], 0,
+                 sizeof(average_current_history[i]));
+        }
       }
 
-      // ----- Collect single voltage measurements ----- //
-
-      gpio_put(all_pins.enablePin, 1);  // set mux to voltage
-      sleep_ms(1);  // delay is longer than ideal, but seems to be necessary, or
-                    // voltage data will be polluted
-
+      // cdc_task reads in commands from PI via usb and responds appropriately
       cdc_task(channel_current_averaged, channel_voltage, sm_array,
                &burst_position, trip_currents, &trip_mask, &trip_status,
                average_current_history, &average_store_position,
                full_current_array, &full_position, &current_buffer_run,
                &slow_read, &before_trip_allowed, sm_array, trip_requirement);
-      tud_task();
+      tud_task();  // tinyUSB formality
+    }
 
-      // clear rx fifos, otherwise data can be polluted by previous current
-      // measurements
-      for (uint32_t i = 0; i < 3; i++) {
-        pio_sm_clear_fifos(pio_0, sm_array[i]);
-        pio_sm_clear_fifos(pio_1, sm_array[i + 3]);
-      }
+    // ----- Collect single voltage measurements ----- //
+    gpio_put(all_pins.enablePin, 1);  // set mux to voltage
+    sleep_ms(1);  // delay is longer than ideal, but seems to be necessary, or
+                  // voltage data will be polluted
 
-      for (uint32_t channel = 0; channel < 3;
-           channel++)  // read in a single voltage value for each of 6 channels
-      {
-        channel_voltage[channel] = get_single_voltage(pio_0, sm_array[channel]);
+    cdc_task(channel_current_averaged, channel_voltage, sm_array,
+             &burst_position, trip_currents, &trip_mask, &trip_status,
+             average_current_history, &average_store_position,
+             full_current_array, &full_position, &current_buffer_run,
+             &slow_read, &before_trip_allowed, sm_array, trip_requirement);
+    tud_task();
 
-        channel_voltage[channel + 3] =
-            get_single_voltage(pio_1, sm_array[channel + 3]);
-      }
+    // clear rx fifos, otherwise data can be polluted by previous current
+    // measurements
+    for (uint32_t i = 0; i < 3; i++) {
+      pio_sm_clear_fifos(pio_0, sm_array[i]);
+      pio_sm_clear_fifos(pio_1, sm_array[i + 3]);
+    }
 
-      gpio_put(all_pins.enablePin, 0);  // set mux to current
-      sleep_ms(1);
+    for (uint32_t channel = 0; channel < 3;
+         channel++)  // read in a single voltage value for each of 6 channels
+    {
+      channel_voltage[channel] = get_single_voltage(pio_0, sm_array[channel]);
+
+      channel_voltage[channel + 3] =
+          get_single_voltage(pio_1, sm_array[channel + 3]);
+    }
+
+    gpio_put(all_pins.enablePin, 0);  // set mux to current
+    sleep_ms(1);
   }
   return 0;
 }

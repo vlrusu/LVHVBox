@@ -1,10 +1,8 @@
 // Flash pico LED AND echo back whatever you send it.
-#include "bsp/board.h"
-#include "pico/cyw43_arch.h"
-#include "pico/stdlib.h"
 #include "tusb.h"
-
-#define PICO_XOSC_STARTUP_DELAY_MULTIPLIER 64
+#include "pico/stdlib.h"
+#include "pico/cyw43_arch.h"
+#include "bsp/board.h"
 
 //--------------------------------------------------------------------+
 // MACRO CONSTANT TYPEDEF PROTYPES
@@ -30,11 +28,9 @@ void cdc_task(void);
 int main(void) {
   stdio_init_all();
   if (cyw43_arch_init()) {
-    return -1;
+      printf("Wi-Fi init failed");
+      return -1;
   }
-
-  //set_sys_clock_khz(
-  //    280000, true);  // Overclocking is necessary to keep up with reading PIO
 
   board_init();
 
@@ -42,7 +38,7 @@ int main(void) {
   tud_init(BOARD_TUD_RHPORT);
 
   while (1) {
-    tud_task();  // tinyusb device task
+    tud_task(); // tinyusb device task
     led_blinking_task();
     cdc_task();
   }
@@ -58,7 +54,7 @@ void cdc_task(void) {
       // read data
       char buf[64];
       uint32_t count = tud_cdc_read(buf, sizeof(buf));
-      (void)count;
+      (void) count;
 
       // Echo back
       // Note: Skip echo by commenting out write() and write_flush()

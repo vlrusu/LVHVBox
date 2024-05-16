@@ -118,6 +118,7 @@ void variable_init() {
   all_pins.enablePin = 7;  // enable pin for MUX
 }
 
+/*
 // Get commands from server and do stuff
 void cdc_task(float channel_current_averaged[6], float channel_voltage[6],
               uint sm[6], uint16_t* burst_position, float trip_currents[6],
@@ -128,20 +129,23 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6],
               uint16_t* full_position, uint8_t* current_buffer_run,
               uint8_t* slow_read, int* before_trip_allowed, uint sm_array[6],
               int trip_requirement[6]) {
-  if (!tud_cdc_available()) return;
+  if (!tud_cdc_available()) {
+    return;
+  }
 
-    cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
-    sleep_ms(250);
-    cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);
-    sleep_ms(250);
+  cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
+  sleep_ms(250);
+  cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);
+  sleep_ms(250);
 
-
-  // read in commands from Server on Pi
-  uint8_t receive_chars[5];
-  tud_cdc_read(
-      &receive_chars,
-      sizeof(receive_chars));  // acquire 5 chars from tinyUSB input buffer
+  //// read in commands from Server on Pi
+  //uint8_t receive_chars[5];
+  //tud_cdc_read(
+  //    &receive_chars,
+  //    sizeof(receive_chars));  // acquire 5 chars from tinyUSB input buffer
   tud_cdc_read_flush();        // clear tinyUSB input buffer
+
+  //uint8_t receive_chars[5] = {0xAA, 0xBB, 0xCC, 0xDD, 0xEE};
 
   // determine response based upon Server command
   if (102 < receive_chars[0] &&
@@ -167,7 +171,8 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6],
       // store ped subtract values from time of trip
       memcpy(ped_subtraction_stored, ped_subtraction, sizeof(ped_subtraction));
     }
-  } else if (108 < receive_chars[0] &&
+  } 
+  else if (108 < receive_chars[0] &&
              receive_chars[0] < 115) {  // ----- Reset Trip ----- //
     *current_buffer_run = 1;
     remaining_buffer_iterations = floor(full_current_history_length / 2);
@@ -230,12 +235,10 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6],
     tud_cdc_write_flush();  // flushes write buffer, data will not actually be
                             // sent without this command
   } else if (receive_chars[0] == 73) {  // ----- Send Averaged Currents ----- //
-    /*
-    absolute_time_t time = get_absolute_time();
-    for (int channel=0; channel<6; channel++) {
-      channel_current_averaged[channel] = (float) to_ms_since_boot(time)/1000;
-    }
-    */
+    //absolute_time_t time = get_absolute_time();
+    //for (int channel=0; channel<6; channel++) {
+    //  channel_current_averaged[channel] = (float) to_ms_since_boot(time)/1000;
+    //}
 
     for (uint8_t i = 0; i < 6; i++) {
       tud_cdc_write(&channel_current_averaged[i],
@@ -381,7 +384,9 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6],
 
     memcpy(&trip_requirement[receive_chars[0] - 45], &intval, 4);
   }
+
 }
+*/
 
 float get_single_voltage(
     PIO pio, uint sm)  // obtains a single non-averaged voltage measurement
@@ -546,10 +551,19 @@ void core1_entry() {
   while (1) tight_loop_contents();  // idle forever
 }
 
+
+void cdc_task(void) {
+  cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
+  sleep_ms(250);
+  cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);
+  sleep_ms(250);
+}
+
 //******************************************************************************
 // Standard loop function, called repeatedly
 int main() {
 #define PICO_XOSC_STARTUP_DELAY_MULTIPLIER 64
+  sleep_ms(2000);
 
   stdio_init_all();
 
@@ -557,10 +571,15 @@ int main() {
     return -1;
   }
 
-  set_sys_clock_khz(
-      280000, true);  // Overclocking is necessary to keep up with reading PIO
+  cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
+  sleep_ms(2000);
+
+  //set_sys_clock_khz(
+  //    280000, true);  // Overclocking is necessary to keep up with reading PIO
 
   board_init();  // tinyUSB formality
+
+  cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);
 
   // float clkdiv = 34; // set clock divider for PIO
   float clkdiv = 45;  // results in 81.967 kHz
@@ -718,11 +737,12 @@ int main() {
         }
 
         // cdc_task reads in commands from PI via usb and responds appropriately
-        cdc_task(channel_current_averaged, channel_voltage, sm_array,
-                 &burst_position, trip_currents, &trip_mask, &trip_status,
-                 average_current_history, &average_store_position,
-                 full_current_array, &full_position, &current_buffer_run,
-                 &slow_read, &before_trip_allowed, sm_array, trip_requirement);
+        //cdc_task(channel_current_averaged, channel_voltage, sm_array,
+        //         &burst_position, trip_currents, &trip_mask, &trip_status,
+        //         average_current_history, &average_store_position,
+        //         full_current_array, &full_position, &current_buffer_run,
+        //         &slow_read, &before_trip_allowed, sm_array, trip_requirement);
+        cdc_task();
         tud_task();  // tinyUSB formality
       }
 
@@ -732,11 +752,12 @@ int main() {
       sleep_ms(1);  // delay is longer than ideal, but seems to be necessary, or
                     // voltage data will be polluted
 
-      cdc_task(channel_current_averaged, channel_voltage, sm_array,
-               &burst_position, trip_currents, &trip_mask, &trip_status,
-               average_current_history, &average_store_position,
-               full_current_array, &full_position, &current_buffer_run,
-               &slow_read, &before_trip_allowed, sm_array, trip_requirement);
+      //cdc_task(channel_current_averaged, channel_voltage, sm_array,
+      //         &burst_position, trip_currents, &trip_mask, &trip_status,
+      //         average_current_history, &average_store_position,
+      //         full_current_array, &full_position, &current_buffer_run,
+      //         &slow_read, &before_trip_allowed, sm_array, trip_requirement);
+      cdc_task();
       tud_task();
 
       // clear rx fifos, otherwise data can be polluted by previous current
