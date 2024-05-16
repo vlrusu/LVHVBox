@@ -167,6 +167,9 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6], uint 
         tud_cdc_write(&*trip_status,sizeof(&*trip_status));
         tud_cdc_write_flush(); // flushes write buffer, data will not actually be sent without this command
 
+      } else if (receive_chars[0] == 99) { // ----- Send trip enabled statuses ----- //
+        tud_cdc_write(&*trip_mask,sizeof(&*trip_mask));
+        tud_cdc_write_flush();
       } else if (75 < receive_chars[0] && receive_chars[0] < 82) { // ----- Set new trip value ----- //
         
         // join receive_chars into a single 16 bit unsigned integer
@@ -295,7 +298,7 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6], uint 
       } else if (receive_chars[0] > 38 && receive_chars[0] < 45) {
         if (ped_on == 1) {
       gpio_put(all_pins.P1_0, 0); // put pedestal pin low
-      sleep_ms(200);
+      sleep_ms(700);
 
       // clear rx fifos
       for (uint32_t i=0; i<3; i++) {
@@ -305,7 +308,7 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6], uint 
 
       int32_t pre_ped_subtraction[6] = {0, 0, 0, 0, 0, 0};
 
-      for (int ped_count=0; ped_count<5000; ped_count++) {
+      for (int ped_count=0; ped_count<200; ped_count++) {
 
         for (int i=0; i<3; i++) {
           pre_ped_subtraction[i] += (int16_t) pio_sm_get_blocking(pio_0, sm_array[i]);
@@ -315,7 +318,7 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6], uint 
 
 
       for (int i=0; i<6; i++) {
-        ped_subtraction[i] = (float) pre_ped_subtraction[i]/5000*adc_to_uA;
+        ped_subtraction[i] = (float) pre_ped_subtraction[i]/200*adc_to_uA;
       }
 
       gpio_put(all_pins.P1_0, 1); // put pedestal pin high
@@ -664,7 +667,6 @@ sleep_ms(2000);
 
         channel_voltage[channel+3] = get_single_voltage(pio_1, sm_array[channel+3]);
       }
-
 
 
 
