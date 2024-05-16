@@ -1,0 +1,150 @@
+2024-05-08
+Want to implement "global" commands, i.e. commands that get issued to all channels.
+
++--[ED25519 256]--+
+|                 |
+|                 |
+|          . .    |
+|         + o o   |
+|      . S * + o  |
+|       *oX * + = |
+|     .+=X.+ * = .|
+|    ..==.*E+ o + |
+|    .=o.+.+.o.+ .|
++----[SHA256]-----+
+
+12 HV/pico channels (idxs 0 - 11)
+6 LV channels (idxs 0 - 5)
+
+13 total bytes in the client commands:
+4 - command
+4 - type
+1 - channel
+4 - val
+
+possible arg options for these commands:
+- no channel, val (NONE)
+- no channel, no val (pcb_temp, pico_current)
+
+- channel, no val (get_vhv, readMons, current_buffer_run, trip_status,
+  get_slow_read, current_start/stop, update_ped, down_hv, trip, reset_trip,
+disable/enable_ped/trip, powerOff/On, start/stop_usb)
+
+- channel, float val (set_trip, set_trip_count, ramp_hv)
+  - floatval = bytearray(struct.pack("f", float(keys[2])))
+
+possible ret options for these commands:
+- print formatted round(process_float(temp),2) (gets, reads, pcb_temp, pico_current)
+- print formatted int(temp[0]) (current_buffer_run, trip_status, get_slow_read)
+
+most common: channel command with no input and no output
+
+
+sigintHandler: gracefully closing server-tusb connection
+mutex: multiple server threads don't access pico at same
+muxer: switch between current and voltage ADCs b/c not enough pio pins
+
+=======================
+Understanding how/when pico gets recognized by pi as a usb device:
+  # Device appears in lsusb: Bus 001 Device 061: ID caf0:4003 TinyUSB TinyUSB Device
+
+  # pico in application mode. final line of dmesg.
+  [15732.957857] sd 0:0:0:0: [sda] Attached SCSI removable disk 
+
+  ... # disconnect the pico:
+  [15769.260284] usb 1-2.3: USB disconnect, device number 60
+  [15769.309154] umount: attempt to access beyond end of device
+                 sda: rw=0, sector=0, nr_sectors = 1 limit=0
+  [15769.309169] FAT-fs (sda): unable to read boot sector to mark fs as dirty
+
+  ... # connect pico in application mode:
+  [15849.223239] usb 1-2.3: new full-speed USB device number 61 using xhci-hcd
+  [15849.485970] usb 1-2.3: New USB device found, idVendor=caf0, idProduct=4003, bcdDevice= 1.00
+  [15849.485978] usb 1-2.3: New USB device strings: Mfr=1, Product=2, SerialNumber=3
+  [15849.485982] usb 1-2.3: Product: TinyUSB Device
+  [15849.485984] usb 1-2.3: Manufacturer: TinyUSB
+  [15849.485987] usb 1-2.3: SerialNumber: 123456789012
+  [15849.530076] cdc_acm 1-2.3:1.0: ttyACM0: USB ACM device
+  [15849.534941] usb-storage 1-2.3:1.2: USB Mass Storage device detected
+  [15849.535091] scsi host0: usb-storage 1-2.3:1.2
+  [15850.570675] scsi 0:0:0:0: Direct-Access     TinyUSB  Mass Storage     1.0  PQ: 0 ANSI: 2
+  [15850.571005] sd 0:0:0:0: Attached scsi generic sg0 type 0
+  [15850.590198] sd 0:0:0:0: [sda] 16 512-byte logical blocks: (8.19 kB/8.00 KiB)
+  [15850.600050] sd 0:0:0:0: [sda] Write Protect is off
+  [15850.600054] sd 0:0:0:0: [sda] Mode Sense: 03 00 00 00
+  [15850.609799] sd 0:0:0:0: [sda] No Caching mode page found
+  [15850.609802] sd 0:0:0:0: [sda] Assuming drive cache: write through
+  [15850.749011]  sda:
+  [15850.749079] sd 0:0:0:0: [sda] Attached SCSI removable disk
+
+  ... # umount /media/mu2e/Tiny\ USB
+  <no new output from dmesg>
+
+  ... # unplugging the usb
+  [16421.063843] usb 1-2.3: USB disconnect, device number 61
+
+  ... # starting in bootsel mode
+  [16466.463241] usb 1-2.3: new full-speed USB device number 62 using xhci-hcd
+  [16466.684151] usb 1-2.3: New USB device found, idVendor=2e8a, idProduct=0003, bcdDevice= 1.00
+  [16466.684157] usb 1-2.3: New USB device strings: Mfr=1, Product=2, SerialNumber=3
+  [16466.684160] usb 1-2.3: Product: RP2 Boot
+  [16466.684164] usb 1-2.3: Manufacturer: Raspberry Pi
+  [16466.684166] usb 1-2.3: SerialNumber: E0C9125B0D9B
+  [16466.687918] usb-storage 1-2.3:1.0: USB Mass Storage device detected
+  [16466.688084] scsi host0: usb-storage 1-2.3:1.0
+  [16467.715648] scsi 0:0:0:0: Direct-Access     RPI      RP2              3    PQ: 0 ANSI: 2
+  [16467.716056] sd 0:0:0:0: Attached scsi generic sg0 type 0
+  [16467.716946] sd 0:0:0:0: [sda] 262144 512-byte logical blocks: (134 MB/128 MiB)
+  [16467.717511] sd 0:0:0:0: [sda] Write Protect is off
+  [16467.717518] sd 0:0:0:0: [sda] Mode Sense: 03 00 00 00
+  [16467.718101] sd 0:0:0:0: [sda] No Caching mode page found
+  [16467.718108] sd 0:0:0:0: [sda] Assuming drive cache: write through
+  [16467.741608]  sda: sda1
+  [16467.741897] sd 0:0:0:0: [sda] Attached SCSI removable disk
+
+  ... # loading code (still in bootsel mode) which does not specifically enable MSC
+  ... # viz. example_1
+  <no new output from dmesg>
+
+  ... # picotool reboot (into application mode)
+  ... # device not seen by lsusb
+  [16733.653092] usb 1-2.3: USB disconnect, device number 62
+  [16733.700343] FAT-fs (sda1): unable to read boot sector to mark fs as dirty
+
+
+  ... # let's try loading example_2 with and without MSC
+  ... # without: no output from dmesg
+  ... # with: no output from dmesg!?
+  ... # maybe its the pico w thing that we specified in the examples? Nope. Tried removing all that but still not recognized by lsusb or dmesg or /dev/ttyA*
+
+  ... # example_1, added the line to CMakeLists.txt: pico_enable_stdio_usb(picow_blink 1)
+  ... # device is recognized with lsusb (different VID than usual)
+  ... # /dev/ttyACM0 DOES exist
+  ... # screen /dev/ttyACM0 115200 prints the repeated text.
+  [18502.603231] usb 1-2.3: new full-speed USB device number 67 using xhci-hcd
+  [18502.808691] usb 1-2.3: New USB device found, idVendor=2e8a, idProduct=000a, bcdDevice= 1.00
+  [18502.808696] usb 1-2.3: New USB device strings: Mfr=1, Product=2, SerialNumber=3
+  [18502.808698] usb 1-2.3: Product: Pico
+  [18502.808700] usb 1-2.3: Manufacturer: Raspberry Pi
+  [18502.808702] usb 1-2.3: SerialNumber: E6616407E3172A2B
+  [18502.848535] cdc_acm 1-2.3:1.0: ttyACM0: USB ACM device
+Conclusions from above: pico_enable_stdio_usb does indeed allow us to use
+printf AND when I activate it (in the CMakeLists.txt) it's THE thing that gets
+the pi to recognize it.
+
+Next: example_2 uses tinyusb and is able to make a connection BUT it's a gross
+one: unreliable (LED freezes sometimes) and the dmesg output indicates it's not
+going well. I've checked, so far that reintroducing the MSC stuff doesn't
+improve this config/connection.
+
+example_5 is an exact copy of SmartSwitch. The one thing I can't modify without
+breaking the USB connection is the complicated cdc_task function. Can't replace
+is with a nothing function. Whatever it is, I hope it doesn't have to be this
+way.
+
+And even with the cdc_task function as-is, I can't get the led to flash (though
+the cyw43 stuff doesn't seem to be the problem; the cyw init function doesn't
+affect the USB connection.)
+
+Memory leaks?
+=======================
