@@ -144,9 +144,6 @@ FILE *fp_V_0;
 char *filename_V_1;
 FILE *fp_V_1;
 
-// controls ramping speed
-const int dac_step = 5;
-
 
 
 
@@ -710,7 +707,7 @@ void update_ped(uint8_t channel, int client_addr) {
   sprintf(log_message, "update_ped ch%u", channel);
   write_log(command_log, log_message, client_addr);
 
-  uint8_t send_char = channel + 39;
+  uint8_t send_char = (channel % 6) + 39;
   struct libusb_device_handle *device_handle;
 
   if (0 <= channel && channel < 6 && use_pico0 == 1) {
@@ -735,72 +732,6 @@ void update_ped(uint8_t channel, int client_addr) {
     pthread_mutex_unlock(&usb1_mutex_lock);
   }
 }
-
-
-// rampHV
-void ramp_hv(uint8_t channel, float voltage, int client_addr) {  
-  // log command
-  char *command_log = load_config("Command_Log_File");
-  char log_message[50];
-  sprintf(log_message, "ramp_hv ch%u %.2fV", channel, voltage);
-  write_log(command_log, log_message, client_addr);
-
-
-  int idac = (int)(channel / 4);
-  float alphas[12] = {0.9, 0.9, 0.885, 0.9, 0.9012, 0.9034, 0.9009, 0.9027, 0.8977, 0.9012, 0.9015, 1.};
-  float current_value;
-  uint32_t digvalue;
-  int digvalue_difference;
-  uint32_t final_digvalue = ((int)(alphas[channel] * 16383. * (voltage / 1631.3))) & 0x3FFF;
-
-  if (0<=channel && channel < 6) {
-    current_value = voltages_0[channel];
-  } else if (6<=channel && channel < 12) {
-    current_value = voltages_1[channel-6];
-  }
-
-  // calculate current digvalue
-  digvalue = ((int)(alphas[channel] * 16383. * (current_value / 1631.3))) & 0x3FFF;
-  
-  int single_count = 0;
-  int single_num = 500;
-  if (0 <= channel && channel < 12) {
-    while (abs(digvalue_difference) >= dac_step) {
-      if (digvalue_difference > 0) {
-        if (single_count < single_num) {
-          single_count += 1;
-          digvalue += 1;
-        } else {
-          digvalue += dac_step;
-        }
-          
-        DAC8164_writeChannel(&dac[idac], channel, digvalue);
-      } else if (digvalue_difference < 0) {
-        if (single_count < single_num) {
-          single_count += 1;
-          digvalue -= 1;
-        } else {
-          digvalue -= dac_step;
-        }
-
-        DAC8164_writeChannel(&dac[idac], channel, digvalue);
-      }
-
-      digvalue_difference = final_digvalue - digvalue;
-    }
-
-    DAC8164_writeChannel(&dac[idac], channel, final_digvalue);
-
-  } else {
-    error_log("Invalid ramp_hv channel value");
-    printf("Invalid ramp_hv channel value\n");
-
-    return;
-  }
-  
-}
-
-
 
 // trip
 void trip(uint8_t channel, int client_addr) {
@@ -1015,6 +946,49 @@ void pico_current(int client_addr) {
   write(client_addr, &return_val, sizeof(return_val));
 }
 
+// trip_enabled
+int trip_enabled(uint8_t channel, int client_addr) {
+  uint8_t send_val = 99;
+  char *input_data;
+  input_data = (char *)malloc(1);
+  int return_val = 1;
+
+  if (0 <= channel && channel < 6 && use_pico0 == 1) {
+    pthread_mutex_lock(&usb0_mutex_lock);
+    libusb_bulk_transfer(device_handle_0, 0x02, &send_val, 1, 0, 0);
+    libusb_bulk_transfer(device_handle_0, 0x82, input_data, sizeof(input_data), 0, 0);
+    pthread_mutex_unlock(&usb0_mutex_lock);
+
+    if ((*input_data & 1 << (channel)) == 0) {
+      return_val = 0;
+    }
+
+  } else if (5 < channel && channel < 12 && use_pico1 == 1) {
+    pthread_mutex_lock(&usb1_mutex_lock);
+    libusb_bulk_transfer(device_handle_1, 0x02, &send_val, 1, 0, 0);
+    libusb_bulk_transfer(device_handle_1, 0x82, input_data, sizeof(input_data), 0, 0);
+    pthread_mutex_unlock(&usb1_mutex_lock);
+
+    if ((*input_data & 1 << (channel-6)) == 0) {
+      return_val = 0;
+    }
+  } else {
+    printf("Channel: %u\n", channel);
+    error_log("Invalid trip_enabled channel value");
+    printf("Invalid trip_enabled channel value\n");
+
+
+  }
+  free(input_data);
+
+  if (client_addr == -9999) {
+    return return_val;
+  } else {
+    write(client_addr, &return_val, sizeof(return_val));  
+    return 0;
+  }
+}
+
 // trip_status
 void trip_status(uint8_t channel, int client_addr) {
   uint8_t send_val = 33;
@@ -1135,6 +1109,118 @@ void set_trip_count(uint8_t channel, float value, int client_addr) {
   }
 
 }
+
+
+
+// rampHV
+void ramp_hv(uint8_t channel, float voltage, int client_addr) {  
+  // log command
+  char *command_log = load_config("Command_Log_File");
+  char log_message[50];
+  sprintf(log_message, "ramp_hv ch%u %.2fV", channel, voltage);
+  write_log(command_log, log_message, client_addr);
+
+  // get trip_enabled status of relevant channel
+  int trip_enabled_status = trip_enabled(channel, -9999);
+  printf("trip enabled status: %i\n",trip_enabled_status);
+
+
+  int idac = (int)(channel / 4);
+  float alphas[12] = {0.9, 0.9, 0.885, 0.9, 0.9012, 0.9034, 0.9009, 0.9027, 0.8977, 0.9012, 0.9015, 1.};
+  float current_value;
+  uint32_t digvalue;
+  int digvalue_difference;
+  uint32_t final_digvalue = ((int)(alphas[channel] * 16383. * (voltage / 1631.3))) & 0x3FFF;
+
+  if (0<=channel && channel < 6) {
+    current_value = voltages_0[channel];
+  } else if (6<=channel && channel < 12) {
+    current_value = voltages_1[channel-6];
+  }
+
+  // calculate current digvalue
+  digvalue = ((int)(alphas[channel] * 16383. * (current_value / 1631.3))) & 0x3FFF;
+
+  if (0 <= channel && channel < 12) {
+    // temporarily disable trip if currently enabled
+    if (trip_enabled_status == 1) {
+      disable_trip((uint8_t)channel, -9999);
+      sleep(1);
+    }
+
+
+    if (voltage < current_value) {
+      printf("in inner\n");
+      /*
+      for (int i=0; i<5; i++) {
+        DAC8164_writeChannel(&dac[idac], channel, final_digvalue);
+      }
+      */
+
+     DAC8164_writeChannel(&dac[idac], channel, final_digvalue);
+     if (trip_enabled_status == 1) {
+        enable_trip((uint8_t)channel, -9999);
+      }
+    } else {
+
+      int iteration = 0;
+      int max_step = 25;
+      float speed_divisor = 3;
+      int dac_step;
+      int trip_enabled_yet= 0;
+      
+      while (abs(digvalue_difference) >= dac_step) {
+        iteration += 1;
+      
+        if (dac_step != max_step) {
+          dac_step = ceil(iteration/speed_divisor);
+
+
+        } else if (trip_enabled_yet == 0) {
+          printf("at max step\n");
+          if (trip_enabled_status == 1) {
+            enable_trip((uint8_t)channel, -9999);
+            sleep(1);
+          }
+
+          trip_enabled_yet = 1;
+        }
+        
+        //printf("dac_step: %i\n",dac_step);
+
+        if (digvalue_difference > 0) {
+          digvalue += dac_step;  
+          DAC8164_writeChannel(&dac[idac], channel, digvalue);
+        } else if (digvalue_difference < 0) {
+          digvalue -= dac_step;
+          DAC8164_writeChannel(&dac[idac], channel, digvalue);
+        }
+
+        digvalue_difference = final_digvalue - digvalue;
+      }
+
+      DAC8164_writeChannel(&dac[idac], channel, final_digvalue);
+
+    }
+    // enable trip if it was previously enabled
+    
+    /*
+    if (trip_enabled_status == 1) {
+      enable_trip((uint8_t)channel, 9999);
+      sleep(1);
+    }
+    */
+    
+
+  } else {
+    error_log("Invalid ramp_hv channel value");
+    printf("Invalid ramp_hv channel value\n");
+
+    return;
+  }
+  
+}
+
 
 // updateV48
 void updateV48() {
@@ -1503,9 +1589,12 @@ int write_pipe_currents(int fd[num_pipes], float store_all_currents_internal[6][
     
           for (uint8_t channel = 0; channel < 6; channel++) {
             // Apply the first-order low-pass filter
+            /*
             float input_value = store_all_currents_internal[channel][time_index];
             float filtered_value = ALPHA * input_value + (1 - ALPHA) * last_current_output[channel];
             last_current_output[channel] = filtered_value;
+            */
+           float filtered_value = store_all_currents_internal[channel][time_index];
 
             // Decimation by 5: Only write every 5th sample
             if (time_index % DECIMATION_FACTOR == 0 && use_pipe == 1) {
@@ -2070,6 +2159,10 @@ void *acquire_data(void *arguments) {
       { // trip status
         trip_status(char_parameter, client_addr);
       }     
+      else if (current_command == COMMAND_trip_enabled)
+      { // trip_enabled
+        trip_enabled(char_parameter, client_addr);
+      }
       else if (current_command == COMMAND_pcb_temp)
       {
         pcb_temp(client_addr);
@@ -2149,7 +2242,7 @@ void *acquire_data(void *arguments) {
     }
 
 
-    msleep(5);
+    msleep(3);
 
   }
 }
@@ -2281,11 +2374,6 @@ int main( int argc, char **argv ) {
   // load variables from config.txt
   lv_mcp_reset = atoi(load_config("lv_mcp_reset"));
   lv_global_enable = atoi(load_config("lv_global_enable"));
-  printf("lv_mcp_reset: %u\n", lv_mcp_reset);
-  printf("lv_global_enable: %u\n", lv_global_enable);
-
-
-
 
   char prepowerchmap[50];
   memcpy(prepowerchmap, load_config("CServer_LV_powerChMap"), 6);
@@ -2364,6 +2452,8 @@ int main( int argc, char **argv ) {
 
     return 0;
   }
+
+
 
 
   

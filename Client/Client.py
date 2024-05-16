@@ -254,6 +254,23 @@ def process_command(line):
             return_val = int(temp[0])
 
             print("Trip status: " + str(return_val))
+        
+        elif keys[0] == "trip_enabled":
+            channel = int(keys[1])
+            assert 0 <= channel <= 11
+
+            command_current_buffer_run = bitstring_to_bytes(command_dict["COMMAND_trip_enabled"])
+            type_pico = bitstring_to_bytes(command_dict["TYPE_pico"])
+            bits_channel = (channel).to_bytes(1, byteorder='big')
+            padding = bytearray(4)
+            command_string = command_current_buffer_run + type_pico + bits_channel + padding
+
+            sock.send(command_string)
+
+            temp = sock.recv(1024)
+            return_val = int(temp[0])
+
+            print("Trip enabled: " + str(return_val))
 
         elif keys[0] == "pcb_temp":
         

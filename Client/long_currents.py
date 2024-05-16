@@ -4,14 +4,14 @@ import matplotlib.pyplot as plt
 
 if __name__=="__main__":
     #filename = "full_currents_1728949092.txt"
-    filename = "temp_0.txt"
+    filename = "temp_long.txt"
 
     f = open(filename, "r")
     lines = f.readlines()
     f.close()
 
 
-    float_vals = [float(i.split()[5]) for i in lines]
+    float_vals = [float(i.split()[2]) for i in lines]
 
     times = [i for i in range(len(float_vals))]
     
