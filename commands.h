@@ -13,6 +13,7 @@
 #define COMMAND_disable_trip 1085402425
 #define COMMAND_enable_trip 1290514474
 #define COMMAND_trip_status 700800878
+#define COMMAND_trip_enabled 2061649761
 #define COMMAND_set_trip 1061049701
 #define COMMAND_set_trip_count 1011069207
 #define COMMAND_enable_ped 2168095
