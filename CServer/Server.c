@@ -497,7 +497,6 @@ void get_buffer_status(uint8_t channel, int client_addr) {
   uint8_t send_val = 95;
   char *input_data;
   input_data = (char *)malloc(1);
-
   int return_val = 1;
 
   if (0 <= channel && channel < 6 && use_pico0 == 1) {
@@ -520,7 +519,7 @@ void get_buffer_status(uint8_t channel, int client_addr) {
   }
 
   
-  if ((*input_data & 1 << (channel)) == 0) {
+  if (*input_data == 0) {
     return_val = 0;
   }
  
@@ -626,7 +625,6 @@ void stop_usb(int *pause_usb, int client_addr) {
   write_log(command_log, log_message, client_addr);
 
   *pause_usb = 1;
-
 }
 
 
@@ -880,6 +878,8 @@ void disable_ped(uint8_t channel, int client_addr) {
   sprintf(log_message, "disable_ped ch%u", channel);
   write_log(command_log, log_message, client_addr);
 
+  printf("disable_ped ch%u\n",channel);
+
   uint8_t send_val = 38;
 
   if (0 <= channel && channel < 6 && use_pico0 == 1) {
@@ -973,7 +973,6 @@ int trip_enabled(uint8_t channel, int client_addr) {
       return_val = 0;
     }
   } else {
-    printf("Channel: %u\n", channel);
     error_log("Invalid trip_enabled channel value");
     printf("Invalid trip_enabled channel value\n");
 
@@ -1472,6 +1471,8 @@ void *handle_client(void *args) {
       memcpy(&add_command.float_parameter, &buffer[9], 4);
 
       add_command.client_addr = inner_socket;
+
+      
 
       // add command to linux kernel queue
       if (add_command.command_type == TYPE_pico && ((uint8_t) add_command.char_parameter < 6 | add_command.command_name == COMMAND_pcb_temp)) {
@@ -2214,7 +2215,7 @@ void *acquire_data(void *arguments) {
       
     }
 
-
+    
     if (pause_usb == 0) {
       if (pico == 0 && use_pico0 == 1) {
         int current_success_0 = request_averaged_currents(common->all_currents, 0);
@@ -2407,9 +2408,9 @@ int main( int argc, char **argv ) {
   pico0_queue_key = ftok(pathname, pico0_queue_id);
   pico0_msqid = msgget(pico0_queue_key, IPC_CREAT);
 
-  pico1_queue_id = 1;
-  pico1_queue_key = ftok(pathname, pico0_queue_id);
-  pico1_msqid = msgget(pico0_queue_key, IPC_CREAT);
+  pico1_queue_id = 2;
+  pico1_queue_key = ftok(pathname, pico1_queue_id);
+  pico1_msqid = msgget(pico1_queue_key, IPC_CREAT);
 
 
 
