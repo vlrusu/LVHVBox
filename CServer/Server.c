@@ -1122,17 +1122,12 @@ void ramp_hv(uint8_t channel, float voltage, int client_addr) {
   sprintf(log_message, "ramp_hv ch%u %.2fV", channel, voltage);
   write_log(command_log, log_message, client_addr);
 
-  // get trip_enabled status of relevant channel
-  int trip_enabled_status = trip_enabled(channel, -9999);
-  printf("trip enabled status: %i\n",trip_enabled_status);
-
-
   int idac = (int)(channel / 4);
-  float alphas[12] = {0.9, 0.9, 0.885, 0.9, 0.9012, 0.9034, 0.9009, 0.9027, 0.8977, 0.9012, 0.9015, 1.};
+  //float alphas[12] = {0.9, 0.9, 0.885, 0.9, 0.9012, 0.9034, 0.9009, 0.9027, 0.8977, 0.9012, 0.9015, 1.};
   float current_value;
   uint32_t digvalue;
   int digvalue_difference;
-  uint32_t final_digvalue = ((int)(alphas[channel] * 16383. * (voltage / 1631.3))) & 0x3FFF;
+  uint32_t final_digvalue = ((int)(0.9 * 16383. * (voltage / 1631.3))) & 0x3FFF;
 
   if (0<=channel && channel < 6) {
     current_value = voltages_0[channel];
@@ -1141,45 +1136,24 @@ void ramp_hv(uint8_t channel, float voltage, int client_addr) {
   }
 
   // calculate current digvalue
-  digvalue = ((int)(alphas[channel] * 16383. * (current_value / 1631.3))) & 0x3FFF;
+  digvalue = ((int)(1 * 16383. * (current_value / 1631.3))) & 0x3FFF;
 
   if (0 <= channel && channel < 12) {
-    // temporarily disable trip if currently enabled
-    if (trip_enabled_status == 1) {
-      disable_trip((uint8_t)channel, -9999);
-      sleep(1);
-    }
-
 
     if (voltage < current_value) {
-      printf("in inner\n");
       DAC8164_writeChannel(&dac[idac], channel, final_digvalue);
-      if (trip_enabled_status == 1) {
-        enable_trip((uint8_t)channel, -9999);
-      }
     } else {
 
       int iteration = 0;
       int max_step = 25;
       float speed_divisor = 3;
       int dac_step;
-      int trip_enabled_yet= 0;
       
       while (abs(digvalue_difference) >= dac_step) {
         iteration += 1;
       
         if (dac_step != max_step) {
           dac_step = ceil(iteration/speed_divisor);
-
-
-        } else if (trip_enabled_yet == 0) {
-          printf("at max step\n");
-          if (trip_enabled_status == 1) {
-            enable_trip((uint8_t)channel, -9999);
-            sleep(1);
-          }
-
-          trip_enabled_yet = 1;
         }
 
         if (digvalue_difference > 0) {

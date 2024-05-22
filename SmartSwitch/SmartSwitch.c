@@ -30,6 +30,7 @@ struct Pins {
   uint8_t crowbarPins[mChn];
   uint8_t headerPins[nAdc];
   uint8_t P1_0;
+  uint8_t P1_1;
   uint8_t sclk_0;
   uint8_t sclk_1;
   uint8_t csPin_0;
@@ -82,6 +83,9 @@ void port_init() {
   gpio_init(all_pins.P1_0);
   gpio_set_dir(all_pins.P1_0, GPIO_OUT);
 
+  gpio_init(all_pins.P1_1);
+  gpio_set_dir(all_pins.P1_1, GPIO_OUT);
+
   // enable pin
   gpio_init(all_pins.enablePin);
   gpio_set_dir(all_pins.enablePin, GPIO_OUT);
@@ -97,8 +101,31 @@ void variable_init() {
   }
 
   // pinouts/ins same for both picos
-  uint8_t crowbarPins[6] = { 2, 5, 8, 11, 14, 21};
-  uint8_t headerPins[6] = { 1, 3, 6, 10, 12, 9};
+  //uint8_t crowbarPins[6] = { 2, 5, 8, 11, 14, 21};
+  //uint8_t headerPins[6] = { 1, 3, 6, 10, 12, 9};
+
+  // pico1 pinout
+  /*
+  uint8_t crowbarPins[6] = {1, 4, 9, 18, 13, 10};
+  uint8_t headerPins[6] = {3, 2, 8, 12, 17, 7};
+
+  for (int i = 0; i < 6; i++) {
+    all_pins.crowbarPins[i] = crowbarPins[i];
+    all_pins.headerPins[i] = headerPins[i];
+  }
+
+  all_pins.P1_0 = 21;					// Offset
+  all_pins.P1_1 = 20;
+  all_pins.sclk_0 = 5;						// SPI clock
+  all_pins.csPin_0 = 26;					// SPI Chip select for I
+  all_pins.sclk_1 = 19;						// SPI clock
+  all_pins.csPin_1 = 6;					// SPI Chip select for I
+  all_pins.enablePin = 11;     // enable pin for MUX
+  */
+
+  // pico2 pinout
+  int8_t crowbarPins[6] = {1, 5, 21, 14, 22, 15};
+  uint8_t headerPins[6] = {2, 4, 9, 13, 26, 12};
 
   for (int i = 0; i < 6; i++) {
     all_pins.crowbarPins[i] = crowbarPins[i];
@@ -106,11 +133,13 @@ void variable_init() {
   }
 
   all_pins.P1_0 = 20;					// Offset
-  all_pins.sclk_0 = 18;						// SPI clock
-  all_pins.csPin_0 = 16;					// SPI Chip select for I
-  all_pins.sclk_1 = 26;						// SPI clock
-  all_pins.csPin_1 = 15;					// SPI Chip select for I
-  all_pins.enablePin = 7;     // enable pin for MUX
+  all_pins.P1_1 = 17;
+  all_pins.sclk_0 = 6;						// SPI clock
+  all_pins.csPin_0 = 11;					// SPI Chip select for I
+  all_pins.sclk_1 = 19;						// SPI clock
+  all_pins.csPin_1 = 18;					// SPI Chip select for I
+  all_pins.enablePin = 8;     // enable pin for MUX
+
 
 }
 
@@ -180,10 +209,12 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6], uint 
         
       } else if (receive_chars[0] == 37) { // ----- Put Pedestal High ----- //
         gpio_put(all_pins.P1_0,1);
+        gpio_put(all_pins.P1_1,1);
         ped_on = 1;
       
       } else if (receive_chars[0] == 38) { // ----- Put Pedestal Low ----- //
         gpio_put(all_pins.P1_0,0);
+        gpio_put(all_pins.P1_1,0);
         ped_on = 0;
       
       } else if (receive_chars[0] == 86) { // ----- Send Voltages ----- //
@@ -298,6 +329,7 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6], uint 
       } else if (receive_chars[0] > 38 && receive_chars[0] < 45) {
         if (ped_on == 1) {
       gpio_put(all_pins.P1_0, 0); // put pedestal pin low
+      gpio_put(all_pins.P1_1, 0); // put pedestal pin low
       sleep_ms(700);
 
       // clear rx fifos
@@ -322,6 +354,7 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6], uint 
       }
 
       gpio_put(all_pins.P1_0, 1); // put pedestal pin high
+      gpio_put(all_pins.P1_1, 1); // put pedestal pin high
       
       // update ped_subtraction_stored
       if (*current_buffer_run == 1) {
@@ -601,6 +634,7 @@ for (uint8_t i=0; i<6; i++) // ensure that all crowbar pins are initially off
 }
 
 gpio_put(all_pins.P1_0, 1); // put pedestal pin high
+gpio_put(all_pins.P1_1, 1); // put pedestal pin high
 sleep_ms(2000);
 
 
