@@ -193,10 +193,10 @@ char pipe_path_base[14] = "/tmp/data_pipe";
 char v_pipe_path_base[15] = "/tmp/vdata_pipe";
 
 #define ALPHA 0.1 // Choose a value between 0 and 1. Smaller values result in heavier filtering.
-#define DECIMATION_FACTOR 10
+#define DECIMATION_FACTOR 20
 uint8_t use_pipe = 1; // when server tries to open pipe, will be set to 0 upon fail - will then assume pipe is not to be used
-int num_pipes = 6;
-int pipe_channels[6] = {0, 1, 2, 3, 4, 5};
+int num_pipes = 12;
+int pipe_channels[12] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
 
 // initialize command queue variables
 int queue_key;
@@ -899,8 +899,6 @@ void disable_ped(uint8_t channel, int client_addr) {
 
     return;
   }
-
-  
 }
 
 // pcb_temp
@@ -1453,19 +1451,23 @@ void *live_status(void *args) {
   char flush_buffer[1];
 
   while (1) {
-    for (int ichannel = 0; ichannel < 6; ichannel++) {
-      // create command
-      add_command.command_name = COMMAND_trip_status;
-      add_command.command_type = TYPE_pico;
-      add_command.char_parameter = ichannel;
-      add_command.float_parameter = 0;
-      add_command.client_addr = -9999;
+      for (int ichannel = 0; ichannel < 12; ichannel++) {
+        // create command
+        add_command.command_name = COMMAND_trip_status;
+        add_command.command_type = TYPE_pico;
+        add_command.char_parameter = ichannel;
+        add_command.float_parameter = 0;
+        add_command.client_addr = -9999;
 
-      // add command to queue
-      msgsnd(pico0_msqid, (void *)&add_command, sizeof(add_command), IPC_NOWAIT);
+        // add command to queue
+        if (ichannel < 6) {
+          msgsnd(pico0_msqid, (void *)&add_command, sizeof(add_command), IPC_NOWAIT);
+        } else {
+          msgsnd(pico1_msqid, (void *)&add_command, sizeof(add_command), IPC_NOWAIT);
+        }
 
-    }
-    sleep(2);
+      }
+      sleep(2);
   }
 }
 
@@ -1541,14 +1543,20 @@ void *create_connections() {
 
 
 
-int write_pipe_currents(int fd[num_pipes], float store_all_currents_internal[6][HISTORY_LENGTH]) {
+int write_pipe_currents(int pico, int fd[num_pipes], float store_all_currents_internal[6][HISTORY_LENGTH]) {
       char buffer[1024];
       int write_success = 0;
 
-      for (int pipe_id=0; pipe_id<num_pipes; pipe_id++) {
+      for (int pipe_id=0; pipe_id<6; pipe_id++) {
+        int channel;
+        if (pico == 0) {
+          channel = pipe_id;
+        } else {
+          channel = pipe_id+6;
+        }
         for (uint32_t time_index = 0; time_index < HISTORY_LENGTH; time_index++) {
     
-          for (uint8_t channel = 0; channel < 6; channel++) {
+  
             // Apply the first-order low-pass filter
             /*
             float input_value = store_all_currents_internal[channel][time_index];
@@ -1557,23 +1565,24 @@ int write_pipe_currents(int fd[num_pipes], float store_all_currents_internal[6][
             */
            float filtered_value = store_all_currents_internal[channel][time_index];
 
+
             // Decimation by 5: Only write every 5th sample
             if (time_index % DECIMATION_FACTOR == 0 && use_pipe == 1) {
               int length = snprintf(buffer, sizeof(buffer), "%f ", filtered_value);
 
-              write_success = write(fd[pipe_id], buffer, length); // Write to the pipe
+              write_success = write(fd[channel], buffer, length); // Write to the pipe
 
               if (write_success == -1) {
                 use_pipe = 0;
                 error_log("Current pipe disconnected");
                 return -1;
               }
-            }
+            
           }
 
           if (time_index % DECIMATION_FACTOR == 0 && use_pipe == 1) {
             int length = snprintf(buffer, sizeof(buffer), "\n");
-            write_success = write(fd[pipe_id], buffer, length); // Write the timestamp to the pipe
+            write_success = write(fd[channel], buffer, length); // Write the timestamp to the pipe
 
             if (write_success == -1) {
             use_pipe = 0;
@@ -1587,28 +1596,31 @@ int write_pipe_currents(int fd[num_pipes], float store_all_currents_internal[6][
 }
 
 
-int write_pipe_voltages(int pico, int vfd[6], float voltages_0[6]) {
+int write_pipe_voltages(int pico, int vfd[12], float voltages_0[6], float voltages_1[6]) {
   int write_success = 0;
 
-  if (pico == 0) {
-    char buffer[1024]; // A buffer to format and write data
-    for (int channel = 0; channel < 6; channel++) {
-      // only write to pipe if connection was properly established earlier
-      for (int pipe_id=0; pipe_id<num_pipes; pipe_id++) {
-        if (use_pipe == 1) {
-          int length = snprintf(buffer, sizeof(buffer), "%f ", voltages_0[channel]);
-          write_success = write(vfd[pipe_id], buffer, length); // Write to the pipe
-        }
+  char buffer[1024]; // A buffer to format and write data
 
-        if (write_success == -1) {
-          use_pipe = 0;
-          error_log("Voltage pipe disconnected");
-          return -1;
+    for (int pipe_id=0; pipe_id<6; pipe_id++) {
+      if (use_pipe == 1) {
+        if (pico == 0) {
+          int length = snprintf(buffer, sizeof(buffer), "%f ", voltages_0[pipe_id]);
+          write_success = write(vfd[pipe_id], buffer, length); // Write to the pipe
+        } else {
+          int length = snprintf(buffer, sizeof(buffer), "%f ", voltages_1[pipe_id]);
+          write_success = write(vfd[pipe_id+6], buffer, length); // Write to the pipe
         }
       }
 
+      if (write_success == -1) {
+        use_pipe = 0;
+        error_log("Voltage pipe disconnected");
+        return -1;
+      }
+    
+
     }
-  }
+    msleep(1);
   int seconds = time(NULL);
 
   if (pico == 0 && use_pipe == 1) {
@@ -1672,13 +1684,23 @@ int initialize_libusb(int pico) {
 
 
 int initialize_pipes(int fd[num_pipes], int vfd[num_pipes]) {
-  char *pipe_path = malloc(15);
-  char *v_pipe_path = malloc(16);
+  char *pipe_path = malloc(17);
+  char *v_pipe_path = malloc(18);
   struct stat st_i;
 
   for (int pipe_id=0; pipe_id<num_pipes; pipe_id++) {
-    strncpy(pipe_path, pipe_path_base, 15);
-    pipe_path[14] = 48+pipe_channels[pipe_id];
+    strncpy(pipe_path, pipe_path_base, 16);
+    //pipe_path[14] = 48+pipe_channels[pipe_id];
+
+    //char channel_string[2] = itoa(pipe_channels[pipe_id]);
+    //memcpy(pipe_path[14], &channel_string, sizeof(itoa(pipe_channels[pipe_id])));
+
+    //snprintf(&pipe_path[14], 1, pipe_channels[pipe_id]);
+
+    snprintf(pipe_path, 17, "/tmp/data_pipe%i", pipe_channels[pipe_id]);
+
+
+
     if (stat(pipe_path, &st_i) == -1)
     {
       if (mkfifo(pipe_path, 0666) == -1)
@@ -1697,8 +1719,10 @@ int initialize_pipes(int fd[num_pipes], int vfd[num_pipes]) {
   struct stat st[num_pipes];
   for (int pipe_id=0; pipe_id<num_pipes; pipe_id++) {
     sleep(0.1);
-    memcpy(v_pipe_path, &v_pipe_path_base, 15);
-    v_pipe_path[15] = pipe_channels[pipe_id]+48;
+    //memcpy(v_pipe_path, &v_pipe_path_base, 15);
+    //v_pipe_path[15] = pipe_channels[pipe_id]+48;
+
+    snprintf(v_pipe_path, 18, "/tmp/vdata_pipe%i", pipe_channels[pipe_id]);
 
     if (stat(v_pipe_path, &st[pipe_id]) == -1)
     {
@@ -1719,6 +1743,7 @@ int initialize_pipes(int fd[num_pipes], int vfd[num_pipes]) {
 
   free(pipe_path);
   free(v_pipe_path);
+
 
   return 0;
 }
@@ -1952,6 +1977,8 @@ int request_voltages(int pico) {
   char *input_data;
   input_data = (char *)malloc(24);
 
+
+
   if (pico == 0) {
     pthread_mutex_lock(&usb0_mutex_lock);
     libusb_bulk_transfer(device_handle_0, 0x02, &voltage_char, 1, 0, 0);
@@ -2048,8 +2075,8 @@ void *acquire_data(void *arguments) {
   hv_arg_struct *common = arguments;
   int pico = common->pico;
   float last_output[6]; // State for each channel's filter
-  int fd[num_pipes];
-  int vfd[num_pipes];
+  int fd[12];
+  int vfd[12];
 
   if (initialize_libusb(pico) == -1) {
     char error_msg[100];
@@ -2059,11 +2086,12 @@ void *acquire_data(void *arguments) {
   }
 
 
-
+  if (use_pico0 == 1 && use_pico1 == 1) {
+    int pipe_initialization_success = initialize_pipes(fd, vfd);
+    printf("pipe_initialization_success: %i\n", pipe_initialization_success);
+  }
 
   if (pico == 0 && use_pico0 == 1) {
-    int pipe_initialization_success = initialize_pipes(fd, vfd);
-
     if (write_data_0 == 1) {
       int txt_init_success_0 = initialize_txt(pico);
     }
@@ -2185,11 +2213,13 @@ void *acquire_data(void *arguments) {
         int voltage_success_1 = request_voltages(1);
       }
 
+      if (use_pico0 == 1 && use_pico1 == 1) {
+        int pipe_voltage_success = write_pipe_voltages(pico, vfd, voltages_0, voltages_1);
+        int pipe_current_success = write_pipe_currents(pico, fd, common->all_currents);
+      }
+
       // ----- Write/send voltages/currents -----
       if (pico == 0 && use_pico0 == 1) {
-        int pipe_voltage_success = write_pipe_voltages(0, vfd, voltages_0);
-        int pipe_current_success = write_pipe_currents(fd, common->all_currents);
-
         if (write_data_0 == 1) {
 
           int current_write_success = write_currents_0(common->all_currents);
@@ -2522,7 +2552,7 @@ int main( int argc, char **argv ) {
   pthread_create(&lv_acquisition_thread, NULL, lv_acquisition, NULL);
 
   // create statusing thread
-  if (use_pico0 == 1) {
+  if (use_pico0 && live_status) {
     pthread_create(&status_thread_0, NULL, live_status, &args_0);
   }
 

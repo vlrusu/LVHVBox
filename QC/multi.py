@@ -11,7 +11,8 @@ v_pipe_path = "/tmp/vdata_pipe"  # Second pipe
 
 SPIKE_THRESHOLD = 20.
 
-plot_channels = [0, 1, 2, 3, 4, 5]
+plot_channels = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+#plot_channels = [0, 1, 2, 3, 4, 5]
 
 data_length = 3300
 
@@ -166,12 +167,13 @@ class App(QtWidgets.QMainWindow):
         
         with open(trigger_file_path, 'r') as f:
             content = f.readline().split()
-        if content[self.channel] == "1":
-            self.plotWidget.getViewBox().setBackgroundColor('r')
-#                self.curve.setPen(self.alertPen)  # Set curve color to red
-        else:
-            self.plotWidget.getViewBox().setBackgroundColor('k')                
-#                self.curve.setPen(self.defaultPen)  # Reset curve color to default
+        if len(content) == 12:
+            if content[self.channel] == "1":
+                self.plotWidget.getViewBox().setBackgroundColor('r')
+    #                self.curve.setPen(self.alertPen)  # Set curve color to red
+            else:
+                self.plotWidget.getViewBox().setBackgroundColor('k')                
+    #                self.curve.setPen(self.defaultPen)  # Reset curve color to default
         
 
     def toggle_pause(self):
@@ -184,11 +186,12 @@ class App(QtWidgets.QMainWindow):
 
     def update_plot(self, value):
 
+
         if self.paused:  # Check if paused
             return
         
 
-        thissample = float(value[self.channel])
+        thissample = float(value[0])
         self.data = np.append(self.data, thissample)[-data_length:]
 
 
@@ -210,9 +213,10 @@ class App(QtWidgets.QMainWindow):
         """Update the label with the data from the second pipe."""
 #        print(value[self.channel])
 
-        if len(value) == 6:
-
-            self.label.setText(value[self.channel])
+        try:
+            self.label.setText(value[0])
+        except:
+           pass
     #        self.label.setPos(self.plotWidget.viewRange()[0][1], self.plotWidget.viewRange()[1][0])
 
 

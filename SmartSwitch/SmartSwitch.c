@@ -25,6 +25,8 @@
 #define nAdc  6		// Number of SmartSwitches
 #define mChn  6		// Number of channels for trip processing
 
+#define pico 1  // which pico (1 or 2)
+
 
 struct Pins {
   uint8_t crowbarPins[mChn];
@@ -100,45 +102,59 @@ void variable_init() {
     }
   }
 
+  // pinouts for old muxers/hv board
   // pinouts/ins same for both picos
-  //uint8_t crowbarPins[6] = { 2, 5, 8, 11, 14, 21};
-  //uint8_t headerPins[6] = { 1, 3, 6, 10, 12, 9};
-
-  // pico1 pinout
   /*
-  uint8_t crowbarPins[6] = {1, 4, 9, 18, 13, 10};
-  uint8_t headerPins[6] = {3, 2, 8, 12, 17, 7};
-
+  uint8_t crowbarPins[6] = { 2, 5, 8, 11, 14, 21};
+  uint8_t headerPins[6] = { 1, 3, 6, 10, 12, 9};
   for (int i = 0; i < 6; i++) {
     all_pins.crowbarPins[i] = crowbarPins[i];
     all_pins.headerPins[i] = headerPins[i];
   }
 
-  all_pins.P1_0 = 21;					// Offset
-  all_pins.P1_1 = 20;
-  all_pins.sclk_0 = 5;						// SPI clock
-  all_pins.csPin_0 = 26;					// SPI Chip select for I
-  all_pins.sclk_1 = 19;						// SPI clock
-  all_pins.csPin_1 = 6;					// SPI Chip select for I
-  all_pins.enablePin = 11;     // enable pin for MUX
+  all_pins.P1_0 = 20;      // Offset
+  all_pins.sclk_0 = 18;    // SPI clock
+  all_pins.csPin_0 = 16;   // SPI Chip select for I
+  all_pins.sclk_1 = 26;    // SPI clock
+  all_pins.csPin_1 = 15;   // SPI Chip select for I
+  all_pins.enablePin = 7;  // enable pin for MUX
   */
 
-  // pico2 pinout
-  int8_t crowbarPins[6] = {1, 5, 21, 14, 22, 15};
-  uint8_t headerPins[6] = {2, 4, 9, 13, 26, 12};
+  // pico1 pinout
+  if (pico == 1) {
+    uint8_t crowbarPins[6] = {1, 4, 9, 18, 13, 10};
+    uint8_t headerPins[6] = {3, 2, 8, 12, 17, 7};
 
-  for (int i = 0; i < 6; i++) {
-    all_pins.crowbarPins[i] = crowbarPins[i];
-    all_pins.headerPins[i] = headerPins[i];
+    for (int i = 0; i < 6; i++) {
+      all_pins.crowbarPins[i] = crowbarPins[i];
+      all_pins.headerPins[i] = headerPins[i];
+    }
+
+    all_pins.P1_0 = 21;					// Offset
+    all_pins.P1_1 = 20;
+    all_pins.sclk_0 = 5;						// SPI clock
+    all_pins.csPin_0 = 26;					// SPI Chip select for I
+    all_pins.sclk_1 = 19;						// SPI clock
+    all_pins.csPin_1 = 6;					// SPI Chip select for I
+    all_pins.enablePin = 11;     // enable pin for MUX
+  } else {
+    // pico2 pinout
+    int8_t crowbarPins[6] = {1, 5, 21, 14, 22, 15};
+    uint8_t headerPins[6] = {2, 4, 9, 13, 26, 12};
+
+    for (int i = 0; i < 6; i++) {
+      all_pins.crowbarPins[i] = crowbarPins[i];
+      all_pins.headerPins[i] = headerPins[i];
+    }
+
+    all_pins.P1_0 = 20;					// Offset
+    all_pins.P1_1 = 17;
+    all_pins.sclk_0 = 6;						// SPI clock
+    all_pins.csPin_0 = 11;					// SPI Chip select for I
+    all_pins.sclk_1 = 19;						// SPI clock
+    all_pins.csPin_1 = 18;					// SPI Chip select for I
+    all_pins.enablePin = 8;     // enable pin for MUX
   }
-
-  all_pins.P1_0 = 20;					// Offset
-  all_pins.P1_1 = 17;
-  all_pins.sclk_0 = 6;						// SPI clock
-  all_pins.csPin_0 = 11;					// SPI Chip select for I
-  all_pins.sclk_1 = 19;						// SPI clock
-  all_pins.csPin_1 = 18;					// SPI Chip select for I
-  all_pins.enablePin = 8;     // enable pin for MUX
 
 
 }
@@ -224,13 +240,6 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6], uint 
         tud_cdc_write_flush(); // flushes write buffer, data will not actually be sent without this command
 
       } else if (receive_chars[0] == 73) { // ----- Send Averaged Currents ----- //
-        /*
-        absolute_time_t time = get_absolute_time();
-        for (int channel=0; channel<6; channel++) {
-          channel_current_averaged[channel] = (float) to_ms_since_boot(time)/1000;
-        }
-        */
-
 
         for (uint8_t i=0; i<6; i++) {
           tud_cdc_write(&channel_current_averaged[i],sizeof(&channel_current_averaged[i]));
@@ -330,7 +339,7 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6], uint 
         if (ped_on == 1) {
       gpio_put(all_pins.P1_0, 0); // put pedestal pin low
       gpio_put(all_pins.P1_1, 0); // put pedestal pin low
-      sleep_ms(700);
+      sleep_ms(1400);
 
       // clear rx fifos
       for (uint32_t i=0; i<3; i++) {
