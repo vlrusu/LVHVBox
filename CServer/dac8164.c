@@ -15,7 +15,6 @@
 
 #define DAC8164DELAY 20 // in uS
 
-
 int DAC8164_setup(DAC8164 *self, MCP *MCP, uint8_t sync, int sclk, uint8_t sdi, int enable_pin, uint8_t ldac_pin)
 {
   self->_MCP = MCP;
