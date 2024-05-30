@@ -1558,12 +1558,11 @@ int write_pipe_currents(int pico, int fd[num_pipes], float store_all_currents_in
     
   
             // Apply the first-order low-pass filter
-            /*
+            
             float input_value = store_all_currents_internal[channel][time_index];
             float filtered_value = ALPHA * input_value + (1 - ALPHA) * last_current_output[channel];
             last_current_output[channel] = filtered_value;
-            */
-           float filtered_value = store_all_currents_internal[channel][time_index];
+            
 
 
             // Decimation by 5: Only write every 5th sample
