@@ -1593,13 +1593,12 @@ int write_pipe_currents(int fd[num_pipes], float store_all_currents_internal[6][
     
           for (uint8_t channel = 0; channel < 6; channel++) {
             // Apply the first-order low-pass filter
-            /*
+            
             float input_value = store_all_currents_internal[channel][time_index];
             float filtered_value = ALPHA * input_value + (1 - ALPHA) * last_current_output[channel];
             last_current_output[channel] = filtered_value;
-            */
-           float filtered_value = store_all_currents_internal[channel][time_index];
-
+            
+        
             // Decimation by 5: Only write every 5th sample
             if (time_index % DECIMATION_FACTOR == 0 && use_pipe == 1) {
               int length = snprintf(buffer, sizeof(buffer), "%f ", filtered_value);
