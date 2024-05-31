@@ -1141,7 +1141,9 @@ void ramp_hv(uint8_t channel, float voltage, int client_addr) {
   if (0 <= channel && channel < 12) {
 
     if (voltage < current_value) {
-      DAC8164_writeChannel(&dac[idac], channel, final_digvalue);
+      for (int i=0; i<5; i++) {
+        DAC8164_writeChannel(&dac[idac], channel, final_digvalue);
+      }
     } else {
 
       int iteration = 0;
