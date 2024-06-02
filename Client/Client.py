@@ -193,8 +193,8 @@ def execute_command(sock, command, channel, val):
         else:
             assert -1 <= channel < n_channels[command.type_key]+1
     send_command(sock, command, channel, val)
+    cmd_output = sock.recv(1024)
     if command.cmd_output_str_format:
-        cmd_output = sock.recv(1024)
         if channel is not None:
             fmt = f"Channel {channel} " + command.cmd_output_str_format
             process_response(cmd_output, fmt)

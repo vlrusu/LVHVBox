@@ -234,6 +234,8 @@ float i2c_read_6V_current(unsigned int channel_number){
 }
 
 float i2c_read_48V_voltage(unsigned int channel_number){
+  // reverse polarity of channeling
+  channel_number = 5 - channel_number;
   uint8_t map[6] = {6, 0, 6, 0, 6, 0};
   uint8_t LTCaddress[6] = {0x26, 0x26, 0x16, 0x16, 0x14, 0x14};
   uint8_t address = LTCaddress[channel_number];
