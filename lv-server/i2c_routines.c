@@ -214,6 +214,8 @@ float i2c_read_low(uint8_t address, uint8_t channel, float scale){
 }
 
 float i2c_read_6V_voltage(unsigned int channel_number){
+  // reverse polarity of channeling
+  channel_number = 5 - channel_number;
   uint8_t map[6] = {4, 3, 4, 3, 4, 3};
   uint8_t LTCaddress[6] = {0x26, 0x26, 0x16, 0x16, 0x14, 0x14};
   uint8_t address = LTCaddress[channel_number];
@@ -224,6 +226,8 @@ float i2c_read_6V_voltage(unsigned int channel_number){
 }
 
 float i2c_read_6V_current(unsigned int channel_number){
+  // reverse polarity of channeling
+  channel_number = 5 - channel_number;
   uint8_t map[6] = {5, 2, 5, 2, 5, 2};
   uint8_t LTCaddress[6] = {0x26, 0x26, 0x16, 0x16, 0x14, 0x14};
   uint8_t address = LTCaddress[channel_number];
@@ -246,6 +250,8 @@ float i2c_read_48V_voltage(unsigned int channel_number){
 }
 
 float i2c_read_48V_current(unsigned int channel_number){
+  // reverse polarity of channeling
+  channel_number = 5 - channel_number;
   uint8_t map[6] = {7, 1, 7, 1, 7, 1};
   uint8_t LTCaddress[6] = {0x26, 0x26, 0x16, 0x16, 0x14, 0x14};
   uint8_t address = LTCaddress[channel_number];
@@ -313,7 +319,6 @@ void* i2c_loop(void* args){
       msleep(100);
     }
 
-    // TODO
     // pop next task off the stack
     QueueItem_t* item = queue_pop(queue);
     task_t* task = (task_t*) (item->payload);
