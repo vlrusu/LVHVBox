@@ -18,6 +18,13 @@ DAC8164 hv_dacs[3];
 int initialize_i2c_lv(uint8_t channel_map[6]){
   char error_msg[100];
 
+  if (MCP_setup(lvpgoodMCP, 1) == -1) {
+    error_log("main MCP_set lvpgoodMCP failure");
+    printf("main MCP_set lvpgoodMCP failure");
+
+    return -1;
+  }
+
   if (setup_gpio(lv_mcp_reset) == -1) {
     error_log("main setup_gpio lv_mcp_reset failure");
     printf("main setup_gpio lv_mcp_reset failure");
@@ -96,6 +103,13 @@ int initialize_i2c_lv(uint8_t channel_map[6]){
 }
 
 int initialize_i2c_hv(){
+  if (MCP_setup(hvMCP, 2) == -1) {
+    error_log("main MCP_set hvMCP failure");
+    printf("main MCP_set hvMCP failure");
+
+    return -1;
+  }
+
   if (MCP_pinMode(hvMCP, 4, OUTPUT) == -1) {
     error_log("hv_initialization MCP_pinMode pin 4 failure");
     printf("hv_initialization MCP_pinMode pin 4 failure");
