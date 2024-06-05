@@ -16,26 +16,28 @@ project(SmartSwitch C CXX ASM)
 # Initialise the Raspberry Pi Pico SDK
 pico_sdk_init()
 
+# Compilation and follow-on flash command
+function(compile_and_flash target pico USB_VID)
+  add_executable(${target} SmartSwitch.c usb_descriptors.c msc_disk.c)
+  target_compile_definitions(${target} PRIVATE pico=${pico})
+  target_compile_definitions(${target} PRIVATE USB_VID=${USB_VID})
+  target_include_directories(${target} PUBLIC ${CMAKE_CURRENT_LIST_DIR})
+  target_link_libraries(${target}
+                        pico_stdlib
+                        hardware_adc
+                        hardware_pio
+                        tinyusb_device
+                        tinyusb_board)
+  pico_add_extra_outputs(${target})
+  pico_set_program_name(${target} "SmartSwitch")
+  pico_set_program_version(${target} "0.1")
+  #pico_enable_stdio_uart(${target} 0)
+  #pico_enable_stdio_usb(${target} 0)
+  add_custom_target(flash-pico-${pico}
+                    DEPENDS ${target}
+                    COMMAND echo picotool load -f ${target}.elf)
+endfunction()
 
-# Add executable. Default name is the project name, version 0.1
-
-add_executable(SmartSwitch SmartSwitch.c usb_descriptors.c msc_disk.c)
-
-
-
-
-pico_set_program_name(SmartSwitch "SmartSwitch")
-pico_set_program_version(SmartSwitch "0.1")
-
-#pico_enable_stdio_uart(SmartSwitch 0)
-#pico_enable_stdio_usb(SmartSwitch 0)
-
-target_include_directories(SmartSwitch PUBLIC
-    ${CMAKE_CURRENT_LIST_DIR}
-)
-
-
-# Add the standard library to the build
-target_link_libraries(SmartSwitch pico_stdlib hardware_adc hardware_pio tinyusb_device tinyusb_board)
-
-pico_add_extra_outputs(SmartSwitch)
+# Add executables, and generate commands to load onto picos
+compile_and_flash(SmartSwitch_1 1 0xcaf0)
+compile_and_flash(SmartSwitch_2 2 0xcaf1)

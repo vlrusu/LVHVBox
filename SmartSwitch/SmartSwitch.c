@@ -25,7 +25,7 @@
 #define nAdc  6		// Number of SmartSwitches
 #define mChn  6		// Number of channels for trip processing
 
-#define pico 1  // which pico (1 or 2)
+// #define pico 1 or 2, configured externally
 
 
 struct Pins {
