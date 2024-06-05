@@ -35,7 +35,7 @@ function(compile_and_flash target pico USB_VID)
   #pico_enable_stdio_usb(${target} 0)
   add_custom_target(flash-pico-${pico}
                     DEPENDS ${target}
-                    COMMAND echo picotool load -f ${target}.elf)
+                    COMMAND echo picotool load ${target}.elf -f \${REST})
 endfunction()
 
 # Add executables, and generate commands to load onto picos
