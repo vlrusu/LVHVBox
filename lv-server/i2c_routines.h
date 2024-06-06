@@ -16,6 +16,7 @@
 #include "gpio.h"
 #include "i2cbusses.h"
 #include "MCP23S08.h"
+#include "connections.h"
 #include "utils.h"
 #include "Logging.h"
 #include "PriorityQueue.h"
@@ -45,12 +46,14 @@ float i2c_read_48V_current(unsigned int);
 int i2c_lv_power_control(uint8_t channel, uint8_t pin_map[6], int value);
 int i2c_lv_power_on(uint8_t, uint8_t[6]);
 int i2c_lv_power_off(uint8_t, uint8_t[6]);
-//void i2c_ramp_hv(uint8_t, float);
+float i2c_deferred_hv_query(int, uint8_t);
+float i2c_ramp_hv(int, uint8_t, float);
 
 typedef struct {
   PriorityQueue_t* queue;
   uint8_t channel_map[6];
   Logger_t* logger;
+  unsigned int port;
 } i2c_loop_args_t;
 
 void* i2c_loop(void*);

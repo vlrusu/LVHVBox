@@ -120,9 +120,9 @@ int main(int argc, char** argv){
   i2c_loop_args_t i2c_loop_args;
   i2c_loop_args.queue = &i2c_queue;
   i2c_loop_args.logger = &logger;
+  i2c_loop_args.port = port;
   memcpy(i2c_loop_args.channel_map, channel_map, sizeof(i2c_loop_args.channel_map));
   pthread_t i2c_thread;
-  pthread_create(&i2c_thread, NULL, i2c_loop, &i2c_loop_args);
 
   // start pico loops
   if (pico_a.handle != NULL){
@@ -152,6 +152,8 @@ int main(int argc, char** argv){
   foyer_args.logger = &logger;
   pthread_t foyer_thread;
   pthread_create(&foyer_thread, NULL, foyer, &foyer_args);
+
+  pthread_create(&i2c_thread, NULL, i2c_loop, &i2c_loop_args);
 
   // wait forever
   pthread_join(foyer_thread, NULL);

@@ -306,14 +306,55 @@ int i2c_lv_power_off(uint8_t channel, uint8_t pin_map[6]){
   return rv;
 }
 
+float i2c_deferred_hv_query(int fd, uint8_t channel){
+  // first, construct query of hv voltage
+  char writeable[13];
+  // command name
+  writeable[0]  = (COMMAND_get_vhv & 0xFF000000) >> 24;
+  writeable[1]  = (COMMAND_get_vhv & 0x00FF0000) >> 16;
+  writeable[2]  = (COMMAND_get_vhv & 0x0000FF00) >>  8;
+  writeable[3]  = (COMMAND_get_vhv & 0x000000FF) >>  0;
+  // command type
+  writeable[4]  = (TYPE_pico       & 0xFF000000) >> 24;
+  writeable[5]  = (TYPE_pico       & 0x00FF0000) >> 16;
+  writeable[6]  = (TYPE_pico       & 0x0000FF00) >>  8;
+  writeable[7]  = (TYPE_pico       & 0x000000FF) >>  0;
+  // channel
+  writeable[8]  = (char) channel;
+  // unused
+  writeable[9]  = 0;
+  writeable[10] = 0;
+  writeable[11] = 0;
+  writeable[12] = 0;
+
+  // perform query
+  float queried;
+  write(fd, &writeable, sizeof(writeable));
+  //msleep(100);
+  int nread;
+  if ((nread = read(fd, &queried, 4)) < 1){
+    return -9.9;
+  }
+
+  return queried;
+}
+
+float i2c_ramp_hv(int fd, uint8_t channel, float target){
+  float rv = i2c_deferred_hv_query(fd, channel);
+  return rv;
+}
+
 void* i2c_loop(void* args){
   i2c_loop_args_t* casted = (i2c_loop_args_t*) args;
   PriorityQueue_t* queue = casted->queue;
   Logger_t* logger = casted->logger;
   uint8_t channel_map[6];
   memcpy(channel_map, casted->channel_map, sizeof(channel_map));
-
   char msg[128];
+
+  // establish connection back through foyer to allow coupling to hv readings
+  int fd = loopback_connect(casted->port);
+
   while (1) {
     while (queue_size(queue) < 1){
       msleep(100);
@@ -350,12 +391,12 @@ void* i2c_loop(void* args){
     }
     // hv commands these require pico-based hv polling
     // to protect against biasing the hv too quickly
-//  else if (task->command.name == COMMAND_ramp_hv){
-//    rv = i2c_ramp_hv(task->command.char_parameter, task->command.float_parameter);
-//  }
-//  else if (task->command.name == COMMAND_down_hv){
-//    rv = i2c_ramp_hv(task->command.char_parameter, 0.0);
-//  }
+    else if (task->command.name == COMMAND_ramp_hv){
+      rv = i2c_ramp_hv(fd, task->command.char_parameter, task->command.float_parameter);
+    }
+    else if (task->command.name == COMMAND_down_hv){
+      rv = i2c_ramp_hv(fd, task->command.char_parameter, 0.0);
+    }
     // otherwise, have encountered an unexpected command
     else{
       sprintf(msg, "i2c encountered command of unknown label %u. skipping this command.", task->command.name);

@@ -46,6 +46,25 @@ int open_server(unsigned int port, int backlog){
   return rv;
 }
 
+// instantiate a loopback connection
+int loopback_connect(unsigned int port){
+  int rv = socket(AF_INET, SOCK_STREAM, 0);
+
+  struct sockaddr_in address;
+  address.sin_family = AF_INET;
+  struct hostent* entry = gethostbyname("localhost");
+  memcpy(entry->h_addr, &(address.sin_addr), entry->h_length);
+  address.sin_port = htons(port);
+
+  if (connect(rv, (struct sockaddr*) &address, sizeof(address)) < 0){
+    char msg[128];
+    sprintf(msg, "failed to connect inet socket on localhost port %h", port);
+    exit_on_error(msg);
+  }
+
+  return rv;
+}
+
 // actively listen for connections
 void* foyer(void* args){
   foyer_args_t* casted = (foyer_args_t*) args;
