@@ -21,6 +21,8 @@
 #include "bsp/board.h"
 #include "tusb.h"
 
+#include "pico/bootrom.h"
+
 // Channel count
 #define nAdc  6		// Number of SmartSwitches
 #define mChn  6		// Number of channels for trip processing
@@ -380,6 +382,9 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6], uint 
         int intval = (int) two;
 
         memcpy(&trip_requirement[receive_chars[0]-45], &intval, 4);
+    } else if (receive_chars[0] == 255){
+      // force reboot into BOOTSEL mode
+      reset_usb_boot(0, 0);
     }
     
     
