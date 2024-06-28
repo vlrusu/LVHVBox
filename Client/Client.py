@@ -314,5 +314,8 @@ if __name__ == "__main__":
                 process_command(line)
         except AssertionError:
             print("Ensure that all arguments are valid")
+        # ejc: no cleanup == bad
+        except EOFError:
+            exit(0)
         except Exception as e:
             print((type(e), e))

@@ -346,7 +346,7 @@ int powerOff(uint8_t channel, int client_addr) {
   sprintf(log_message, "powerOff ch%u", channel);
   write_log(command_log, log_message, client_addr);
 
-  uint8_t local_powerChMap[6] = {5, 6, 7, 2, 3, 4};
+  //  uint8_t local_powerChMap[6] = {5, 6, 7, 2, 3, 4};
 
   if (channel < 0 || channel > 6) {
     error_log("Invalid powerOff channel value");
@@ -364,7 +364,7 @@ int powerOff(uint8_t channel, int client_addr) {
     }
     
     for (int i=0; i<6; i++) {
-      if (MCP_pinWrite(lvpgoodMCP, local_powerChMap[i], LOW) == -1) {
+      if (MCP_pinWrite(lvpgoodMCP, powerChMap[i], LOW) == -1) {
         //return -1;
 
         char error_msg[50];
@@ -379,7 +379,7 @@ int powerOff(uint8_t channel, int client_addr) {
       
     }
   } else {
-    if (MCP_pinWrite(lvpgoodMCP, local_powerChMap[channel], LOW) == -1) {
+    if (MCP_pinWrite(lvpgoodMCP, powerChMap[channel], LOW) == -1) {
       //return -1;
 
       char error_msg[50];
@@ -1558,11 +1558,12 @@ int write_pipe_currents(int pico, int fd[num_pipes], float store_all_currents_in
     
   
             // Apply the first-order low-pass filter
-            
+            /*
             float input_value = store_all_currents_internal[channel][time_index];
             float filtered_value = ALPHA * input_value + (1 - ALPHA) * last_current_output[channel];
             last_current_output[channel] = filtered_value;
-            
+            */
+           float filtered_value = store_all_currents_internal[channel][time_index];
 
 
             // Decimation by 5: Only write every 5th sample
