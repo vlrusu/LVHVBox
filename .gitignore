@@ -1048,3 +1048,5 @@ lvdata.log
 lvhvbox.log
 .gitignore
 CServer/live_status.txt
+
+CServer/livestatus.txt
