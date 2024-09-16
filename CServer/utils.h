@@ -29,5 +29,7 @@ char* load_config(char* constant_name);
 char* extract_value(char* input_string);
 char* extract_name(char* input_string);
 
+// ejc
+void exit_on_error(char* msg){
 
 #endif
