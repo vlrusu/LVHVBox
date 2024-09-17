@@ -38,9 +38,12 @@ float i2c_read_6V_voltage(unsigned int);
 float i2c_read_6V_current(unsigned int);
 float i2c_read_48V_voltage(unsigned int);
 float i2c_read_48V_current(unsigned int);
+int i2c_lv_power_on(uint8_t);
+int i2c_lv_power_off(uint8_t);
 
 typedef struct {
   PriorityQueue_t* queue;
+  uint8_t channel_map[6];
 } i2c_loop_args_t;
 
 void* i2c_loop(void*);

@@ -24,9 +24,10 @@ void heap_push(Heap_t* heap, HeapNode_t* node){
     i++;
   }
 
+  heap->buffer[i] = node;
   // if root is empty, assign and short-circuit
   if (i == 0){
-    heap->buffer[i] = node;
+    /**/
   }
   // for nontrivial insertions, append to bottom, and bubble up
   else if (0 < i){
@@ -58,7 +59,7 @@ void heap_push(Heap_t* heap, HeapNode_t* node){
 HeapNode_t* heap_pop(Heap_t* heap){
   // identify rightmost empty node
   size_t i = heap->size - 1;
-  while ((heap->buffer[i] != NULL) && (0 < i)){
+  while ((heap->buffer[i] == NULL) && (0 < i)){
     i--;
   }
 

@@ -187,9 +187,54 @@ float i2c_read_48V_current(unsigned int channel_number){
   return rv;
 }
 
+int i2c_lv_power_control(uint8_t channel, int value){
+  if ((channel < 0 ) || (6 < channel)){
+    return 0;
+  }
+
+  if (write_gpio_value(lv_global_enable, value) == -1){
+    //error_log("poweron error 0");
+    //return -1;
+  }
+
+  if (channel == 6){
+    for (int i = 0; i < 6; i++){
+      if (MCP_pinWrite(lvpgoodMCP, i, value) == -1){
+        char error_msg[50];
+        sprintf(error_msg, "mcp powerOn fail write channel %i", i);
+        //error_log(error_msg);
+        //return -1;
+      }
+
+    }
+  }
+  else{
+    if (MCP_pinWrite(lvpgoodMCP, channel, value) == -1){
+      char error_msg[50];
+      sprintf(error_msg, "mcp powerOn fail write channel %u", channel);
+      //error_log(error_msg);
+      //return -1;
+    }
+  }
+
+  return 0;
+}
+
+int i2c_lv_power_on(uint8_t channel){
+  int rv = i2c_lv_power_control(channel, HIGH);
+  return rv;
+}
+
+int i2c_lv_power_off(uint8_t channel){
+  int rv = i2c_lv_power_control(channel, LOW);
+  return rv;
+}
+
 void* i2c_loop(void* args){
   i2c_loop_args_t* casted = (i2c_loop_args_t*) args;
   PriorityQueue_t* queue = casted->queue;
+  uint8_t channel_map[6];
+  memcpy(channel_map, casted->channel_map, sizeof(channel_map));
 
   while (1) {
     while (queue_size(queue) < 1){
@@ -198,15 +243,24 @@ void* i2c_loop(void* args){
 
     // TODO
     // pop next task off the stack, execute i2c read, and mark as complete
-    task_t* task = (task_t*) queue_pop(queue)->payload;
+    QueueItem_t* item = queue_pop(queue);
+    task_t* task = (task_t*) (item->payload);
     float rv;
-    if (task->command.name == COMMAND_readMonV6){
+    if (task->command.name == COMMAND_powerOn){
+      uint8_t channel = channel_map[task->command.char_parameter];
+      rv = i2c_lv_power_on(channel);
+    }
+    else if (task->command.name == COMMAND_powerOff){
+      uint8_t channel = channel_map[task->command.char_parameter];
+      rv = i2c_lv_power_off(channel);
+    }
+    else if (task->command.name == COMMAND_readMonV6){
       rv = i2c_read_6V_voltage(task->command.char_parameter);
     }
     else if (task->command.name == COMMAND_readMonI6){
       rv = i2c_read_6V_current(task->command.char_parameter);
     }
-    if (task->command.name == COMMAND_readMonV48){
+    else if (task->command.name == COMMAND_readMonV48){
       rv = i2c_read_48V_voltage(task->command.char_parameter);
     }
     else if (task->command.name == COMMAND_readMonI48){

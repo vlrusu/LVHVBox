@@ -85,6 +85,7 @@ int main(int argc, char** argv){
   // start i2c loop
   i2c_loop_args_t i2c_loop_args;
   i2c_loop_args.queue = &queue;
+  memcpy(i2c_loop_args.channel_map, channel_map, sizeof(i2c_loop_args.channel_map));
   pthread_t i2c_thread;
   pthread_create(&i2c_thread, NULL, i2c_loop, &i2c_loop_args);
 
