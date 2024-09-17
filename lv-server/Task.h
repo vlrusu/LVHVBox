@@ -11,9 +11,11 @@
 typedef struct{
   command_t command;
   int addr;
+  float rv;
   int complete;
   int error;
   pthread_mutex_t mutex;
+  pthread_cond_t condition;
 } task_t;
 
 int complete(task_t*);

@@ -23,18 +23,17 @@
 #include "i2cbusses.h"
 #include "gpio.h"
 #include "utils.h"
-#include "BinaryHeap.h"
+#include "PriorityQueue.h"
+#include "i2c_routines.h"
+#include "spi_routines.h"
 
-// globals -.-
-uint8_t spi_bpw = 8;           // bits per word
-uint32_t spi_speed = 40000000; // 10MHz
-uint16_t spi_delay = 0;
-static const uint8_t spi_mode = 0;
-int spiFds;
-
-static const char* spidev = "/dev/spidev0.0"; //this is the SPI device. Assume here that there is only one SPI bus
+// i2c globals
+extern uint8_t lv_mcp_reset;
+extern uint8_t lv_global_enable;
+extern MCP* lvpgoodMCP;
 
 int main(int argc, char** argv){
+  int rv;
   unsigned int port = 12000;
   int backlog = 3;
   char c;
@@ -62,11 +61,43 @@ int main(int argc, char** argv){
     }
   }
 
-  int sfd = open_server(port, backlog);
-  pthread_t foyer_thread;
-  pthread_create(&foyer_thread, NULL, foyer, &sfd);
+  // initialize spi driver interface
+  rv = initialize_spi();
+  if (rv != 0){
+    return rv;
+  }
 
-  pause();
+  // initialize gpio pins and adcs
+  // TODO read from config (including globals initialized in i2c_routines)
+  lv_mcp_reset = 3;
+  lv_global_enable = 18;
+  lvpgoodMCP = (MCP*) malloc(sizeof(struct MCP*));
+  uint8_t channel_map [6] = {4, 3, 2, 7, 6, 5};
+  rv = initialize_i2c(channel_map);
+  if (rv != 0){
+    return rv;
+  }
+
+  // define queue
+  PriorityQueue_t queue;
+  queue_init(&queue, 1024);
+
+  // start i2c loop
+  i2c_loop_args_t i2c_loop_args;
+  i2c_loop_args.queue = &queue;
+  pthread_t i2c_thread;
+  pthread_create(&i2c_thread, NULL, i2c_loop, &i2c_loop_args);
+
+  // start server
+  int sfd = open_server(port, backlog);
+  foyer_args_t foyer_args;
+  foyer_args.fd = sfd;
+  foyer_args.queue = &queue;
+  pthread_t foyer_thread;
+  pthread_create(&foyer_thread, NULL, foyer, &foyer_args);
+
+  // wait forever
+  pthread_join(foyer_thread, NULL);
 
   return 0;
 }

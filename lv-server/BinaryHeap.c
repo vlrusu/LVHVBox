@@ -27,7 +27,6 @@ void heap_push(Heap_t* heap, HeapNode_t* node){
   // if root is empty, assign and short-circuit
   if (i == 0){
     heap->buffer[i] = node;
-    return;
   }
   // for nontrivial insertions, append to bottom, and bubble up
   else if (0 < i){

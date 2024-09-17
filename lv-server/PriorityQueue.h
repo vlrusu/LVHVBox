@@ -18,5 +18,6 @@ void queue_init(PriorityQueue_t*, size_t);
 void queue_destroy(PriorityQueue_t*);
 void queue_push(PriorityQueue_t*, QueueItem_t*);
 QueueItem_t* queue_pop(PriorityQueue_t*);
+size_t queue_size(PriorityQueue_t*);
 
 #endif

@@ -48,8 +48,9 @@ int open_server(unsigned int port, int backlog){
 
 // actively listen for connections
 void* foyer(void* args){
-  int* casted = (int*) args;
-  int sfd = *casted;
+  foyer_args_t* casted = (foyer_args_t*) args;
+  int sfd = casted->fd;
+  PriorityQueue_t* queue = casted->queue;
 
   int cfd;
   struct sockaddr_in address;
@@ -63,7 +64,10 @@ void* foyer(void* args){
       exit_on_error(msg);
     }
 
+    client_handler_args_t* cargs = malloc(sizeof(client_handler_args_t));
+    cargs->client_addr = cfd;
+    cargs->queue = queue;
     pthread_t thread;
-    pthread_create(&thread, NULL, client_handler, &cfd);
+    pthread_create(&thread, NULL, client_handler, cargs);
   }
 }
