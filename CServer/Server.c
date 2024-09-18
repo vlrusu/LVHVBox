@@ -1409,6 +1409,7 @@ void *handle_client(void *args) {
     if (return_val == 0) {
       printf("Thread terminated \n");
       write_log(command_log, "Client Disconnected", inner_socket);
+      close(inner_socket);
       return 0;
     }
 
