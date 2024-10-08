@@ -72,23 +72,28 @@ int main(int argc, char** argv){
   log_init(&logger, lpath, 10, 1);
 
   // initialize spi driver interface
+  log_write(&logger, "initializing spi interface", LOG_DETAIL);
   rv = initialize_spi();
   if (rv != 0){
+    log_write(&logger, "failed to initialize spi interface", LOG_INFO);
     return rv;
   }
 
   // initialize gpio pins and adcs
   // TODO read from config (including globals initialized in i2c_routines)
+  log_write(&logger, "initializing MCP pins for i2c interface", LOG_DETAIL);
   lv_mcp_reset = 3;
   lv_global_enable = 18;
   lvpgoodMCP = (MCP*) malloc(sizeof(struct MCP*));
   uint8_t channel_map [6] = {4, 3, 2, 7, 6, 5};
   rv = initialize_i2c(channel_map);
   if (rv != 0){
+    log_write(&logger, "failed to initialize i2c interface", LOG_INFO);
     return rv;
   }
 
   // initialize usb interface and pico handles
+  log_write(&logger, "initializing libusb and raspberri pico connections", LOG_DETAIL);
   if (libusb_init(NULL) != 0){
     char msg[64];
     sprintf(msg, "failed to initialize libusb context");
@@ -118,18 +123,22 @@ int main(int argc, char** argv){
   pthread_create(&i2c_thread, NULL, i2c_loop, &i2c_loop_args);
 
   // start pico loops
-  pico_loop_args_t pico_a_loop_args;
-  pico_a_loop_args.pico = &pico_a;
-  pico_a_loop_args.queue = &pico_a_queue;
-  pico_a_loop_args.logger = &logger;
-  pthread_t pico_a_thread;
-  pthread_create(&pico_a_thread, NULL, pico_loop, &pico_a_loop_args);
-  pico_loop_args_t pico_b_loop_args;
-  pico_b_loop_args.pico = &pico_b;
-  pico_b_loop_args.queue = &pico_b_queue;
-  pico_b_loop_args.logger = &logger;
-  pthread_t pico_b_thread;
-  pthread_create(&pico_b_thread, NULL, pico_loop, &pico_b_loop_args);
+  if (pico_a.handle != NULL){
+    pico_loop_args_t pico_a_loop_args;
+    pico_a_loop_args.pico = &pico_a;
+    pico_a_loop_args.queue = &pico_a_queue;
+    pico_a_loop_args.logger = &logger;
+    pthread_t pico_a_thread;
+    pthread_create(&pico_a_thread, NULL, pico_loop, &pico_a_loop_args);
+  }
+  if (pico_b.handle != NULL){
+    pico_loop_args_t pico_b_loop_args;
+    pico_b_loop_args.pico = &pico_b;
+    pico_b_loop_args.queue = &pico_b_queue;
+    pico_b_loop_args.logger = &logger;
+    pthread_t pico_b_thread;
+    pthread_create(&pico_b_thread, NULL, pico_loop, &pico_b_loop_args);
+  }
 
   // start server
   int sfd = open_server(port, backlog);
