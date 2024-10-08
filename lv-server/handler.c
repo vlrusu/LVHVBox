@@ -14,7 +14,7 @@ void* client_handler(void* args){
 
   char msg[128];
   sprintf(msg, "new client session open at fd %d", addr);
-  log_write(logger, msg, 1);
+  log_write(logger, msg, LOG_INFO);
 
   char buffer[512];
   int stop = 0;
@@ -33,6 +33,8 @@ void* client_handler(void* args){
       uint32_t two = buffer[1] << 16;
       uint32_t three = buffer[0] << 24;
       task.command.name = zero + one + two + three;
+      sprintf(msg, "client %d received command label %u", addr, task.command.name);
+      log_write(logger, msg, LOG_DETAIL);
 
       uint32_t zero_0 = buffer[7];
       uint32_t one_0 = buffer[6] << 8;
@@ -64,6 +66,6 @@ void* client_handler(void* args){
   }
 
   sprintf(msg, "closing client session for fd %d", addr);
-  log_write(logger, msg, 1);
+  log_write(logger, msg, LOG_INFO);
   close(addr);
 }

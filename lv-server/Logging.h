@@ -5,6 +5,10 @@
 #ifndef LOGGING_H
 #define LOGGING_H
 
+#define LOG_INFO 2
+#define LOG_DETAIL 4
+#define LOG_VERBOSE 6
+
 #include <fcntl.h>
 #include <pthread.h>
 #include <stdio.h>
@@ -13,6 +17,8 @@
 #include <time.h>
 #include <unistd.h>
 
+// TODO this should contain a queue, so that writes into the log
+// are decoupled from io latency
 typedef struct {
   char* path;
   int fd;

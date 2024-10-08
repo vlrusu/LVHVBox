@@ -16,6 +16,7 @@
 #include "i2cbusses.h"
 #include "MCP23S08.h"
 #include "utils.h"
+#include "Logging.h"
 #include "PriorityQueue.h"
 #include "Task.h"
 
@@ -45,6 +46,7 @@ int i2c_lv_power_off(uint8_t, uint8_t[6]);
 typedef struct {
   PriorityQueue_t* queue;
   uint8_t channel_map[6];
+  Logger_t* logger;
 } i2c_loop_args_t;
 
 void* i2c_loop(void*);

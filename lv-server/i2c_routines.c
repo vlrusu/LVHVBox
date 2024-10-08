@@ -235,9 +235,11 @@ int i2c_lv_power_off(uint8_t channel, uint8_t pin_map[6]){
 void* i2c_loop(void* args){
   i2c_loop_args_t* casted = (i2c_loop_args_t*) args;
   PriorityQueue_t* queue = casted->queue;
+  Logger_t* logger = casted->logger;
   uint8_t channel_map[6];
   memcpy(channel_map, casted->channel_map, sizeof(channel_map));
 
+  char msg[128];
   while (1) {
     while (queue_size(queue) < 1){
       msleep(100);
@@ -247,6 +249,8 @@ void* i2c_loop(void* args){
     // pop next task off the stack, execute i2c read, and mark as complete
     QueueItem_t* item = queue_pop(queue);
     task_t* task = (task_t*) (item->payload);
+    sprintf(msg, "i2c received command label %u", task->command.name);
+    log_write(logger, msg, LOG_VERBOSE);
     float rv;
     if (task->command.name == COMMAND_powerOn){
       uint8_t channel = task->command.char_parameter;
@@ -268,8 +272,14 @@ void* i2c_loop(void* args){
     else if (task->command.name == COMMAND_readMonI48){
       rv = i2c_read_48V_current(task->command.char_parameter);
     }
+    else{
+      sprintf(msg, "i2c encountered command of unknown label %u. skipping this command.", task->command.name);
+      log_write(logger, msg, LOG_INFO);
+    }
 
     // set outgoing rv
+    sprintf(msg, "i2c return value = %f", rv);
+    log_write(logger, msg, LOG_VERBOSE);
     pthread_mutex_lock(&(task->mutex));
     task->rv = rv;
     task->complete = 1;
