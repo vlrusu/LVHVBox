@@ -25,8 +25,10 @@
 #include "utils.h"
 #include "Logging.h"
 #include "PriorityQueue.h"
+#include "Pico.h"
 #include "i2c_routines.h"
 #include "spi_routines.h"
+#include "pico_routines.h"
 
 // i2c globals
 extern uint8_t lv_mcp_reset;
@@ -86,6 +88,19 @@ int main(int argc, char** argv){
     return rv;
   }
 
+  // initialize usb interface and pico handles
+  if (libusb_init(NULL) != 0){
+    char msg[64];
+    sprintf(msg, "failed to initialize libusb context");
+    log_write(&logger, msg, LOG_INFO);
+    exit_on_error(msg);
+  }
+  libusb_set_option(NULL, LIBUSB_OPTION_LOG_LEVEL, LIBUSB_LOG_LEVEL_WARNING);
+  Pico_t pico_a;
+  pico_init(&pico_a, PICO_VENDOR_ID_0, 0, 0);
+  Pico_t pico_b;
+  pico_init(&pico_b, PICO_VENDOR_ID_1, 1, 6);
+
   // define queues
   PriorityQueue_t i2c_queue;
   queue_init(&i2c_queue, 1024);
@@ -102,6 +117,20 @@ int main(int argc, char** argv){
   pthread_t i2c_thread;
   pthread_create(&i2c_thread, NULL, i2c_loop, &i2c_loop_args);
 
+  // start pico loops
+  pico_loop_args_t pico_a_loop_args;
+  pico_a_loop_args.pico = &pico_a;
+  pico_a_loop_args.queue = &pico_a_queue;
+  pico_a_loop_args.logger = &logger;
+  pthread_t pico_a_thread;
+  pthread_create(&pico_a_thread, NULL, pico_loop, &pico_a_loop_args);
+  pico_loop_args_t pico_b_loop_args;
+  pico_b_loop_args.pico = &pico_b;
+  pico_b_loop_args.queue = &pico_b_queue;
+  pico_b_loop_args.logger = &logger;
+  pthread_t pico_b_thread;
+  pthread_create(&pico_b_thread, NULL, pico_loop, &pico_b_loop_args);
+
   // start server
   int sfd = open_server(port, backlog);
   foyer_args_t foyer_args;
@@ -116,7 +145,8 @@ int main(int argc, char** argv){
   // wait forever
   pthread_join(foyer_thread, NULL);
 
-  // clean up logging
+  // clean up
+  libusb_exit(NULL);
   log_destroy(&logger);
 
   return 0;
