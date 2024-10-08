@@ -19,7 +19,9 @@ int open_server(unsigned int, int);
 
 typedef struct {
   int fd;
-  PriorityQueue_t* queue;
+  PriorityQueue_t* i2c_queue;
+  PriorityQueue_t* pico_a_queue;
+  PriorityQueue_t* pico_b_queue;
   Logger_t* logger;
 } foyer_args_t;
 

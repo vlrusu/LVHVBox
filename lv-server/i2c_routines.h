@@ -42,6 +42,7 @@ float i2c_read_48V_current(unsigned int);
 int i2c_lv_power_control(uint8_t channel, uint8_t pin_map[6], int value);
 int i2c_lv_power_on(uint8_t, uint8_t[6]);
 int i2c_lv_power_off(uint8_t, uint8_t[6]);
+//void i2c_ramp_hv(uint8_t, float);
 
 typedef struct {
   PriorityQueue_t* queue;

@@ -11,7 +11,9 @@
 
 typedef struct {
   int client_addr;
-  PriorityQueue_t* queue;
+  PriorityQueue_t* i2c_queue;
+  PriorityQueue_t* pico_a_queue;
+  PriorityQueue_t* pico_b_queue;
   Logger_t* logger;
 } client_handler_args_t;
 

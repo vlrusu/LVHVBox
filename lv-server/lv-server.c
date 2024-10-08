@@ -86,13 +86,17 @@ int main(int argc, char** argv){
     return rv;
   }
 
-  // define queue
-  PriorityQueue_t queue;
-  queue_init(&queue, 1024);
+  // define queues
+  PriorityQueue_t i2c_queue;
+  queue_init(&i2c_queue, 1024);
+  PriorityQueue_t pico_a_queue;
+  queue_init(&pico_a_queue, 1024);
+  PriorityQueue_t pico_b_queue;
+  queue_init(&pico_b_queue, 1024);
 
   // start i2c loop
   i2c_loop_args_t i2c_loop_args;
-  i2c_loop_args.queue = &queue;
+  i2c_loop_args.queue = &i2c_queue;
   i2c_loop_args.logger = &logger;
   memcpy(i2c_loop_args.channel_map, channel_map, sizeof(i2c_loop_args.channel_map));
   pthread_t i2c_thread;
@@ -102,7 +106,9 @@ int main(int argc, char** argv){
   int sfd = open_server(port, backlog);
   foyer_args_t foyer_args;
   foyer_args.fd = sfd;
-  foyer_args.queue = &queue;
+  foyer_args.i2c_queue = &i2c_queue;
+  foyer_args.pico_a_queue = &pico_a_queue;
+  foyer_args.pico_b_queue = &pico_b_queue;
   foyer_args.logger = &logger;
   pthread_t foyer_thread;
   pthread_create(&foyer_thread, NULL, foyer, &foyer_args);

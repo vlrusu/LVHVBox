@@ -3,13 +3,16 @@
 // September 2024
 
 #include <unistd.h>
+#include "../commands.h"
 #include "handler.h"
 #include "utils.h"
 
 void* client_handler(void* args){
   client_handler_args_t* casted = (client_handler_args_t*) args;
   int addr = casted->client_addr;
-  PriorityQueue_t* queue = casted->queue;
+  PriorityQueue_t* i2c_queue = casted->i2c_queue;
+  PriorityQueue_t* pico_a_queue = casted->pico_a_queue;
+  PriorityQueue_t* pico_b_queue = casted->pico_b_queue;
   Logger_t* logger = casted->logger;
 
   char msg[128];
@@ -45,20 +48,47 @@ void* client_handler(void* args){
       memcpy(&task.command.char_parameter, &buffer[8], 1);
       memcpy(&task.command.float_parameter, &buffer[9], 4);
 
-      // submit to queue
+      // submit to relevant queue
+      int queued = 0;
       QueueItem_t* item = malloc(sizeof(QueueItem_t));
       item->payload = &task;
       item->key = 0;
-      queue_push(queue, item);
+      // i2c commands
+      if ((task.command.type == TYPE_lv) || (task.command.type == TYPE_hv)){
+        queue_push(i2c_queue, item);
+        queued = 1;
+      }
+      // pico commands
+      else if (task.command.type == TYPE_pico){
+        // TODO push into relevant pico queue
+        if (task.command.char_parameter < 6){
+          queue_push(pico_a_queue, item);
+          queued = 1;
+        }
+        else if (task.command.char_parameter < 12){
+          queue_push(pico_b_queue, item);
+          queued = 1;
+        }
+        else{
+          sprintf(msg, "client %d pico command to unknown channel %d", addr, task.command.char_parameter);
+          log_write(logger, msg, LOG_INFO);
+        }
+      }
+      else{
+        sprintf(msg, "client %d command of unknown type %u", addr, task.command.type);
+        log_write(logger, msg, LOG_INFO);
+      }
 
       // wait until task is complete
-      pthread_mutex_t local_mutex;
-      pthread_mutex_lock(&local_mutex);
-      while (!complete(&task)){
-        // TODO catch errors here
-        pthread_cond_wait(&(task.condition), &local_mutex);
+      if (queued){
+        pthread_mutex_t local_mutex;
+        pthread_mutex_lock(&local_mutex);
+        while (!complete(&task)){
+          // TODO catch errors here
+          pthread_cond_wait(&(task.condition), &local_mutex);
+        }
+        pthread_mutex_unlock(&local_mutex);
       }
-      pthread_mutex_unlock(&local_mutex);
 
       // send response back to client
       write(task.addr, &(task.rv), sizeof(task.rv));

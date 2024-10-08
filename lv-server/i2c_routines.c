@@ -246,12 +246,15 @@ void* i2c_loop(void* args){
     }
 
     // TODO
-    // pop next task off the stack, execute i2c read, and mark as complete
+    // pop next task off the stack
     QueueItem_t* item = queue_pop(queue);
     task_t* task = (task_t*) (item->payload);
     sprintf(msg, "i2c received command label %u", task->command.name);
     log_write(logger, msg, LOG_VERBOSE);
+
+    // execute i2c operation
     float rv;
+    // lv commands
     if (task->command.name == COMMAND_powerOn){
       uint8_t channel = task->command.char_parameter;
       rv = i2c_lv_power_on(channel, channel_map);
@@ -272,12 +275,21 @@ void* i2c_loop(void* args){
     else if (task->command.name == COMMAND_readMonI48){
       rv = i2c_read_48V_current(task->command.char_parameter);
     }
+    // hv commands these require pico-based hv polling
+    // to protect against biasing the hv too quickly
+//  else if (task->command.name == COMMAND_ramp_hv){
+//    rv = i2c_ramp_hv(task->command.char_parameter, task->command.float_parameter);
+//  }
+//  else if (task->command.name == COMMAND_down_hv){
+//    rv = i2c_ramp_hv(task->command.char_parameter, 0.0);
+//  }
+    // otherwise, have encountered an unexpected command
     else{
       sprintf(msg, "i2c encountered command of unknown label %u. skipping this command.", task->command.name);
       log_write(logger, msg, LOG_INFO);
     }
 
-    // set outgoing rv
+    // mark task as complete
     sprintf(msg, "i2c return value = %f", rv);
     log_write(logger, msg, LOG_VERBOSE);
     pthread_mutex_lock(&(task->mutex));

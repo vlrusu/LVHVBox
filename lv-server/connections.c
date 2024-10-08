@@ -50,7 +50,9 @@ int open_server(unsigned int port, int backlog){
 void* foyer(void* args){
   foyer_args_t* casted = (foyer_args_t*) args;
   int sfd = casted->fd;
-  PriorityQueue_t* queue = casted->queue;
+  PriorityQueue_t* i2c_queue = casted->i2c_queue;
+  PriorityQueue_t* pico_a_queue = casted->pico_a_queue;
+  PriorityQueue_t* pico_b_queue = casted->pico_b_queue;
   Logger_t* logger = casted->logger;
 
   int cfd;
@@ -67,7 +69,9 @@ void* foyer(void* args){
 
     client_handler_args_t* cargs = malloc(sizeof(client_handler_args_t));
     cargs->client_addr = cfd;
-    cargs->queue = queue;
+    cargs->i2c_queue = i2c_queue;
+    cargs->pico_a_queue = pico_a_queue;
+    cargs->pico_b_queue = pico_b_queue;
     cargs->logger = logger;
     pthread_t thread;
     pthread_create(&thread, NULL, client_handler, cargs);
