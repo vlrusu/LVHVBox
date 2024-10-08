@@ -11,6 +11,7 @@
 #include <stddef.h>
 
 #include "utils.h"
+#include "Logging.h"
 #include "PriorityQueue.h"
 #include "handler.h"
 
@@ -19,6 +20,7 @@ int open_server(unsigned int, int);
 typedef struct {
   int fd;
   PriorityQueue_t* queue;
+  Logger_t* logger;
 } foyer_args_t;
 
 void* foyer(void*);

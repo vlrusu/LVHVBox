@@ -23,6 +23,7 @@
 #include "i2cbusses.h"
 #include "gpio.h"
 #include "utils.h"
+#include "Logging.h"
 #include "PriorityQueue.h"
 #include "i2c_routines.h"
 #include "spi_routines.h"
@@ -36,9 +37,10 @@ int main(int argc, char** argv){
   int rv;
   unsigned int port = 12000;
   int backlog = 3;
+  char* lpath = NULL;
   char c;
   int stop = 0;
-  while ((!stop) && ((c = getopt(argc, argv, "p:b:")) != -1)){
+  while ((!stop) && ((c = getopt(argc, argv, "p:b:l:")) != -1)){
     char msg[256];
     switch(c){
       case 'p':
@@ -51,6 +53,9 @@ int main(int argc, char** argv){
         sprintf(msg, "unsupported command-line option (-%c)", c);
         exit_on_error(msg);
         break;
+      case 'l':
+        lpath = optarg;
+        break;
       case 255:
         stop = 1;
         break;
@@ -60,6 +65,9 @@ int main(int argc, char** argv){
         break;
     }
   }
+
+  Logger_t logger;
+  log_init(&logger, lpath, 10, 1);
 
   // initialize spi driver interface
   rv = initialize_spi();
@@ -94,11 +102,15 @@ int main(int argc, char** argv){
   foyer_args_t foyer_args;
   foyer_args.fd = sfd;
   foyer_args.queue = &queue;
+  foyer_args.logger = &logger;
   pthread_t foyer_thread;
   pthread_create(&foyer_thread, NULL, foyer, &foyer_args);
 
   // wait forever
   pthread_join(foyer_thread, NULL);
+
+  // clean up logging
+  log_destroy(&logger);
 
   return 0;
 }

@@ -10,6 +10,11 @@ void* client_handler(void* args){
   client_handler_args_t* casted = (client_handler_args_t*) args;
   int addr = casted->client_addr;
   PriorityQueue_t* queue = casted->queue;
+  Logger_t* logger = casted->logger;
+
+  char msg[128];
+  sprintf(msg, "new client session open at fd %d", addr);
+  log_write(logger, msg, 1);
 
   char buffer[512];
   int stop = 0;
@@ -57,4 +62,8 @@ void* client_handler(void* args){
       write(task.addr, &(task.rv), sizeof(task.rv));
     }
   }
+
+  sprintf(msg, "closing client session for fd %d", addr);
+  log_write(logger, msg, 1);
+  close(addr);
 }
