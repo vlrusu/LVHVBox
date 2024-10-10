@@ -18,6 +18,8 @@ typedef struct{
   pthread_cond_t condition;
 } task_t;
 
+void task_init(task_t*);
+void task_destroy(task_t*);
 int complete(task_t*);
 
 #endif

@@ -4,15 +4,25 @@
 
 #include "pico_routines.h"
 
-void pico_read_low(Pico_t* pico, char* reading, char* buffer, size_t size){
-  libusb_bulk_transfer(pico->handle, 0x02, reading, 1, 0, 0);
+void pico_write_low(Pico_t* pico, char* src){
+  libusb_bulk_transfer(pico->handle, 0x02, src, 1, 0, 0);
+}
+
+void pico_read_low(Pico_t* pico, char* buffer, size_t size){
   libusb_bulk_transfer(pico->handle, 0x82, buffer, size, 0, 0);
+}
+
+void pico_write_read_low(Pico_t* pico, char* src, char* buffer, size_t size){
+  pico_write_low(pico, src);
+  pico_read_low(pico, buffer, size);
+//libusb_bulk_transfer(pico->handle, 0x02, src, 1, 0, 0);
+//libusb_bulk_transfer(pico->handle, 0x82, buffer, size, 0, 0);
 }
 
 float pico_get_vhv(Pico_t* pico, uint8_t channel){
   char reading = 'V';
   char* buffer = malloc(24);
-  pico_read_low(pico, &reading, buffer, 24);
+  pico_write_read_low(pico, &reading, buffer, 24);
 
   channel -= pico->channel_offset;
   float rv = * (float*) &buffer[4 * channel];
@@ -24,7 +34,7 @@ float pico_get_vhv(Pico_t* pico, uint8_t channel){
 float pico_get_ihv(Pico_t* pico, uint8_t channel){
   char reading = 'H';
   char* buffer = malloc(48);
-  pico_read_low(pico, &reading, buffer, 48);
+  pico_write_read_low(pico, &reading, buffer, 48);
 
   channel -= pico->channel_offset;
   float rv = * (float*) &buffer[24 + 4 * channel];

@@ -26,6 +26,7 @@ void* client_handler(void* args){
     if (nread == 13){
       // generate new task
       task_t task;
+      task_init(&task);
       task.addr = addr;
       task.complete = 0;
       task.error = 0;
@@ -82,6 +83,7 @@ void* client_handler(void* args){
       // wait until task is complete
       if (queued){
         pthread_mutex_t local_mutex;
+        pthread_mutex_init(&local_mutex, NULL);
         pthread_mutex_lock(&local_mutex);
         while (!complete(&task)){
           // TODO catch errors here
@@ -92,6 +94,12 @@ void* client_handler(void* args){
 
       // send response back to client
       write(task.addr, &(task.rv), sizeof(task.rv));
+      free(item);
+      task_destroy(&task);
+    }
+    else{
+      sprintf(msg, "client %d sent message of length %u != 13, ignoring", addr, nread);
+      log_write(logger, msg, LOG_INFO);
     }
   }
 

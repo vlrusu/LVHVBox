@@ -18,7 +18,9 @@ typedef struct {
   Logger_t* logger;
 } pico_loop_args_t;
 
-void pico_read_low(Pico_t*, char*, char*, size_t);
+void pico_write_low(Pico_t*, char*);
+void pico_read_low(Pico_t*, char*, size_t);
+void pico_write_read_low(Pico_t*, char*, char*, size_t);
 float pico_get_vhv(Pico_t*, uint8_t);
 float pico_get_ihv(Pico_t*, uint8_t);
 void* pico_loop(void*);

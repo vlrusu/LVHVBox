@@ -58,6 +58,7 @@ void log_write(Logger_t* logger, char* msg, unsigned int level){
   if ((logger->print) && (level <= logger->print_limit)){
     printf("%s", formatted);
   }
+  free(formatted);
 
   pthread_mutex_unlock(&(logger->mutex));
 }

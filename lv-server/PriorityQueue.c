@@ -11,6 +11,7 @@ void queue_init(PriorityQueue_t* queue, size_t size){
 
 void queue_destroy(PriorityQueue_t* queue){
   heap_destroy(&(queue->heap));
+  pthread_mutex_destroy(&(queue->mutex));
 }
 
 void queue_push(PriorityQueue_t* queue, QueueItem_t* item){
