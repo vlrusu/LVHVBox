@@ -6,6 +6,7 @@
 #include "../commands.h"
 #include "handler.h"
 #include "utils.h"
+#include "pico_routines.h"
 
 void* client_handler(void* args){
   client_handler_args_t* casted = (client_handler_args_t*) args;
@@ -61,8 +62,17 @@ void* client_handler(void* args){
       }
       // pico commands
       else if (task.command.type == TYPE_pico){
-        // TODO push into relevant pico queue
-        if (task.command.char_parameter < 6){
+        // first, global slow controls are split between the two picos...
+        if (task.command.name == COMMAND_query_current){
+          queue_push(pico_a_queue, item);
+          queued = 1;
+        }
+        else if (task.command.name == COMMAND_query_pcb_temperature){
+          queue_push(pico_b_queue, item);
+          queued = 1;
+        }
+        // otherwise, pico of local command is determined by the channel #
+        else if (task.command.char_parameter < 6){
           queue_push(pico_a_queue, item);
           queued = 1;
         }
