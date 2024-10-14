@@ -12,6 +12,7 @@
 #include <linux/spi/spidev.h>
 #include <stdio.h>
 #include "../commands.h"
+#include "dac8164.h"
 #include "gpio.h"
 #include "i2cbusses.h"
 #include "MCP23S08.h"
@@ -31,7 +32,9 @@ typedef struct {
 } i2c_config_t;
 */
 
-int initialize_i2c(uint8_t channel_map[6]);
+int initialize_i2c_lv(uint8_t channel_map[6]);
+int initialize_i2c_hv();
+int initialize_i2c(uint8_t lv_channel_map[6]);
 float i2c_ltc2497(int, int);
 
 float i2c_read_low(uint8_t, uint8_t, float);

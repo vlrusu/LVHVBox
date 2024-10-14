@@ -5,13 +5,17 @@
 #include "i2c_routines.h"
 
 // globals -.-
+// lv
 int lv_i2cbus;
 int lv_i2c = 0;
 uint8_t lv_mcp_reset;
 uint8_t lv_global_enable;
 MCP* lvpgoodMCP;
+// hv
+MCP* hvMCP;
+DAC8164 hv_dacs[3];
 
-int initialize_i2c(uint8_t channel_map[6]){
+int initialize_i2c_lv(uint8_t channel_map[6]){
   char error_msg[100];
 
   if (setup_gpio(lv_mcp_reset) == -1) {
@@ -89,6 +93,54 @@ int initialize_i2c(uint8_t channel_map[6]){
  
 
   return 0;
+}
+
+int initialize_i2c_hv(){
+  if (MCP_pinMode(hvMCP, 4, OUTPUT) == -1) {
+    error_log("hv_initialization MCP_pinMode pin 4 failure");
+    printf("hv_initialization MCP_pinMode pin 4 failure");
+
+    return -1;
+  } else if (MCP_pinWrite(hvMCP, 4, LOW) == -1) {
+    error_log("hv_initialization MCP_pinWrite pin 4 failure");
+    printf("hv_initialization MCP_pinWrite pin 4 failure");
+
+    return -1;
+  } else if (MCP_pinMode(hvMCP, 2, OUTPUT) == -1) {
+    error_log("hv_initialization MCP_pinMode pin 2 failure");
+    printf("hv_initialization MCP_pinMode pin 2 failure");
+
+    return -1;
+  } else if (MCP_pinWrite(hvMCP, 2, LOW) == -1) {
+    error_log("hv_initialization MCP_pinWrite pin 2 failure");
+    printf("hv_initialization MCP_pinWrite pin 2 failure");
+
+    return -1;
+  } else if (DAC8164_setup (&hv_dacs[0], hvMCP, 6, 7, 0, -1, -1) == -1) {
+    error_log("hv_initialization DAC8164_setup dac0 failure");
+    printf("hv_initialization DAC8164_setup dac0 failure");
+
+    return -1;
+  } else if (DAC8164_setup (&hv_dacs[1], hvMCP, 3, 7, 0, -1, -1) == -1) {
+    error_log("hv_initialization DAC8164_setup dac1 failure");
+    printf("hv_initialization DAC8164_setup dac1 failure");
+
+    return -1;
+  } else if (DAC8164_setup (&hv_dacs[2], hvMCP, 5, 7, 0, -1, -1) == -1) {
+    error_log("hv_initialization DAC8164_setup dac2 failure");
+    printf("hv_initialization DAC8164_setup dac2 failure");
+
+    return -1;
+  }
+
+  return 0;
+}
+
+int initialize_i2c(uint8_t lv_channel_map[6]){
+  int rv = 0;
+  rv += initialize_i2c_lv(lv_channel_map[6]);
+  rv += initialize_i2c_hv();
+  return rv;
 }
 
 float i2c_ltc2497(int address, int channelLTC) {
