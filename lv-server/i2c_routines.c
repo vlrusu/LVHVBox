@@ -138,7 +138,7 @@ int initialize_i2c_hv(){
 
 int initialize_i2c(uint8_t lv_channel_map[6]){
   int rv = 0;
-  rv += initialize_i2c_lv(lv_channel_map[6]);
+  rv += initialize_i2c_lv(lv_channel_map);
   rv += initialize_i2c_hv();
   return rv;
 }

@@ -34,6 +34,7 @@
 extern uint8_t lv_mcp_reset;
 extern uint8_t lv_global_enable;
 extern MCP* lvpgoodMCP;
+extern MCP* hvMCP;
 
 int main(int argc, char** argv){
   int rv;
@@ -86,6 +87,7 @@ int main(int argc, char** argv){
   lv_global_enable = 18;
   lvpgoodMCP = (MCP*) malloc(sizeof(struct MCP*));
   uint8_t channel_map [6] = {4, 3, 2, 7, 6, 5};
+  hvMCP = (MCP*) malloc(sizeof(struct MCP*));
   rv = initialize_i2c(channel_map);
   if (rv != 0){
     log_write(&logger, "failed to initialize i2c interface", LOG_INFO);
