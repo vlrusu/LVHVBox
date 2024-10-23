@@ -1279,7 +1279,7 @@ void readMonV48(uint8_t channel, int client_addr) {
     return;
   }
 
-  write(client_addr, &v48[channel], sizeof(v48[channel]));
+  write(client_addr, &v48[5-channel], sizeof(v48[5-channel]));
 }
 
 // readMonI48
@@ -1294,7 +1294,7 @@ void readMonI48(uint8_t channel, int client_addr) {
     return;
   }
 
-  write(client_addr, &i48[channel], sizeof(i48[channel]));
+  write(client_addr, &i48[5-channel], sizeof(i48[5-channel]));
 }
 // readMonV6
 void readMonV6(uint8_t channel, int client_addr) {
@@ -1308,7 +1308,7 @@ void readMonV6(uint8_t channel, int client_addr) {
     return;
   }
 
-  write(client_addr, &v6[channel], sizeof(v6[channel]));
+  write(client_addr, &v6[5-channel], sizeof(v6[5-channel]));
 }
 
 // readMonI6
@@ -1323,7 +1323,7 @@ void readMonI6(uint8_t channel, int client_addr) {
     return;
   }
 
-  write(client_addr, &i6[channel], sizeof(v6[channel]));
+  write(client_addr, &i6[5-channel], sizeof(v6[5-channel]));
 }
 
 void *command_execution() {
