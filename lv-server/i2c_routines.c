@@ -350,7 +350,7 @@ void i2c_dac_write(uint8_t channel, uint32_t value){
 uint32_t i2c_dac_cast(float value){
   float converted = value * (16383.0 / 1631.3);
   uint32_t rv = ((uint32_t) converted) & 0x3FFF;
-  rv -= 30;
+//rv -= 30;
   return rv;
 }
 
@@ -476,6 +476,12 @@ void* i2c_loop(void* args){
     }
     else if (task->command.name == COMMAND_down_hv){
       rv = i2c_ramp_hv(fd, task->command.char_parameter, 0.0, logger);
+    }
+    else if (task->command.name == COMMAND_set_hv_by_dac){
+      uint8_t channel = task->command.char_parameter;
+      uint32_t dac = (uint32_t) (task->command.float_parameter);
+      i2c_dac_write(channel, dac);
+      rv = 0.0;
     }
     // otherwise, have encountered an unexpected command
     else{
