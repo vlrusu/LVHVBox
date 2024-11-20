@@ -339,8 +339,74 @@ float i2c_deferred_hv_query(int fd, uint8_t channel){
   return queried;
 }
 
-float i2c_ramp_hv(int fd, uint8_t channel, float target){
-  float rv = i2c_deferred_hv_query(fd, channel);
+void i2c_dac_write(uint8_t channel, uint32_t value){
+  unsigned int idx = (unsigned int) (channel / 4);
+  DAC8164 dac = hv_dacs[idx];
+  DAC8164_writeChannel(&dac, channel, value);
+}
+
+uint32_t i2c_dac_cast(float value){
+  float converted = value * (16383.0 / 1631.3);
+  uint32_t rv = ((uint32_t) converted) & 0x3FFF;
+  return rv;
+}
+
+void i2c_set_hv(uint8_t channel, float value){
+  uint32_t dvalue = i2c_dac_cast(value);
+  i2c_dac_write(channel, dvalue);
+}
+
+float i2c_ramp_hv_fixed_rate(int fd, uint8_t channel, float target,
+                             float tolerance, float speed, long timestep,
+                             Logger_t* logger){
+  char pfx[64];
+  sprintf(pfx, "%s", "i2c_ramp_hv_fixed_rate");
+  char msg[128];
+  float current = i2c_deferred_hv_query(fd, channel);
+  float sign = -1.0 ? +1.0 : (target < current);
+  float analog_step = sign * speed * timestep;
+  float remaining = target - current;
+  int stop = 0;
+  while ((tolerance < fabs(remaining)) && (0 < sign*remaining) && (!stop)){
+    float next = current + analog_step;
+    sprintf(msg, "%s: ramping %f -> %f", pfx, current, next);
+    log_write(logger, msg, LOG_VERBOSE);
+    i2c_set_hv(channel, next);
+    msleep(timestep);
+    float updated = i2c_deferred_hv_query(fd, channel);
+    sprintf(msg, "%s: updated readback of %f", pfx, updated);
+    log_write(logger, msg, LOG_VERBOSE);
+    if (tolerance < fabs(updated - current)){
+      // TODO need better conditioning than this
+      stop = 1;
+      sprintf(msg, "%s: readback out of tolerance. aborting.", pfx);
+      log_write(logger, msg, LOG_VERBOSE);
+    }
+    else{
+      current = updated;
+      remaining = target - current;
+    }
+  }
+
+  float rv = current;
+  return rv;
+}
+
+float i2c_ramp_hv_impl(int fd, uint8_t channel, float target, Logger_t* logger){
+  // TODO:
+  // - two-stage ramping, slow at ``beginning,'' and faster in bulk
+  // - ramping rates should be configurable via external reference
+  float tolerance = 1.0; // V
+  float speed = 0.001; // V / ms
+  long timestep = 100; // ms
+  float rv = i2c_ramp_hv_fixed_rate(fd, channel, target,
+                                    tolerance, speed, timestep,
+                                    logger);
+  return rv;
+}
+
+float i2c_ramp_hv(int fd, uint8_t channel, float target, Logger_t* logger){
+  float rv = i2c_ramp_hv_impl(fd, channel, target, logger);
   return rv;
 }
 
@@ -392,10 +458,10 @@ void* i2c_loop(void* args){
     // hv commands these require pico-based hv polling
     // to protect against biasing the hv too quickly
     else if (task->command.name == COMMAND_ramp_hv){
-      rv = i2c_ramp_hv(fd, task->command.char_parameter, task->command.float_parameter);
+      rv = i2c_ramp_hv(fd, task->command.char_parameter, task->command.float_parameter, logger);
     }
     else if (task->command.name == COMMAND_down_hv){
-      rv = i2c_ramp_hv(fd, task->command.char_parameter, 0.0);
+      rv = i2c_ramp_hv(fd, task->command.char_parameter, 0.0, logger);
     }
     // otherwise, have encountered an unexpected command
     else{
