@@ -345,9 +345,12 @@ void i2c_dac_write(uint8_t channel, uint32_t value){
   DAC8164_writeChannel(&dac, channel, value);
 }
 
+// FIXME this conversion is bogus and biased high
+// the bias of 30 dac hacks against this at low voltage (< 50 V)
 uint32_t i2c_dac_cast(float value){
   float converted = value * (16383.0 / 1631.3);
   uint32_t rv = ((uint32_t) converted) & 0x3FFF;
+  rv -= 30;
   return rv;
 }
 
@@ -363,9 +366,10 @@ float i2c_ramp_hv_fixed_rate(int fd, uint8_t channel, float target,
   sprintf(pfx, "%s", "i2c_ramp_hv_fixed_rate");
   char msg[128];
   float current = i2c_deferred_hv_query(fd, channel);
-  float sign = -1.0 ? +1.0 : (target < current);
+  float sign = (target < current) ? -1.0 : +1.0;
   float analog_step = sign * speed * timestep;
   float remaining = target - current;
+  unsigned int tried = 0;
   int stop = 0;
   while ((tolerance < fabs(remaining)) && (0 < sign*remaining) && (!stop)){
     float next = current + analog_step;
@@ -376,15 +380,25 @@ float i2c_ramp_hv_fixed_rate(int fd, uint8_t channel, float target,
     float updated = i2c_deferred_hv_query(fd, channel);
     sprintf(msg, "%s: updated readback of %f", pfx, updated);
     log_write(logger, msg, LOG_VERBOSE);
-    if (tolerance < fabs(updated - current)){
+    float change = updated - current;
+    current = updated;
+    tried += 1;
+    if (9 < tried){
+      stop = 1;
+      sprintf(msg, "%s: stalled after 10 attempts to bias. aborting.", pfx);
+      log_write(logger, msg, LOG_INFO);
+    }
+    if (((sign * change) < 0) && (tolerance < fabs(change))){
       // TODO need better conditioning than this
       stop = 1;
       sprintf(msg, "%s: readback out of tolerance. aborting.", pfx);
-      log_write(logger, msg, LOG_VERBOSE);
+      log_write(logger, msg, LOG_INFO);
     }
     else{
-      current = updated;
       remaining = target - current;
+      if (tolerance < fabs(change)){
+        tried = 0;
+      }
     }
   }
 
@@ -397,8 +411,8 @@ float i2c_ramp_hv_impl(int fd, uint8_t channel, float target, Logger_t* logger){
   // - two-stage ramping, slow at ``beginning,'' and faster in bulk
   // - ramping rates should be configurable via external reference
   float tolerance = 1.0; // V
-  float speed = 0.001; // V / ms
-  long timestep = 100; // ms
+  float speed = 0.005; // V / ms
+  long timestep = 1000; // ms
   float rv = i2c_ramp_hv_fixed_rate(fd, channel, target,
                                     tolerance, speed, timestep,
                                     logger);
