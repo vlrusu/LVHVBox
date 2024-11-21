@@ -348,7 +348,8 @@ void i2c_dac_write(uint8_t channel, uint32_t value){
 // FIXME this conversion is bogus and biased high
 // the bias of 30 dac hacks against this at low voltage (< 50 V)
 uint32_t i2c_dac_cast(float value){
-  float converted = value * (16383.0 / 1631.3);
+//float converted = value * (16383.0 / 1631.3);
+  float converted = value * (16383.0 / 1812.0);
   uint32_t rv = ((uint32_t) converted) & 0x3FFF;
 //rv -= 30;
   return rv;
@@ -411,8 +412,8 @@ float i2c_ramp_hv_impl(int fd, uint8_t channel, float target, Logger_t* logger){
   // - two-stage ramping, slow at ``beginning,'' and faster in bulk
   // - ramping rates should be configurable via external reference
   float tolerance = 1.0; // V
-  float speed = 0.005; // V / ms
-  long timestep = 1000; // ms
+  float speed = 0.002; // V / ms
+  long timestep = 2000; // ms
   float rv = i2c_ramp_hv_fixed_rate(fd, channel, target,
                                     tolerance, speed, timestep,
                                     logger);
