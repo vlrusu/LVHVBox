@@ -23,6 +23,9 @@
 #include "PriorityQueue.h"
 #include "Task.h"
 
+// new command for direct biasing with raw dac values -  be careful!
+#define COMMAND_set_hv_by_dac 344631823 // COMMAND_ramp_hv + 1
+
 /* for another day...
 typedef struct {
   int i2c_bus;
