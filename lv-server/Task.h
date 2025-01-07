@@ -7,11 +7,12 @@
 
 #include <pthread.h>
 #include "Command.h"
+#include "Messages.h"
 
 typedef struct{
   command_t command;
   int addr;
-  float rv;
+  Message_t* rv;
   int complete;
   int error;
   pthread_mutex_t mutex;

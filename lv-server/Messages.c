@@ -50,6 +50,37 @@ unsigned int typed_printf(char type, char* buf){
   }
 }
 
+void unstructured_cp(MessageBlock_t* block, void* out){
+  unsigned int size = block->used * typed_sizeof(block->type);
+  out = (void*) malloc(size);
+  memcpy(out, block->bytes, size);
+}
+
+void as_chars(MessageBlock_t* block, char* out){
+  unstructured_cp(block, out);
+  out = (char*) out;
+}
+
+void as_ints(MessageBlock_t* block, int* out){
+  unstructured_cp(block, out);
+  out = (int*) out;
+}
+
+void as_uints(MessageBlock_t* block, unsigned int* out){
+  unstructured_cp(block, out);
+  out = (unsigned int*) out;
+}
+
+void as_floats(MessageBlock_t* block, float* out){
+  unstructured_cp(block, out);
+  out = (float*) out;
+}
+
+void as_doubles(MessageBlock_t* block, double* out){
+  unstructured_cp(block, out);
+  out = (double*) out;
+}
+
 MessageBlock_t* block_construct(char type, unsigned int count){
   unsigned int size = typed_sizeof(type);
   MessageBlock_t* rv = (MessageBlock_t*) malloc(sizeof(MessageBlock_t));
@@ -127,8 +158,8 @@ void message_print(Message_t* message){
 
 MessageBlock_t* header_initialize(){
   MessageBlock_t* rv = block_construct('C', 4);
-  rv->used = 4;
   sprintf(rv->bytes, "LVHV");
+  rv->used = 4;
   return rv;
 }
 
@@ -193,6 +224,7 @@ ssize_t message_recv(Message_t** message, int fd){
   unsigned int rv;
   ssize_t nread;
 
+  // first byte is the block count
   unsigned int count;
   if ((nread = read(fd, &count, sizeof(unsigned int))) < 1){
     // TODO error-out...
@@ -206,5 +238,25 @@ ssize_t message_recv(Message_t** message, int fd){
   }
 
   char* first = ((*message)->blocks[0])->bytes;
-  assert((int) strncmp(first, "LVHV", 4) == 0);
+  //assert((int) strncmp(first, "LVHV", 4) == 0);
+  if ((int) strncmp(first, "LVHV", 4) != 0){
+    rv = 0;
+  }
+  return rv;
+}
+
+Message_t* message_wrap_int(int x){
+  Message_t* rv = message_initialize();
+  MessageBlock_t* block = block_construct('I', 1);
+  block_insert(block, &x);
+  message_append(rv, block);
+  return rv;
+}
+
+Message_t* message_wrap_float(float x){
+  Message_t* rv = message_initialize();
+  MessageBlock_t* block = block_construct('F', 1);
+  block_insert(block, &x);
+  message_append(rv, block);
+  return rv;
 }

@@ -6,6 +6,7 @@
 #define HANDLER_H
 
 #include "Logging.h"
+#include "Messages.h"
 #include "PriorityQueue.h"
 #include "Task.h"
 

@@ -494,7 +494,7 @@ void* i2c_loop(void* args){
     sprintf(msg, "i2c return value = %f", rv);
     log_write(logger, msg, LOG_VERBOSE);
     pthread_mutex_lock(&(task->mutex));
-    task->rv = rv;
+    task->rv = message_wrap_float(rv);
     task->complete = 1;
     pthread_mutex_unlock(&(task->mutex));
     pthread_cond_signal(&(task->condition));

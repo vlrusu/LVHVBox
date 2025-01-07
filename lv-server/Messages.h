@@ -28,6 +28,13 @@ typedef struct {
 unsigned int typed_sizeof(char);
 unsigned int typed_printf(char, char*);
 
+void unstructured_cp(MessageBlock_t*, void*);
+void as_chars(MessageBlock_t*, char*);
+void as_ints(MessageBlock_t*, int*);
+void as_uints(MessageBlock_t*, unsigned int*);
+void as_floats(MessageBlock_t*, float*);
+void as_doubles(MessageBlock_t*, double*);
+
 MessageBlock_t* block_construct(char, unsigned int);
 void block_destroy(MessageBlock_t*);
 void block_insert(MessageBlock_t*, void*);
@@ -46,5 +53,8 @@ ssize_t block_send(MessageBlock_t*, int);
 ssize_t message_send(Message_t*, int);
 ssize_t block_recv(MessageBlock_t**, int);
 ssize_t message_recv(Message_t**, int);
+
+Message_t* message_wrap_int(int);
+Message_t* message_wrap_float(float);
 
 #endif

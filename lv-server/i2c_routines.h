@@ -20,6 +20,8 @@
 #include "connections.h"
 #include "utils.h"
 #include "Logging.h"
+#include "Messages.h"
+#include "Messages.h"
 #include "PriorityQueue.h"
 #include "Task.h"
 

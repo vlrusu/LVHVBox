@@ -330,7 +330,7 @@ void* pico_loop(void* args){
     sprintf(msg, "pico %d return value = %f", pico->id, rv);
     log_write(logger, msg, LOG_VERBOSE);
     pthread_mutex_lock(&(task->mutex));
-    task->rv = rv;
+    task->rv = message_wrap_float(rv);
     task->complete = 1;
     pthread_mutex_unlock(&(task->mutex));
     pthread_cond_signal(&(task->condition));
