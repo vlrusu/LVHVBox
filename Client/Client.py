@@ -5,6 +5,8 @@ import socket
 import time
 import struct
 from collections import namedtuple
+import ctypes
+from Connection import Connection
 
 HISTORY_REQUEST_MAX = 100
 current_buffer_len = 8000  # must be divisible by 10
@@ -91,7 +93,7 @@ def read_commands():
         # print(string)
 
         # command_dict[i[1]] = bstring_to_chars(string)
-        command_dict[i[1]] = string
+        command_dict[i[1]] = int(i[2])
 
     # print(str(command_dict))
     return command_dict
@@ -141,34 +143,24 @@ def create_command_string_default():
 
 
 # interpret number from format_string provided and print it
-def process_response(number, format_str):
-    if "{:.2f}" in format_str:
-        number = round(process_float(number), 2)
-    elif "{:}" in format_str:
-        number = int(number[0])
+def process_response(blocks, format_str):
+    number = blocks[1][0]
     print(format_str.format(number))
 
 
 # ship it. socket.send(command_string)
-def send_command(sock, command, channel=None, val=None):
+def send_command(connection, command, channel=None, val=0.0):
     command_dict = read_commands()
-    command_bytes = bitstring_to_bytes(command_dict["COMMAND_" + command.name])
-    type_bytes = bitstring_to_bytes(command_dict["TYPE_" + command.type_key])
-    command_string = command_bytes + type_bytes
-    channel_bytes = channel.to_bytes(1, byteorder="big") if channel else bytearray(1)
-
+    cmd = ctypes.c_uint(command_dict["COMMAND_" + command.name])
+    typ = ctypes.c_uint(command_dict["TYPE_" + command.type_key])
+    channel = channel if channel else 0
+    channel = ctypes.c_char(channel)
     if command.in_val_type == float:
-        val_bytes = bytearray(struct.pack("f", float(val))) if val else bytearray(4)
+        value = ctypes.c_float(float(val))
     else:
-        val_bytes = bytearray(struct.pack("I", int(val))) if val else bytearray(4)
+        value = ctypes.c_int(int(val))
 
-    command_string += channel_bytes + val_bytes
-    assert (
-        len(command_string) == COMMAND_BYTE_LENGTH
-    ), f"Invalid command byte length.{command_string} {len(command_string)}"
-    # padding = bytearray(COMMAND_BYTE_LENGTH - len(command_string))
-    # command_string += padding
-    sock.send(command_string)
+    connection.send_message(cmd, typ, channel, value)
 
 
 # wrap command execution in a try except to keep it clean
@@ -193,7 +185,7 @@ def execute_command(sock, command, channel, val):
         else:
             assert -1 <= channel < n_channels[command.type_key]+1
     send_command(sock, command, channel, val)
-    cmd_output = sock.recv(1024)
+    cmd_output = sock.recv_message()
     if command.cmd_output_str_format:
         if channel is not None:
             fmt = f"Channel {channel} " + command.cmd_output_str_format
@@ -274,7 +266,7 @@ def process_command(line):
 
     if command.is_channel_cmd:
         channel = None
-        in_val = None
+        in_val = 0.0
         try:
             channel = int(keys[1])
         except IndexError:
@@ -282,30 +274,28 @@ def process_command(line):
         try:
             in_val = keys[2]
         except IndexError:
-            in_val = None
+            in_val = 0.0
         # channel = -1 if len(keys) != 2 else int(keys[1])
         # in_val = None if len(keys) != 3 else keys[2]
         if channel == -1:  # Handle all channels
             # Server expects special channel arg for powering off all channels.
             # This works, or we could change how the server works.
             if command.name == "powerOff":
-                execute_command(sock, command, 6, in_val)
+                execute_command(connection, command, 6, in_val)
                 return
             for channel in range(n_channels[command.type_key]):
-                execute_command(sock, command, channel, in_val)
+                execute_command(connection, command, channel, in_val)
                 time.sleep(0.05)
         else:
-            execute_command(sock, command, channel, in_val)
+            execute_command(connection, command, channel, in_val)
     else:
-        execute_command(sock, command)
+        execute_command(connection, command)
 
 
 if __name__ == "__main__":
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    # sock.connect('/tmp/serversock')
-    host = "127.0.0.1"
+    host = '127.0.0.1'
     port = 12000
-    sock.connect((host, port))
+    connection = Connection(host, port)
 
     while True:
         try:

@@ -50,35 +50,35 @@ unsigned int typed_printf(char type, char* buf){
   }
 }
 
-void unstructured_cp(MessageBlock_t* block, void* out){
+void unstructured_cp(MessageBlock_t* block, void** out){
   unsigned int size = block->used * typed_sizeof(block->type);
-  out = (void*) malloc(size);
-  memcpy(out, block->bytes, size);
+  *out = (void*) malloc(size);
+  memcpy(*out, block->bytes, size);
 }
 
-void as_chars(MessageBlock_t* block, char* out){
-  unstructured_cp(block, out);
-  out = (char*) out;
+void as_chars(MessageBlock_t* block, char** out){
+  unstructured_cp(block, (void**) out);
+  *out = (char*) *out;
 }
 
-void as_ints(MessageBlock_t* block, int* out){
-  unstructured_cp(block, out);
-  out = (int*) out;
+void as_ints(MessageBlock_t* block, int** out){
+  unstructured_cp(block, (void**) out);
+  *out = (int*) *out;
 }
 
-void as_uints(MessageBlock_t* block, unsigned int* out){
-  unstructured_cp(block, out);
-  out = (unsigned int*) out;
+void as_uints(MessageBlock_t* block, unsigned int** out){
+  unstructured_cp(block, (void**) out);
+  *out = (unsigned int*) *out;
 }
 
-void as_floats(MessageBlock_t* block, float* out){
-  unstructured_cp(block, out);
-  out = (float*) out;
+void as_floats(MessageBlock_t* block, float** out){
+  unstructured_cp(block, (void**) out);
+  *out = (float*) *out;
 }
 
-void as_doubles(MessageBlock_t* block, double* out){
-  unstructured_cp(block, out);
-  out = (double*) out;
+void as_doubles(MessageBlock_t* block, double** out){
+  unstructured_cp(block, (void**) out);
+  *out = (double*) *out;
 }
 
 MessageBlock_t* block_construct(char type, unsigned int count){
@@ -228,6 +228,8 @@ ssize_t message_recv(Message_t** message, int fd){
   unsigned int count;
   if ((nread = read(fd, &count, sizeof(unsigned int))) < 1){
     // TODO error-out...
+    rv = 0;
+    return rv;
   }
   rv += nread;
 

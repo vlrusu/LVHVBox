@@ -63,25 +63,25 @@ void* client_handler(void* args){
     }
 
     unsigned int* u;
-    as_uints(message->blocks[1], u);
+    as_uints(message->blocks[1], &u);
     task.command.name = (uint32_t) (*u);
     free(u);
     sprintf(msg, "client %d received command label %u", addr, task.command.name);
     log_write(logger, msg, LOG_DETAIL);
 
-    as_uints(message->blocks[2], u);
+    as_uints(message->blocks[2], &u);
     task.command.type = (uint32_t) (*u);
     free(u);
     sprintf(msg, "client %d received command label %u", addr, task.command.name);
     log_write(logger, msg, LOG_DETAIL);
 
     char* c;
-    as_chars(message->blocks[3], c);
+    as_chars(message->blocks[3], &c);
     task.command.char_parameter = *c;
     free(c);
 
     float* f;
-    as_floats(message->blocks[4], f);
+    as_floats(message->blocks[4], &f);
     task.command.float_parameter = *f;
     free(f);
 
@@ -138,8 +138,10 @@ void* client_handler(void* args){
     }
 
     // send response back to client
-    write(task.addr, &(task.rv), sizeof(task.rv));
+    //write(task.addr, &(task.rv), sizeof(task.rv));
+    message_send(task.rv, task.addr);
     free(item);
+    message_destroy(task.rv);
     task_destroy(&task);
   }
 
