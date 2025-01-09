@@ -239,11 +239,19 @@ Message_t* pico_query_current_buffer(Pico_t* pico, uint8_t channel){
   }
   writeable += channel - pico->channel_offset;
 
-  float buffer[16];
+  const unsigned int count = 16;
+  float buffer[count];
   pico_write_read_low_timeout(pico, &writeable, 1, 50,
                                     (char*) buffer, sizeof(buffer), 500);
 
-  Message_t* rv = message_wrap_int(0);
+  // package into structured message
+  MessageBlock_t* block = block_construct('F', count);
+  for (unsigned int i = 0 ; i < count ; i++){
+    block_insert(block, &buffer[i]);
+  }
+  Message_t* rv = message_initialize();
+  message_append(rv, block);
+
   return rv;
 }
 
