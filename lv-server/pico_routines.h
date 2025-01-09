@@ -37,7 +37,10 @@ typedef struct {
 void pico_write_low(Pico_t*, char*, size_t);
 void pico_write_low_timeout(Pico_t*, char*, size_t, unsigned int);
 void pico_read_low(Pico_t*, char*, size_t);
+void pico_read_low_timeout(Pico_t*, char*, size_t, unsigned int);
 void pico_write_read_low(Pico_t*, char*, size_t, char*, size_t);
+void pico_write_read_low_timeout(Pico_t* pico, char*, size_t, unsigned int,
+                                               char*, size_t, unsigned int);
 float pico_get_vhv(Pico_t*, uint8_t);
 float pico_get_ihv(Pico_t*, uint8_t);
 int pico_enable_trip(Pico_t* ,uint8_t);
