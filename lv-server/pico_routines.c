@@ -341,11 +341,10 @@ void* pico_loop(void* args){
       rv = pico_end_current_buffering(pico);
     }
     else if (task->command.name == COMMAND_query_current_buffer){
-      // TODO this can return an arbitrarily long sequence (for now, length-10)
-      // thus, it requires structured messages, instead of 32-bit rvs -.-
+      // this returns a length-10 subsequence of a length-8000 buffer
+      // TODO return arbitrarily many samples
       uint8_t channel = task->command.char_parameter;
-      // rv = pico_query_current_buffer(pico, channel)
-      rv = 0;
+      rv = pico_query_current_buffer(pico, channel);
     }
     // otherwise, have encountered an unexpected command
     else{

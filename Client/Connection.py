@@ -100,7 +100,7 @@ class Connection:
         encoded = self.encode_message(self.header, *items)
         self.client.send(encoded)
 
-    # TODO disable timeout and calculate rolling size to for exact read
+    # TODO disable timeout and calculate rolling size for exact read
     def recv_message(self):
         chunk = 1024
         rv = b''

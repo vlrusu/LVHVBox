@@ -199,21 +199,12 @@ def current_burst(keys):
 
     command_dict = read_commands()
 
-    # send command to stop usb
-    command_stop_usb = bitstring_to_bytes(command_dict["COMMAND_stop_usb"])
-    type_pico = bitstring_to_bytes(command_dict["TYPE_pico"])
-    padding_0 = bytearray(4)
-    bits_channel = (channel).to_bytes(1, byteorder="big")
-    command_string = command_stop_usb + type_pico + bits_channel + padding_0
-    sock.send(command_string)
-
-    time.sleep(0.5)
-
     assert 0 <= channel <= 11
 
-    padding = bytearray(4)
-    command_current_burst = bitstring_to_bytes(command_dict["COMMAND_current_burst"])
-    bits_channel = (channel).to_bytes(1, byteorder="big")
+    cmd = ctypes.c_uint(command_dict["COMMAND_current_burst"])
+    typ = ctypes.c_uint(command_dict["TYPE_pico"])
+    channel = ctypes.c_char(channel)
+    padding = ctypes.c_float(0.0)
     command_string = command_current_burst + type_pico + bits_channel + padding
 
     num_cycles = int(current_buffer_len / full_current_chunk)
@@ -224,24 +215,10 @@ def current_burst(keys):
         # time.sleep(0.2) # put into config.txt later
         # sock.send(bytes(command_string,"utf-8"))
 
-        sock.send(command_string)
-
-        temp = sock.recv(64)
-
-        for i in range(full_current_chunk):
-            byte_loop = []
-            for j in range(4):
-                byte_loop.append(temp[4 * i + j])
-            full_currents.append(process_float(byte_loop))
-
-    # send command to start usb
-    time.sleep(0.5)
-    command_start_usb = bitstring_to_bytes(command_dict["COMMAND_start_usb"])
-    type_pico = bitstring_to_bytes(command_dict["TYPE_pico"])
-    padding_0 = bytearray(4)
-    bits_channel = (channel).to_bytes(1, byteorder="big")
-    command_string = command_start_usb + type_pico + bits_channel + padding_0
-    sock.send(command_string)
+        sock.send_message(cmd, typ, channel, padding)
+        samples = socks.recv_message()
+        for sample in samples:
+            full_currents.append(sample)
 
     # write into new file
     filename = "full_currents_" + str(int(time.time())) + ".txt"
