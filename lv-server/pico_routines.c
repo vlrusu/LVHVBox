@@ -227,19 +227,10 @@ Message_t* pico_end_current_buffering(Pico_t* pico){
 }
 
 Message_t* pico_query_current_buffer(Pico_t* pico, uint8_t channel){
-  char writeable;
-  if (pico->id == 0){
-    writeable = 89;
-  }
-  else if (pico->id == 1){
-    writeable = 83;
-  }
-  else{
-    // impossible state
-  }
+  char writeable = 89;
   writeable += channel - pico->channel_offset;
 
-  const unsigned int count = 16;
+  const unsigned int count = 10;
   float buffer[count];
   pico_write_read_low_timeout(pico, &writeable, 1, 50,
                                     (char*) buffer, sizeof(buffer), 500);
