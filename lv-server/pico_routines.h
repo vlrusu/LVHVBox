@@ -8,6 +8,7 @@
 #include "../commands.h"
 #include "utils.h"
 #include "Logging.h"
+#include "Messages.h"
 #include "Pico.h"
 #include "PriorityQueue.h"
 #include "Task.h"
@@ -41,28 +42,28 @@ void pico_read_low_timeout(Pico_t*, char*, size_t, unsigned int);
 void pico_write_read_low(Pico_t*, char*, size_t, char*, size_t);
 void pico_write_read_low_timeout(Pico_t* pico, char*, size_t, unsigned int,
                                                char*, size_t, unsigned int);
-float pico_get_vhv(Pico_t*, uint8_t);
-float pico_get_ihv(Pico_t*, uint8_t);
-int pico_enable_trip(Pico_t* ,uint8_t);
-int pico_disable_trip(Pico_t*, uint8_t);
-int pico_reset_trip(Pico_t*, uint8_t);
-int pico_force_trip(Pico_t*, uint8_t);
-int pico_program_trip_threshold(Pico_t*, uint8_t, float);
-int pico_program_trip_count(Pico_t*, uint8_t, float);
-int pico_query_trip_enabled_all(Pico_t*);
-int pico_query_trip_enabled(Pico_t*, uint8_t);
-int pico_query_trip_status_all(Pico_t*);
-int pico_query_trip_status(Pico_t*, uint8_t);
-float pico_query_current(Pico_t*);
-float pico_query_pcb_temperature(Pico_t*);
-int pico_get_slow_read(Pico_t*, uint8_t);
-int pico_get_buffer_status(Pico_t*, uint8_t);
-int pico_enable_pedestal(Pico_t*);
-int pico_disable_pedestal(Pico_t*);
-int pico_update_pedestal(Pico_t*, uint8_t);
-int pico_begin_current_buffering(Pico_t*);
-int pico_end_current_buffering(Pico_t*);
-int pico_query_current_buffer(Pico_t*, uint8_t);
+Message_t* pico_get_vhv(Pico_t*, uint8_t);
+Message_t* pico_get_ihv(Pico_t*, uint8_t);
+Message_t* pico_enable_trip(Pico_t* ,uint8_t);
+Message_t* pico_disable_trip(Pico_t*, uint8_t);
+Message_t* pico_reset_trip(Pico_t*, uint8_t);
+Message_t* pico_force_trip(Pico_t*, uint8_t);
+Message_t* pico_program_trip_threshold(Pico_t*, uint8_t, float);
+Message_t* pico_program_trip_count(Pico_t*, uint8_t, float);
+Message_t* pico_query_trip_enabled_all(Pico_t*);
+Message_t* pico_query_trip_enabled(Pico_t*, uint8_t);
+Message_t* pico_query_trip_status_all(Pico_t*);
+Message_t* pico_query_trip_status(Pico_t*, uint8_t);
+Message_t* pico_query_current(Pico_t*);
+Message_t* pico_query_pcb_temperature(Pico_t*);
+Message_t* pico_get_slow_read(Pico_t*, uint8_t);
+Message_t* pico_get_buffer_status(Pico_t*, uint8_t);
+Message_t* pico_enable_pedestal(Pico_t*);
+Message_t* pico_disable_pedestal(Pico_t*);
+Message_t* pico_update_pedestal(Pico_t*, uint8_t);
+Message_t* pico_begin_current_buffering(Pico_t*);
+Message_t* pico_end_current_buffering(Pico_t*);
+Message_t* pico_query_current_buffer(Pico_t*, uint8_t);
 void* pico_loop(void*);
 
 #endif

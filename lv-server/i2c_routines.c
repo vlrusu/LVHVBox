@@ -165,7 +165,8 @@ float i2c_ltc2497(int address, int channelLTC) {
 
   set_slave_addr(lv_i2c, address, 1);
 
-  msleep(200);
+  // msleep(200);
+  msleep(1);
 
   //----- WRITE BYTES -----
   block[0] = channelLTC;
@@ -180,7 +181,8 @@ float i2c_ltc2497(int address, int channelLTC) {
     return -1;
   }
 
-  msleep(200);
+  // msleep(200);
+  msleep(150);
 
   //----- READ BYTES -----
   length = 3;                                //<<< Number of bytes to read
@@ -213,7 +215,7 @@ float i2c_read_low(uint8_t address, uint8_t channel, float scale){
   return rv;
 }
 
-float i2c_read_6V_voltage(unsigned int channel_number){
+Message_t* i2c_read_6V_voltage(unsigned int channel_number){
   // reverse polarity of channeling
   channel_number = 5 - channel_number;
   uint8_t map[6] = {4, 3, 4, 3, 4, 3};
@@ -221,11 +223,12 @@ float i2c_read_6V_voltage(unsigned int channel_number){
   uint8_t address = LTCaddress[channel_number];
   uint8_t channel = (5 << 5) + map[channel_number];
   float scale = 0.00857905;
-  float rv = i2c_read_low(address, channel, scale);
+  float frv = i2c_read_low(address, channel, scale);
+  Message_t* rv = message_wrap_float(frv);
   return rv;
 }
 
-float i2c_read_6V_current(unsigned int channel_number){
+Message_t* i2c_read_6V_current(unsigned int channel_number){
   // reverse polarity of channeling
   channel_number = 5 - channel_number;
   uint8_t map[6] = {5, 2, 5, 2, 5, 2};
@@ -233,11 +236,12 @@ float i2c_read_6V_current(unsigned int channel_number){
   uint8_t address = LTCaddress[channel_number];
   uint8_t channel = (5 << 5) + map[channel_number];
   float scale = 0.010;
-  float rv = i2c_read_low(address, channel, scale);
+  float frv = i2c_read_low(address, channel, scale);
+  Message_t* rv = message_wrap_float(frv);
   return rv;
 }
 
-float i2c_read_48V_voltage(unsigned int channel_number){
+Message_t* i2c_read_48V_voltage(unsigned int channel_number){
   // reverse polarity of channeling
   channel_number = 5 - channel_number;
   uint8_t map[6] = {6, 0, 6, 0, 6, 0};
@@ -245,11 +249,12 @@ float i2c_read_48V_voltage(unsigned int channel_number){
   uint8_t address = LTCaddress[channel_number];
   uint8_t channel = (5 << 5) + map[channel_number];
   float scale = 0.0012089;
-  float rv = i2c_read_low(address, channel, scale);
+  float frv = i2c_read_low(address, channel, scale);
+  Message_t* rv = message_wrap_float(frv);
   return rv;
 }
 
-float i2c_read_48V_current(unsigned int channel_number){
+Message_t* i2c_read_48V_current(unsigned int channel_number){
   // reverse polarity of channeling
   channel_number = 5 - channel_number;
   uint8_t map[6] = {7, 1, 7, 1, 7, 1};
@@ -257,7 +262,8 @@ float i2c_read_48V_current(unsigned int channel_number){
   uint8_t address = LTCaddress[channel_number];
   uint8_t channel = (5 << 5) + map[channel_number];
   float scale = 0.010;
-  float rv = i2c_read_low(address, channel, scale);
+  float frv = i2c_read_low(address, channel, scale);
+  Message_t* rv = message_wrap_float(frv);
   return rv;
 }
 
@@ -296,13 +302,15 @@ int i2c_lv_power_control(uint8_t channel, uint8_t pin_map[6], int value){
   return 0;
 }
 
-int i2c_lv_power_on(uint8_t channel, uint8_t pin_map[6]){
-  int rv = i2c_lv_power_control(channel, pin_map, HIGH);
+Message_t* i2c_lv_power_on(uint8_t channel, uint8_t pin_map[6]){
+  int irv = i2c_lv_power_control(channel, pin_map, HIGH);
+  Message_t* rv = message_wrap_int(irv);
   return rv;
 }
 
-int i2c_lv_power_off(uint8_t channel, uint8_t pin_map[6]){
-  int rv = i2c_lv_power_control(channel, pin_map, LOW);
+Message_t* i2c_lv_power_off(uint8_t channel, uint8_t pin_map[6]){
+  int irv = i2c_lv_power_control(channel, pin_map, LOW);
+  Message_t* rv = message_wrap_int(irv);
   return rv;
 }
 
@@ -420,8 +428,9 @@ float i2c_ramp_hv_impl(int fd, uint8_t channel, float target, Logger_t* logger){
   return rv;
 }
 
-float i2c_ramp_hv(int fd, uint8_t channel, float target, Logger_t* logger){
-  float rv = i2c_ramp_hv_impl(fd, channel, target, logger);
+Message_t* i2c_ramp_hv(int fd, uint8_t channel, float target, Logger_t* logger){
+  float frv = i2c_ramp_hv_impl(fd, channel, target, logger);
+  Message_t* rv = message_wrap_float(frv);
   return rv;
 }
 
@@ -448,7 +457,7 @@ void* i2c_loop(void* args){
     log_write(logger, msg, LOG_VERBOSE);
 
     // execute i2c operation
-    float rv;
+    Message_t* rv;
     // lv commands
     if (task->command.name == COMMAND_powerOn){
       uint8_t channel = task->command.char_parameter;
@@ -482,7 +491,7 @@ void* i2c_loop(void* args){
       uint8_t channel = task->command.char_parameter;
       uint32_t dac = (uint32_t) (task->command.float_parameter);
       i2c_dac_write(channel, dac);
-      rv = 0.0;
+      rv = message_wrap_int(0);
     }
     // otherwise, have encountered an unexpected command
     else{
@@ -491,10 +500,10 @@ void* i2c_loop(void* args){
     }
 
     // mark task as complete
-    sprintf(msg, "i2c return value = %f", rv);
-    log_write(logger, msg, LOG_VERBOSE);
+    // sprintf(msg, "i2c return value = %f", rv);
+    // log_write(logger, msg, LOG_VERBOSE);
     pthread_mutex_lock(&(task->mutex));
-    task->rv = message_wrap_float(rv);
+    task->rv = rv;
     task->complete = 1;
     pthread_mutex_unlock(&(task->mutex));
     pthread_cond_signal(&(task->condition));

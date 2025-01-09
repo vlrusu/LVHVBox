@@ -262,3 +262,29 @@ Message_t* message_wrap_float(float x){
   message_append(rv, block);
   return rv;
 }
+
+int message_as_int(Message_t* message){
+  int* ptr;
+  as_ints(message->blocks[0], &ptr);
+  int rv = *ptr;
+  return rv;
+}
+
+float message_as_float(Message_t* message){
+  float* ptr;
+  as_floats(message->blocks[0], &ptr);
+  float rv = *ptr;
+  return rv;
+}
+
+int message_unwrap_int(Message_t* message){
+  int rv = message_as_int(message);
+  message_destroy(message);
+  return rv;
+}
+
+float message_unwrap_float(Message_t* message){
+  float rv = message_as_float(message);
+  message_destroy(message);
+  return rv;
+}

@@ -62,6 +62,7 @@ void* client_handler(void* args){
       break;
     }
 
+    // unpack message into task, and deallocate
     unsigned int* u;
     as_uints(message->blocks[1], &u);
     task.command.name = (uint32_t) (*u);
@@ -84,6 +85,8 @@ void* client_handler(void* args){
     as_floats(message->blocks[4], &f);
     task.command.float_parameter = *f;
     free(f);
+
+    message_destroy(message);
 
     // submit to relevant queue
     int queued = 0;
@@ -140,10 +143,12 @@ void* client_handler(void* args){
     // send response back to client
     //write(task.addr, &(task.rv), sizeof(task.rv));
     message_send(task.rv, task.addr);
-    free(item);
     message_destroy(task.rv);
+    free(item);
     task_destroy(&task);
   }
+
+  message_destroy(message);
 
   sprintf(msg, "closing client session for fd %d", addr);
   log_write(logger, msg, LOG_INFO);

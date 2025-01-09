@@ -35,55 +35,61 @@ void pico_write_read_low_timeout(Pico_t* pico,
   pico_read_low_timeout(pico, buf, osize, otmout);
 }
 
-float pico_get_vhv(Pico_t* pico, uint8_t channel){
+Message_t* pico_get_vhv(Pico_t* pico, uint8_t channel){
   char reading = 'V';
   char* buffer = malloc(24);
   pico_write_read_low(pico, &reading, 1, buffer, 24);
 
   channel -= pico->channel_offset;
-  float rv = * (float*) &buffer[4 * channel];
+  float frv = * (float*) &buffer[4 * channel];
+  Message_t* rv = message_wrap_float(frv);
 
   free(buffer);
   return rv;
 }
 
-float pico_get_ihv(Pico_t* pico, uint8_t channel){
+Message_t* pico_get_ihv(Pico_t* pico, uint8_t channel){
   char reading = 'H';
   char* buffer = malloc(48);
   pico_write_read_low(pico, &reading, 1, buffer, 48);
 
   channel -= pico->channel_offset;
-  float rv = * (float*) &buffer[24 + 4 * channel];
+  float frv = * (float*) &buffer[24 + 4 * channel];
+  Message_t* rv = message_wrap_float(frv);
 
   free(buffer);
   return rv;
 }
 
-int pico_enable_trip(Pico_t* pico, uint8_t channel){
+Message_t* pico_enable_trip(Pico_t* pico, uint8_t channel){
   char writeable = 121 + channel - pico->channel_offset;
   pico_write_low(pico, &writeable, 1);
-  return 1;
+  Message_t* rv = message_wrap_int(1);
+  return rv;
 }
 
-int pico_disable_trip(Pico_t* pico, uint8_t channel){
+Message_t* pico_disable_trip(Pico_t* pico, uint8_t channel){
   char writeable = 115 + channel - pico->channel_offset;;
   pico_write_low(pico, &writeable, 1);
-  return 1;
+  Message_t* rv = message_wrap_int(1);
+  return rv;
 }
 
-int pico_reset_trip(Pico_t* pico, uint8_t channel){
+Message_t* pico_reset_trip(Pico_t* pico, uint8_t channel){
   char writeable = 109 + channel - pico->channel_offset;;
   pico_write_low(pico, &writeable, 1);
-  return 1;
+  Message_t* rv = message_wrap_int(1);
+  return rv;
 }
 
-int pico_force_trip(Pico_t* pico, uint8_t channel){
+Message_t* pico_force_trip(Pico_t* pico, uint8_t channel){
   char writeable = 103 + channel - pico->channel_offset;;
   pico_write_low(pico, &writeable, 1);
-  return 1;
+  Message_t* rv = message_wrap_int(1);
+  return rv;
 }
 
-int pico_program_trip_threshold(Pico_t* pico, uint8_t channel, float threshold){
+Message_t* pico_program_trip_threshold(Pico_t* pico, uint8_t channel, float threshold){
   uint16_t encoded = (uint16_t) (65535 * (threshold / 1000.0));
 
   char writeable[3];
@@ -92,9 +98,11 @@ int pico_program_trip_threshold(Pico_t* pico, uint8_t channel, float threshold){
   writeable[2] = (encoded >> 0) & 0xFFFF;
 
   pico_write_low(pico, writeable, sizeof(writeable));
+  Message_t* rv = message_wrap_int(1);
+  return rv;
 }
 
-int pico_program_trip_count(Pico_t* pico, uint8_t channel, float count){
+Message_t* pico_program_trip_count(Pico_t* pico, uint8_t channel, float count){
   uint16_t casted = (uint16_t) count;
 
   char writeable[3];
@@ -103,103 +111,122 @@ int pico_program_trip_count(Pico_t* pico, uint8_t channel, float count){
   writeable[2] = (casted >> 0) & 0xFFFF;
 
   pico_write_low(pico, writeable, sizeof(writeable));
+  Message_t* rv = message_wrap_int(1);
+  return rv;
 }
 
-int pico_query_trip_enabled_all(Pico_t* pico){
+Message_t* pico_query_trip_enabled_all(Pico_t* pico){
   char writeable = 99;
-  int rv;
-  pico_write_read_low(pico, &writeable, 1, (char*) &rv, sizeof(rv));
+  int irv;
+  pico_write_read_low(pico, &writeable, 1, (char*) &irv, sizeof(irv));
+  Message_t* rv = message_wrap_int(irv);
   return rv;
 }
 
-int pico_query_trip_enabled(Pico_t* pico, uint8_t channel){
-  int mask = pico_query_trip_enabled_all(pico);
+Message_t* pico_query_trip_enabled(Pico_t* pico, uint8_t channel){
+  Message_t* message_mask = pico_query_trip_enabled_all(pico);
+  int mask = message_unwrap_int(message_mask);
+
   int selection = (1 << (channel - pico->channel_offset));
-  int rv = (mask & selection) != 0;
+  int irv = (mask & selection) != 0;
+  Message_t* rv = message_wrap_int(irv);
   return rv;
 }
 
-int pico_query_trip_status_all(Pico_t* pico){
+Message_t* pico_query_trip_status_all(Pico_t* pico){
   char writeable = 33;
-  int rv;
-  pico_write_read_low(pico, &writeable, 1, (char*) &rv, sizeof(rv));
+  int irv;
+  pico_write_read_low(pico, &writeable, 1, (char*) &irv, sizeof(irv));
+  Message_t* rv = message_wrap_int(irv);
   return rv;
 }
 
-int pico_query_trip_status(Pico_t* pico, uint8_t channel){
-  int mask = pico_query_trip_status_all(pico);
+Message_t* pico_query_trip_status(Pico_t* pico, uint8_t channel){
+  Message_t* message_mask = pico_query_trip_status_all(pico);
+  int mask = message_unwrap_int(message_mask);
+
   int selection = (1 << (channel - pico->channel_offset));
-  int rv = (mask & selection) != 0;
+  int irv = (mask & selection) != 0;
+  Message_t* rv = message_wrap_int(irv);
   return rv;
 }
 
 // only for pico 0
-float pico_query_current(Pico_t* pico){
+Message_t* pico_query_current(Pico_t* pico){
   char writeable = 98;
-  float rv;
-  pico_write_read_low(pico, &writeable, 1, (char*) &rv, sizeof(rv));
-  rv *= 3.3 / 4096;
+  float frv;
+  pico_write_read_low(pico, &writeable, 1, (char*) &frv, sizeof(frv));
+  frv *= 3.3 / 4096;
+  Message_t* rv = message_wrap_int(frv);
   return rv;
 }
 
 // only for pico 1
-float pico_query_pcb_temperature(Pico_t* pico){
+Message_t* pico_query_pcb_temperature(Pico_t* pico){
   char writeable = 98;
-  float rv;
-  pico_write_read_low(pico, &writeable, 1, (char*) &rv, sizeof(rv));
-  rv *= 3.3 / 4096;
-  rv = 1.8455 - rv;
-  rv /= 0.01123;
+  float frv;
+  pico_write_read_low(pico, &writeable, 1, (char*) &frv, sizeof(frv));
+  frv *= 3.3 / 4096;
+  frv = 1.8455 - frv;
+  frv /= 0.01123;
+  Message_t* rv = message_wrap_int(frv);
   return rv;
 }
 
-int pico_get_slow_read(Pico_t* pico, uint8_t channel){
+Message_t* pico_get_slow_read(Pico_t* pico, uint8_t channel){
   char writeable = 97;
   char readable;
   pico_write_read_low(pico, &writeable, 1, &readable, 1);
-  int rv = (int) readable;
+  int irv = (int) readable;
+  Message_t* rv = message_wrap_int(irv);
   return rv;
 }
 
-int pico_get_buffer_status(Pico_t* pico, uint8_t channel){
+Message_t* pico_get_buffer_status(Pico_t* pico, uint8_t channel){
   char writeable = 95;
   char readable;
   pico_write_read_low(pico, &writeable, 1, &readable, 1);
-  int rv = (int) readable;
+  int irv = (int) readable;
+  Message_t* rv = message_wrap_int(irv);
   return rv;
 }
 
-int pico_enable_pedestal(Pico_t* pico){
+Message_t* pico_enable_pedestal(Pico_t* pico){
   char writeable = 37;
   pico_write_low(pico, &writeable, 1);
-  return 1;
+  Message_t* rv = message_wrap_int(1);
+  return rv;
 }
 
-int pico_disable_pedestal(Pico_t* pico){
+Message_t* pico_disable_pedestal(Pico_t* pico){
   char writeable = 38;
   pico_write_low(pico, &writeable, 1);
-  return 1;
+  Message_t* rv = message_wrap_int(1);
+  return rv;
 }
 
-int pico_update_pedestal(Pico_t* pico, uint8_t channel){
+Message_t* pico_update_pedestal(Pico_t* pico, uint8_t channel){
   char writeable = 39 + channel - pico->channel_offset;;
   pico_write_low(pico, &writeable, 1);
-  return 1;
+  Message_t* rv = message_wrap_int(1);
+  return rv;
 }
 
-int pico_begin_current_buffering(Pico_t* pico){
+Message_t* pico_begin_current_buffering(Pico_t* pico){
   char writeable = 87;
   pico_write_low(pico, &writeable, 1);
-  return 1;
+  Message_t* rv = message_wrap_int(1);
+  return rv;
 }
 
-int pico_end_current_buffering(Pico_t* pico){
+Message_t* pico_end_current_buffering(Pico_t* pico){
   char writeable = 88;
   pico_write_low(pico, &writeable, 1);
-  return 1;
+  Message_t* rv = message_wrap_int(1);
+  return rv;
 }
 
-int pico_query_current_buffer(Pico_t* pico, uint8_t channel){
+Message_t* pico_query_current_buffer(Pico_t* pico, uint8_t channel){
   char writeable;
   if (pico->id == 0){
     writeable = 89;
@@ -216,7 +243,8 @@ int pico_query_current_buffer(Pico_t* pico, uint8_t channel){
   pico_write_read_low_timeout(pico, &writeable, 1, 50,
                                     (char*) buffer, sizeof(buffer), 500);
 
-  return 0;
+  Message_t* rv = message_wrap_int(0);
+  return rv;
 }
 
 void* pico_loop(void* args){
@@ -239,7 +267,7 @@ void* pico_loop(void* args){
     log_write(logger, msg, LOG_VERBOSE);
 
     // execute pico operation
-    float rv;
+    Message_t* rv;
     // lv commands
     if (task->command.name == COMMAND_get_vhv){
       uint8_t channel = task->command.char_parameter;
@@ -327,10 +355,10 @@ void* pico_loop(void* args){
     }
 
     // mark task as complete
-    sprintf(msg, "pico %d return value = %f", pico->id, rv);
-    log_write(logger, msg, LOG_VERBOSE);
+    // sprintf(msg, "pico %d return value = %f", pico->id, rv);
+    // log_write(logger, msg, LOG_VERBOSE);
     pthread_mutex_lock(&(task->mutex));
-    task->rv = message_wrap_float(rv);
+    task->rv = rv;
     task->complete = 1;
     pthread_mutex_unlock(&(task->mutex));
     pthread_cond_signal(&(task->condition));

@@ -57,4 +57,9 @@ ssize_t message_recv(Message_t**, int);
 Message_t* message_wrap_int(int);
 Message_t* message_wrap_float(float);
 
+int message_as_int(Message_t*);
+float message_as_float(Message_t*);
+int message_unwrap_int(Message_t*);
+float message_unwrap_float(Message_t*);
+
 #endif
