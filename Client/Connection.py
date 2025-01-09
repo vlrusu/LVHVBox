@@ -13,6 +13,7 @@ class Connection:
         self.reestablish()
 
         self.header = [ctypes.c_char(c) for c in 'LVHV'.encode()]
+        self.check = (b'L', b'V', b'H', b'V')
         self.typecodes = {
           ctypes.c_char: 'C',
           ctypes.c_int: 'I',
@@ -113,4 +114,6 @@ class Connection:
                 recv = b''
 
         rv = self.decode_message(rv)
+        assert(rv[0] == self.check)
+        rv = rv[1:]
         return rv

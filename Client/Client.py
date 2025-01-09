@@ -144,7 +144,7 @@ def create_command_string_default():
 
 # interpret number from format_string provided and print it
 def process_response(blocks, format_str):
-    number = blocks[1][0]
+    number = blocks[0][0]
     print(format_str.format(number))
 
 
