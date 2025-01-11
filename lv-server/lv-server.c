@@ -23,6 +23,7 @@
 #include "i2cbusses.h"
 #include "gpio.h"
 #include "utils.h"
+#include "ConfigurationStore.h"
 #include "Logging.h"
 #include "PriorityQueue.h"
 #include "Pico.h"
@@ -36,14 +37,15 @@ extern uint8_t lv_global_enable;
 extern MCP* lvpgoodMCP;
 extern MCP* hvMCP;
 
-int main(int argc, char** argv){
+int main(int argc, char* argv[]){
   int rv;
   unsigned int port = 12000;
   int backlog = 3;
   char* lpath = NULL;
-  char c;
+  char* cpath = NULL;
+  int c;
   int stop = 0;
-  while ((!stop) && ((c = getopt(argc, argv, "p:b:l:")) != -1)){
+  while ((!stop) && ((c = getopt(argc, argv, "p:b:l:c:")) != -1)){
     char msg[256];
     switch(c){
       case 'p':
@@ -59,8 +61,8 @@ int main(int argc, char** argv){
       case 'l':
         lpath = optarg;
         break;
-      case 255:
-        stop = 1;
+      case 'c':
+        cpath = optarg;
         break;
       default:
         sprintf(msg, "impossible parsing state");
@@ -71,6 +73,13 @@ int main(int argc, char** argv){
 
   Logger_t logger;
   log_init(&logger, lpath, 10, 1);
+
+  // initialize configuration table
+//char msg[] = "initializing configuration table";
+//log_write(&logger, (char*) &msg, LOG_INFO);
+//ConfigurationStore_t* config = malloc(sizeof(ConfigurationStore_t));
+//config_init(config);
+//config_load_from(config, cpath);
 
   // initialize spi driver interface
   log_write(&logger, "initializing spi interface", LOG_DETAIL);
