@@ -60,7 +60,7 @@ void config_load_from(ConfigurationStore_t* config, char* path){
 
   char line[1024];
   while (read_line(fd, (char*) &line)){
-    char* type = (char*) malloc(1);
+    char* type = (char*) malloc(2);
     char* key = (char*) malloc(256);
     char* value = (char*) malloc(256);
     if (empty_line((char*) &line)){
@@ -70,8 +70,11 @@ void config_load_from(ConfigurationStore_t* config, char* path){
       // wrap rhs value
       MessageBlock_t* block;
       if (strcmp(type, "C") == 0){
-        block = block_construct('C', 1);
-        block_insert(block, value);
+        unsigned int length = (unsigned int) strlen(value);
+        block = block_construct('C', length);
+        for (unsigned int i = 0 ; i < length ; i++){
+          block_insert(block, value+i);
+        }
       }
       else if (strcmp(type, "I") == 0){
         int casted = atoi(value);
@@ -111,12 +114,14 @@ int read_line(int fd, char* out){
   char buff;
   unsigned int count = 0;
   do {
-    if (read(fd, &buff, 1) == 1){
+    ssize_t nread = read(fd, &buff, 1);
+    if (nread == 1){
       sprintf(out+count, "%s", &buff);
       count++;
     }
     else{
       // error-out
+      break;
     }
   } while (buff != '\n');
 }
@@ -160,6 +165,21 @@ int parse_config_line(char* buff, char* type, char* key, char* value){
   else{
     // error-out
   }
+  *(type+1) = (char) 0;
+
+  unsigned int length = (unsigned int) strlen(key);
+  length = (unsigned int) strlen(key);
+  if (strlen(key) < 1){
+    // error-out
+  }
+  length = (unsigned int) strlen(value);
+  if (length < 1){
+    // error-out
+  }
+  if (value[length-1] != ';'){
+    // error-out
+  }
+  value[length-1] = (char) 0;
 
   return 1;
 }

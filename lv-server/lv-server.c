@@ -75,11 +75,11 @@ int main(int argc, char* argv[]){
   log_init(&logger, lpath, 10, 1);
 
   // initialize configuration table
-//char msg[] = "initializing configuration table";
-//log_write(&logger, (char*) &msg, LOG_INFO);
-//ConfigurationStore_t* config = malloc(sizeof(ConfigurationStore_t));
-//config_init(config);
-//config_load_from(config, cpath);
+  char msg[] = "initializing configuration table";
+  log_write(&logger, (char*) &msg, LOG_INFO);
+  ConfigurationStore_t* config = malloc(sizeof(ConfigurationStore_t));
+  config_init(config);
+  config_load_from(config, cpath);
 
   // initialize spi driver interface
   log_write(&logger, "initializing spi interface", LOG_DETAIL);

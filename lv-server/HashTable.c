@@ -24,7 +24,7 @@ int htkey_equal(HTKey_t lhs, HTKey_t rhs){
 }
 
 void htentry_init(HTEntry_t* entry, HTKey_t key, HTValue_t value){
-  entry = malloc(sizeof(HTEntry_t));
+  //entry = malloc(sizeof(HTEntry_t));
   entry->key = key;
   entry->value = value;
   entry->next = 0;
@@ -37,7 +37,8 @@ void htentry_destroy(HTEntry_t* entry){
 }
 
 void htbucket_init(HTBucket_t* bucket){
-  bucket = malloc(sizeof(HTBucket_t));
+  //bucket = malloc(sizeof(HTBucket_t));
+  bucket->first = 0;
   bucket->count = 0;
 }
 
@@ -102,7 +103,7 @@ unsigned int hashtable_hash(HashTable_t* table, HTKey_t key){
 }
 
 void hashtable_insert(HashTable_t* table, HTKey_t key, HTValue_t value){
-  HTEntry_t* entry;
+  HTEntry_t* entry = (HTEntry_t*) malloc(sizeof(HTEntry_t));
   htentry_init(entry, key, value);
   unsigned int idx = hashtable_hash(table, key);
   HTBucket_t* bucket = &table->buckets[idx];
