@@ -79,7 +79,15 @@ int main(int argc, char* argv[]){
   log_write(&logger, (char*) &msg, LOG_INFO);
   ConfigurationStore_t* config = malloc(sizeof(ConfigurationStore_t));
   config_init(config);
-  config_load_from(config, cpath);
+  if (access(cpath, R_OK) == 0){
+	  config_load_from(config, cpath);
+  }
+  else{
+    char* m = (char*) malloc(1024);
+    sprintf(m, "warning: no readable config at %s", cpath);
+    log_write(&logger, m, LOG_INFO);
+    free(m);
+  }
 
   // initialize spi driver interface
   log_write(&logger, "initializing spi interface", LOG_DETAIL);
