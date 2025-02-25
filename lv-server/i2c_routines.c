@@ -316,32 +316,40 @@ Message_t* i2c_lv_power_off(uint8_t channel, uint8_t pin_map[6]){
 
 float i2c_deferred_hv_query(int fd, uint8_t channel){
   // first, construct query of hv voltage
-  char writeable[13];
-  // command name
-  writeable[0]  = (COMMAND_get_vhv & 0xFF000000) >> 24;
-  writeable[1]  = (COMMAND_get_vhv & 0x00FF0000) >> 16;
-  writeable[2]  = (COMMAND_get_vhv & 0x0000FF00) >>  8;
-  writeable[3]  = (COMMAND_get_vhv & 0x000000FF) >>  0;
-  // command type
-  writeable[4]  = (TYPE_pico       & 0xFF000000) >> 24;
-  writeable[5]  = (TYPE_pico       & 0x00FF0000) >> 16;
-  writeable[6]  = (TYPE_pico       & 0x0000FF00) >>  8;
-  writeable[7]  = (TYPE_pico       & 0x000000FF) >>  0;
-  // channel
-  writeable[8]  = (char) channel;
-  // unused
-  writeable[9]  = 0;
-  writeable[10] = 0;
-  writeable[11] = 0;
-  writeable[12] = 0;
+  char xc;
+  unsigned int xu;
+  float xf;
+  MessageBlock_t* block;
+  Message_t* message = message_initialize();
+  block = block_construct('U', 1);
+  xu = COMMAND_get_vhv;
+  block_insert(block, &xu);
+  message_append(message, block);
+  block = block_construct('U', 1);
+  xu = TYPE_pico;
+  block_insert(block, &xu);
+  message_append(message, block);
+  block = block_construct('C', 1);
+  xc = (char) channel;
+  block_insert(block, &xc);
+  message_append(message, block);
+  block = block_construct('F', 1);
+  xf = 0.0;
+  block_insert(block, &xf);
+  message_append(message, block);
 
   // perform query
-  float queried;
-  write(fd, &writeable, sizeof(writeable));
-  //msleep(100);
-  int nread;
-  if ((nread = read(fd, &queried, 4)) < 1){
-    return -9.9;
+  message_send(message, fd);
+  message_destroy(message);
+
+  float queried = -9.9;
+  if (0 < message_recv(&message, fd)){
+    if (message->count == 2){
+      if (message->blocks[1]->type == 'F'){
+        queried = block_as_float(message->blocks[1]);
+      }
+    }
+    message_destroy(message);
   }
 
   return queried;
