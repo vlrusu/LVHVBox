@@ -172,6 +172,8 @@ def safe_command_execution(func):
             print("Bad Input:", e)
         except AssertionError:
             print("Channel number is out of allowed range")
+        except TimeoutError:
+            print("TimeoutError")
 
     return wrapper
 
@@ -185,8 +187,20 @@ def execute_command(sock, command, channel, val):
         else:
             assert -1 <= channel < n_channels[command.type_key]+1
     send_command(sock, command, channel, val)
+
+    # custom timeout for ramp_hv, which can take up to 20 sec.
+    original_timeout = sock.client.gettimeout()
+    if command.name == 'ramp_hv':
+        sock.client.settimeout(60)
+
+    # receive
     cmd_output = sock.recv_message()
-    if command.cmd_output_str_format:
+
+    # return timeout to default
+    if command.name == 'ramp_hv':
+        sock.client.settimeout(original_timeout)
+
+    if command.cmd_output_str_format is not None:
         if channel is not None:
             fmt = f"Channel {channel} " + command.cmd_output_str_format
             process_response(cmd_output, fmt)
