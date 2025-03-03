@@ -236,9 +236,23 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6], uint 
         ped_on = 0;
       
       } else if (receive_chars[0] == 86) { // ----- Send Voltages ----- //
-        for (uint8_t i=0; i<6; i++) {
-          tud_cdc_write(&channel_voltage[i],sizeof(&channel_voltage[i]));
+        uint32_t raw_values[6];
+        for (uint32_t channel = 0; channel < 3; channel++) {
+          raw_values[channel] = pio_sm_get_blocking(pio_0, sm_array[channel]);
+          raw_values[channel+3] = pio_sm_get_blocking(pio_1, sm_array[channel+3]);
         }
+
+        // Send the raw ADC values instead of calculated voltages
+        for (uint8_t i=0; i<6; i++) {
+          // Convert to float to maintain compatibility with existing code
+          float raw_value_as_float = (float)raw_values[i];
+          tud_cdc_write(&raw_value_as_float, sizeof(float));
+        }
+
+        //for (uint8_t i=0; i<6; i++) {
+        //  tud_cdc_write(&channel_voltage[i],sizeof(&channel_voltage[i]));
+        //}
+
         tud_cdc_write_flush(); // flushes write buffer, data will not actually be sent without this command
 
       } else if (receive_chars[0] == 73) { // ----- Send Averaged Currents ----- //

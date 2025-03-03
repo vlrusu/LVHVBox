@@ -42,7 +42,7 @@ void pico_read_low_timeout(Pico_t*, char*, size_t, unsigned int);
 void pico_write_read_low(Pico_t*, char*, size_t, char*, size_t);
 void pico_write_read_low_timeout(Pico_t* pico, char*, size_t, unsigned int,
                                                char*, size_t, unsigned int);
-Message_t* pico_get_vhv(Pico_t*, uint8_t);
+Message_t* pico_get_vhv(Pico_t*, uint8_t, Logger_t* logger);
 Message_t* pico_get_ihv(Pico_t*, uint8_t);
 Message_t* pico_enable_trip(Pico_t* ,uint8_t);
 Message_t* pico_disable_trip(Pico_t*, uint8_t);

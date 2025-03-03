@@ -35,6 +35,44 @@ void pico_write_read_low_timeout(Pico_t* pico,
   pico_read_low_timeout(pico, buf, osize, otmout);
 }
 
+Message_t* pico_get_vhv(Pico_t* pico, uint8_t channel, Logger_t* logger){
+  char msg[128];
+  sprintf(msg, "pico_get_vhv: ENTER pico=%p, channel=%d, offset=%d",
+          (void*)pico, channel, pico->channel_offset);
+  log_write(logger, msg, LOG_INFO);
+
+  char reading = 'V';
+  char* buffer = malloc(24);
+  memset(buffer, 0xAA, 24);  // Fill with pattern to detect if read fails
+
+  // Get direct access to check return values
+  int transferred = 0;
+  int result = libusb_bulk_transfer(pico->handle, 0x02, &reading, 1, &transferred, 0);
+  sprintf(msg, "pico_get_vhv: Write result=%d, transferred=%d", result, transferred);
+  log_write(logger, msg, LOG_INFO);
+
+  transferred = 0;
+  result = libusb_bulk_transfer(pico->handle, 0x82, buffer, 24, &transferred, 0);
+  sprintf(msg, "pico_get_vhv: Read result=%d, transferred=%d", result, transferred);
+  log_write(logger, msg, LOG_INFO);
+
+  // Dump raw buffer for debugging
+  sprintf(msg, "pico_get_vhv: Raw buffer bytes (first 8): %02X %02X %02X %02X %02X %02X %02X %02X",
+          buffer[0] & 0xFF, buffer[1] & 0xFF, buffer[2] & 0xFF, buffer[3] & 0xFF,
+          buffer[4] & 0xFF, buffer[5] & 0xFF, buffer[6] & 0xFF, buffer[7] & 0xFF);
+  log_write(logger, msg, LOG_INFO);
+
+  uint8_t adjusted_channel = channel - pico->channel_offset;
+  float frv = * (float*) &buffer[4 * adjusted_channel];
+  sprintf(msg, "pico_get_vhv: Extracted float value: %.4f", frv);
+  log_write(logger, msg, LOG_INFO);
+
+  Message_t* rv = message_wrap_float(frv);
+  free(buffer);
+  return rv;
+}
+
+/*
 Message_t* pico_get_vhv(Pico_t* pico, uint8_t channel){
   char reading = 'V';
   char* buffer = malloc(24);
@@ -47,6 +85,7 @@ Message_t* pico_get_vhv(Pico_t* pico, uint8_t channel){
   free(buffer);
   return rv;
 }
+*/
 
 Message_t* pico_get_ihv(Pico_t* pico, uint8_t channel){
   char reading = 'H';
@@ -270,7 +309,7 @@ void* pico_loop(void* args){
     // lv commands
     if (task->command.name == COMMAND_get_vhv){
       uint8_t channel = task->command.char_parameter;
-      rv = pico_get_vhv(pico, channel);
+      rv = pico_get_vhv(pico, channel, logger);
     }
     else if (task->command.name == COMMAND_get_ihv){
       uint8_t channel = task->command.char_parameter;
