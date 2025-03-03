@@ -323,96 +323,60 @@ float i2c_deferred_hv_query(int fd, uint8_t channel, Logger_t* logger){
   log_write(logger, msg, LOG_INFO);
 
   // first, construct query of hv voltage
-  char writeable[13];
-  // command name
-  writeable[0]  = (COMMAND_get_vhv & 0xFF000000) >> 24;
-  writeable[1]  = (COMMAND_get_vhv & 0x00FF0000) >> 16;
-  writeable[2]  = (COMMAND_get_vhv & 0x0000FF00) >>  8;
-  writeable[3]  = (COMMAND_get_vhv & 0x000000FF) >>  0;
-  // command type
-  writeable[4]  = (TYPE_pico       & 0xFF000000) >> 24;
-  writeable[5]  = (TYPE_pico       & 0x00FF0000) >> 16;
-  writeable[6]  = (TYPE_pico       & 0x0000FF00) >>  8;
-  writeable[7]  = (TYPE_pico       & 0x000000FF) >>  0;
-  // channel
-  writeable[8]  = (char) channel;
-  // unused
-  writeable[9]  = 0;
-  writeable[10] = 0;
-  writeable[11] = 0;
-  writeable[12] = 0;
+  char xc;
+  unsigned int xu;
+  float xf;
+  MessageBlock_t* block;
+  Message_t* message = message_initialize();
+  block = block_construct('U', 1);
+  xu = COMMAND_get_vhv;
+  block_insert(block, &xu);
+  message_append(message, block);
+  block = block_construct('U', 1);
+  xu = TYPE_pico;
+  block_insert(block, &xu);
+  message_append(message, block);
+  block = block_construct('C', 1);
+  xc = (char) channel;
+  block_insert(block, &xc);
+  message_append(message, block);
+  block = block_construct('F', 1);
+  xf = 0.0;
+  block_insert(block, &xf);
+  message_append(message, block);
 
-  // Log the command bytes in hex
-  sprintf(msg, "i2c_deferred_hv_query: Command hex dump: %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X",
-          (unsigned char)writeable[0], (unsigned char)writeable[1], 
-          (unsigned char)writeable[2], (unsigned char)writeable[3],
-          (unsigned char)writeable[4], (unsigned char)writeable[5], 
-          (unsigned char)writeable[6], (unsigned char)writeable[7],
-          (unsigned char)writeable[8], (unsigned char)writeable[9], 
-          (unsigned char)writeable[10], (unsigned char)writeable[11],
-          (unsigned char)writeable[12]);
-  log_write(logger, msg, LOG_INFO);
+  // Get current time for timeout tracking
+  time_t start_time = time(NULL);
 
-  // Log before write
-  sprintf(msg, "i2c_deferred_hv_query: About to write %lu bytes to fd %d", sizeof(writeable), fd);
-  log_write(logger, msg, LOG_INFO);
-  
-  // Check write result
-  int bytes_written = write(fd, &writeable, sizeof(writeable));
-  sprintf(msg, "i2c_deferred_hv_query: Write returned %d (expected %lu)", bytes_written, sizeof(writeable));
-  log_write(logger, msg, LOG_INFO);
-  
-  if (bytes_written < 0) {
-    sprintf(msg, "i2c_deferred_hv_query: Write ERROR: %s (errno=%d)", strerror(errno), errno);
-    log_write(logger, msg, LOG_INFO);
-    return -9.9;
-  }
+  // perform query
+  message_send(message, fd);
+  message_destroy(message);
 
   // Log before read
   sprintf(msg, "i2c_deferred_hv_query: About to read 4 bytes from fd %d", fd);
   log_write(logger, msg, LOG_INFO);
 
-  // perform query
-  float queried;
 
-  // Get current time for timeout tracking
-  time_t start_time = time(NULL);
-
-  // This is where we'll likely hang
-  int nread = read(fd, &queried, 4);
+  float queried = -9.9;
+  if (0 < message_recv(&message, fd)){
+    if (message->count == 2){
+      if (message->blocks[1]->type == 'F'){
+        queried = block_as_float(message->blocks[1]);
+      }
+    }
+    message_destroy(message);
+  }
 
   // If we get here, log the read result
   time_t end_time = time(NULL);
   double elapsed = difftime(end_time, start_time);
 
-  sprintf(msg, "i2c_deferred_hv_query: Read returned %d bytes after %.1f seconds", nread, elapsed);
+  sprintf(msg, "i2c_deferred_hv_query: Read returned after %.1f seconds", elapsed);
   log_write(logger, msg, LOG_INFO);
-
-  if (nread < 0) {
-    sprintf(msg, "i2c_deferred_hv_query: Read ERROR: %s (errno=%d)", strerror(errno), errno);
-    log_write(logger, msg, LOG_INFO);
-    return -9.9;
-  } else if (nread < 1) {
-    sprintf(msg, "i2c_deferred_hv_query: Read returned no data");
-    log_write(logger, msg, LOG_INFO);
-    return -9.9;
-  }
 
   // If we got data, print it
   sprintf(msg, "i2c_deferred_hv_query: Read successful, value=%.2f", queried);
   log_write(logger, msg, LOG_INFO);
-
-  //write(fd, &writeable, sizeof(writeable));
-  ////msleep(100);
-  //int nread;
-  //if ((nread = read(fd, &queried, 4)) < 1){
-  //  sprintf(msg, "  i2c_deferred_hv_query: exit 1");
-  //  log_write(logger, msg, LOG_INFO);
-  //  return -9.9;
-  //}
-
-  //sprintf(msg, "  i2c_deferred_hv_query: exit 2");
-  //log_write(logger, msg, LOG_INFO);
 
   return queried;
 }
