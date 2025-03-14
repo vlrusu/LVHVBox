@@ -121,15 +121,18 @@ class Connection:
     def recv_message(self):
         chunk = 1024
         rv = b''
+        print(3)
         recv = self.client.recv(chunk)
+        print(4)
         while 0 < len(recv):
             rv += recv
             try:
                 recv = self.client.recv(chunk)
             except:
                 recv = b''
-
+        print(5)
         rv = self.decode_message(rv)
+        print(6, rv)
 
         # Handle error: Check if it's a single integer block
         if len(rv) == 1 and isinstance(rv[0], tuple) and rv[0][0] == 'i':

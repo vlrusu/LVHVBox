@@ -162,20 +162,26 @@ void* client_handler(void* args){
         // TODO catch errors here
         pthread_cond_wait(&(task.condition), &local_mutex);
       }
+      sprintf(msg, "task complete");
+      log_write(logger, msg, LOG_INFO);
       pthread_mutex_unlock(&local_mutex);
     }
 
     // send response back to client
     //write(task.addr, &(task.rv), sizeof(task.rv));
 
-    if (task.error < 0) {
-      Message_t* error_msg = message_wrap_int(task.error);
-      message_send(error_msg, task.addr);
-      message_destroy(error_msg);
-    }
-    else {
+    //if (task.error < 0) {
+    //  sprintf(msg, "handling error");
+    //  log_write(logger, msg, LOG_INFO);
+    //  Message_t* error_msg = message_wrap_int(task.error);
+    //  message_send(error_msg, task.addr);
+    //  message_destroy(error_msg);
+    //}
+    //else {
+    //  sprintf(msg, "handling not-error");
+    //  log_write(logger, msg, LOG_INFO);
       message_send(task.rv, task.addr);
-    }
+    //}
     message_destroy(task.rv);
     free(item);
     task_destroy(&task);

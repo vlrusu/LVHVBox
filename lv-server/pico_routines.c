@@ -22,7 +22,7 @@ void pico_read_low_timeout(Pico_t* pico, char* buffer, size_t size,
   libusb_bulk_transfer(pico->handle, 0x82, buffer, size, 0, timeout);
 }
 
-void pico_write_read_low(Pico_t* pico, char* src, size_t isize,
+int pico_write_read_low(Pico_t* pico, char* src, size_t isize,
                                        char* buffer, size_t osize){
   int write_status = pico_write_low(pico, src, isize);
   if (write_status < 0) return write_status;
@@ -40,9 +40,14 @@ void pico_write_read_low_timeout(Pico_t* pico,
   pico_read_low_timeout(pico, buf, osize, otmout);
 }
 
-Message_t* pico_get_vhv(Pico_t* pico, uint8_t channel){
+Message_t* pico_get_vhv(Pico_t* pico, uint8_t channel, Logger_t* logger){
   char reading = 'V';
   char* buffer = malloc(24);
+
+  char msg[128];
+  sprintf(msg, "pico_get_vhv: about to communicate with pico");
+  log_write(logger, msg, LOG_INFO);
+
   int status = pico_write_read_low(pico, &reading, 1, buffer, 24);
 
   // error
@@ -278,10 +283,14 @@ void* pico_loop(void* args){
 
     // execute pico operation
     Message_t* rv;
+    sprintf(msg, "null message made");
+    log_write(logger, msg, LOG_INFO);
     // lv commands
     if (task->command.name == COMMAND_get_vhv){
+      sprintf(msg, "about to call get_vhv");
+      log_write(logger, msg, LOG_INFO);
       uint8_t channel = task->command.char_parameter;
-      rv = pico_get_vhv(pico, channel);
+      rv = pico_get_vhv(pico, channel, logger);
     }
     else if (task->command.name == COMMAND_get_ihv){
       uint8_t channel = task->command.char_parameter;
@@ -372,6 +381,8 @@ void* pico_loop(void* args){
     // check error message -- single negative ints
     // use libusb_error_name() or libusb_strerror() to decode
     if (rv->count == 1 && rv->blocks[0]->type == 'i') {
+      sprintf(msg, "we're in the error handling though");
+      log_write(logger, msg, LOG_INFO);
       int result = message_unwrap_int(rv);
       if (result < 0) {
         task->error = result;

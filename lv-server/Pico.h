@@ -6,8 +6,8 @@
 #define PICO_H
 
 // magic numbers to differentiate lower/upper channels
-#define PICO_VENDOR_ID_0 0xcaf0
-#define PICO_VENDOR_ID_1 0xcaf1
+#define PICO_VENDOR_ID_0 0xcaf1
+#define PICO_VENDOR_ID_1 0xcaf0
 #define PICO_PRODUCT_ID 0x4003
 
 #include <stdlib.h>
