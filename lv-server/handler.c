@@ -167,7 +167,15 @@ void* client_handler(void* args){
 
     // send response back to client
     //write(task.addr, &(task.rv), sizeof(task.rv));
-    message_send(task.rv, task.addr);
+
+    if (task.error < 0) {
+      Message_t* error_msg = message_wrap_int(task.error);
+      message_send(error_msg, task.addr);
+      message_destroy(error_msg);
+    }
+    else {
+      message_send(task.rv, task.addr);
+    }
     message_destroy(task.rv);
     free(item);
     task_destroy(&task);

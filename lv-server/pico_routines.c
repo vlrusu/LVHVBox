@@ -4,8 +4,8 @@
 
 #include "pico_routines.h"
 
-void pico_write_low(Pico_t* pico, char* src, size_t size){
-  libusb_bulk_transfer(pico->handle, 0x02, src, size, 0, 0);
+int pico_write_low(Pico_t* pico, char* src, size_t size){
+  return libusb_bulk_transfer(pico->handle, 0x02, src, size, 0, 0);
 }
 
 void pico_write_low_timeout(Pico_t* pico, char* src, size_t size,
@@ -13,8 +13,8 @@ void pico_write_low_timeout(Pico_t* pico, char* src, size_t size,
   libusb_bulk_transfer(pico->handle, 0x02, src, size, 0, timeout);
 }
 
-void pico_read_low(Pico_t* pico, char* buffer, size_t size){
-  libusb_bulk_transfer(pico->handle, 0x82, buffer, size, 0, 0);
+int pico_read_low(Pico_t* pico, char* buffer, size_t size){
+  return libusb_bulk_transfer(pico->handle, 0x82, buffer, size, 0, 0);
 }
 
 void pico_read_low_timeout(Pico_t* pico, char* buffer, size_t size,
@@ -24,8 +24,13 @@ void pico_read_low_timeout(Pico_t* pico, char* buffer, size_t size,
 
 void pico_write_read_low(Pico_t* pico, char* src, size_t isize,
                                        char* buffer, size_t osize){
-  pico_write_low(pico, src, isize);
-  pico_read_low(pico, buffer, osize);
+  int write_status = pico_write_low(pico, src, isize);
+  if (write_status < 0) return write_status;
+
+  int read_status = pico_read_low(pico, buffer, osize);
+  if (read_status < 0) return read_status;
+
+  return 0;
 }
 
 void pico_write_read_low_timeout(Pico_t* pico,
@@ -38,7 +43,13 @@ void pico_write_read_low_timeout(Pico_t* pico,
 Message_t* pico_get_vhv(Pico_t* pico, uint8_t channel){
   char reading = 'V';
   char* buffer = malloc(24);
-  pico_write_read_low(pico, &reading, 1, buffer, 24);
+  int status = pico_write_read_low(pico, &reading, 1, buffer, 24);
+
+  // error
+  if (status < 0) {
+      free(buffer);
+      return message_wrap_int(status);
+  }
 
   channel -= pico->channel_offset;
   float frv = * (float*) &buffer[4 * channel];
@@ -357,6 +368,20 @@ void* pico_loop(void* args){
     // log_write(logger, msg, LOG_VERBOSE);
     pthread_mutex_lock(&(task->mutex));
     task->rv = rv;
+
+    // check error message -- single negative ints
+    // use libusb_error_name() or libusb_strerror() to decode
+    if (rv->count == 1 && rv->blocks[0]->type == 'i') {
+      int result = message_unwrap_int(rv);
+      if (result < 0) {
+        task->error = result;
+      }
+      else {
+        fprintf(stderr, "Warning: Unknown pico error encountered (%d)\n", result);
+        task->error = LIBUSB_ERROR_OTHER;
+      }
+    }
+
     task->complete = 1;
     pthread_mutex_unlock(&(task->mutex));
     pthread_cond_signal(&(task->condition));
