@@ -7,6 +7,7 @@
 #include "handler.h"
 #include "utils.h"
 #include "pico_routines.h"
+#include "pico_registry.h"
 
 void* client_handler(void* args){
   client_handler_args_t* casted = (client_handler_args_t*) args;
@@ -100,28 +101,52 @@ void* client_handler(void* args){
     }
     // pico commands
     else if (task.command.type == TYPE_pico){
-      // first, global slow controls are split between the two picos...
-      if (task.command.name == COMMAND_query_current){
-        queue_push(pico_a_queue, item);
-        queued = 1;
-      }
-      else if (task.command.name == COMMAND_query_pcb_temperature){
-        queue_push(pico_b_queue, item);
-        queued = 1;
-      }
-      // otherwise, pico of local command is determined by the channel #
-      else if (task.command.char_parameter < 6){
-        queue_push(pico_a_queue, item);
-        queued = 1;
-      }
-      else if (task.command.char_parameter < 12){
-        queue_push(pico_b_queue, item);
-        queued = 1;
-      }
-      else{
-        sprintf(msg, "client %d pico command to unknown channel %d", addr, task.command.char_parameter);
+      // Check if the required pico is connected
+      uint8_t channel = task.command.char_parameter;
+      size_t pico_id = (channel < 6) ? 0 : 1;
+
+      if (!pico_is_connected(pico_id)) {
+        sprintf(msg, "WARNING: command issued to invalid pico %d channel %d", pico_id, channel);
         log_write(logger, msg, LOG_INFO);
+
+        Message_t* error_msg = message_initialize();
+        const char* error_str = "ERROR";
+        size_t str_len = strlen(error_str);
+        MessageBlock_t* block = block_construct('C', str_len);
+        for (size_t i = 0; i < str_len; i++) {
+            block_insert(block, (void*)&error_str[i]);
+        }
+
+        message_append(error_msg, block);
+
+        message_send(error_msg, task.addr);
+        message_destroy(error_msg);
+        continue;
+      } else {
+        // first, global slow controls are split between the two picos...
+        if (task.command.name == COMMAND_query_current){
+          queue_push(pico_a_queue, item);
+          queued = 1;
+        }
+        else if (task.command.name == COMMAND_query_pcb_temperature){
+          queue_push(pico_b_queue, item);
+          queued = 1;
+        }
+        // otherwise, pico of local command is determined by the channel #
+        else if (task.command.char_parameter < 6){
+          queue_push(pico_a_queue, item);
+          queued = 1;
+        }
+        else if (task.command.char_parameter < 12){
+          queue_push(pico_b_queue, item);
+          queued = 1;
+        }
+        else{
+          sprintf(msg, "client %d pico command to unknown channel %d", addr, task.command.char_parameter);
+          log_write(logger, msg, LOG_INFO);
+        }
       }
+
     }
     else{
       sprintf(msg, "client %d command of unknown type %u", addr, task.command.type);

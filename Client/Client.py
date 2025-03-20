@@ -172,6 +172,8 @@ def safe_command_execution(func):
             print("Bad Input:", e)
         except AssertionError:
             print("Channel number is out of allowed range")
+        except TypeError:
+            print("Pico not found")
 
     return wrapper
 
