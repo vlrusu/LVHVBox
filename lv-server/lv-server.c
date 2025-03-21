@@ -30,6 +30,7 @@
 #include "i2c_routines.h"
 #include "spi_routines.h"
 #include "pico_routines.h"
+#include "pico_registry.h"
 
 // i2c globals
 extern uint8_t lv_mcp_reset;
@@ -120,10 +121,16 @@ int main(int argc, char* argv[]){
     exit_on_error(msg);
   }
   libusb_set_option(NULL, LIBUSB_OPTION_LOG_LEVEL, LIBUSB_LOG_LEVEL_WARNING);
+
+  pico_registry_init();
+
   Pico_t pico_a;
   pico_init(&pico_a, PICO_VENDOR_ID_0, 0, 0);
+  pico_registry_set_status(pico_a.id, pico_a.handle != NULL);
+
   Pico_t pico_b;
-  pico_init(&pico_b, PICO_VENDOR_ID_1, 1, 6); // USING THIS ONE, VENDOR_ID_1
+  pico_init(&pico_b, PICO_VENDOR_ID_1, 1, 6);
+  pico_registry_set_status(pico_b.id, pico_b.handle != NULL);
 
   // define queues
   PriorityQueue_t i2c_queue;

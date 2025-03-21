@@ -35,13 +35,13 @@ typedef struct {
   Logger_t* logger;
 } pico_loop_args_t;
 
-void pico_write_low(Pico_t*, char*, size_t);
-void pico_write_low_timeout(Pico_t*, char*, size_t, unsigned int, Logger_t*);
-void pico_read_low(Pico_t*, char*, size_t);
-void pico_read_low_timeout(Pico_t*, char*, size_t, unsigned int, Logger_t*);
-void pico_write_read_low(Pico_t*, char*, size_t, char*, size_t);
+int pico_write_low(Pico_t*, char*, size_t);
+void pico_write_low_timeout(Pico_t*, char*, size_t, unsigned int);
+int pico_read_low(Pico_t*, char*, size_t);
+void pico_read_low_timeout(Pico_t*, char*, size_t, unsigned int);
+int pico_write_read_low(Pico_t*, char*, size_t, char*, size_t);
 void pico_write_read_low_timeout(Pico_t* pico, char*, size_t, unsigned int,
-                                               char*, size_t, unsigned int, Logger_t*);
+                                               char*, size_t, unsigned int);
 Message_t* pico_get_vhv(Pico_t*, uint8_t, Logger_t*);
 Message_t* pico_get_ihv(Pico_t*, uint8_t);
 Message_t* pico_enable_trip(Pico_t* ,uint8_t);
@@ -63,7 +63,7 @@ Message_t* pico_disable_pedestal(Pico_t*);
 Message_t* pico_update_pedestal(Pico_t*, uint8_t);
 Message_t* pico_begin_current_buffering(Pico_t*);
 Message_t* pico_end_current_buffering(Pico_t*);
-Message_t* pico_query_current_buffer(Pico_t*, uint8_t, Logger_t*);
+Message_t* pico_query_current_buffer(Pico_t*, uint8_t);
 void* pico_loop(void*);
 
 #endif

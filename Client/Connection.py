@@ -6,6 +6,22 @@ import ctypes
 import socket
 import struct
 
+LIBUSB_ERROR_MAP = {
+    -1: "LIBUSB_ERROR_IO: Input/output error",
+    -2: "LIBUSB_ERROR_INVALID_PARAM: Invalid parameter",
+    -3: "LIBUSB_ERROR_ACCESS: Permission denied",
+    -4: "LIBUSB_ERROR_NO_DEVICE: No device connected",
+    -5: "LIBUSB_ERROR_NOT_FOUND: Entity not found",
+    -6: "LIBUSB_ERROR_BUSY: Device is busy",
+    -7: "LIBUSB_ERROR_TIMEOUT: Operation timed out",
+    -8: "LIBUSB_ERROR_OVERFLOW: Overflow error",
+    -9: "LIBUSB_ERROR_PIPE: Pipe error",
+    -10: "LIBUSB_ERROR_INTERRUPTED: System call interrupted",
+    -11: "LIBUSB_ERROR_NO_MEM: Memory allocation failure",
+    -12: "LIBUSB_ERROR_NOT_SUPPORTED: Operation not supported",
+    -99: "LIBUSB_ERROR_OTHER: Other error"
+}
+
 class Connection:
     def __init__(self, host, port):
         self.host = host
@@ -105,15 +121,27 @@ class Connection:
     def recv_message(self):
         chunk = 1024
         rv = b''
+        print(3)
         recv = self.client.recv(chunk)
+        print(4)
         while 0 < len(recv):
             rv += recv
             try:
                 recv = self.client.recv(chunk)
             except:
                 recv = b''
-
+        print(5)
         rv = self.decode_message(rv)
+        print(6, rv)
+
+        # Handle error: Check if it's a single integer block
+        if len(rv) == 1 and isinstance(rv[0], tuple) and rv[0][0] == 'i':
+            error_code = rv[0][1]  # Extract the integer error code
+            if error_code < 0:
+                error_message = LIBUSB_ERROR_MAP.get(error_code, f"Unknown error ({error_code})")
+                print(f"Error received: {error_message}")
+                return None
+
         assert(rv[0] == self.check)
         rv = rv[1:]
         return rv

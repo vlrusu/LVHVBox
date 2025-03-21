@@ -4,111 +4,62 @@
 
 #include "pico_routines.h"
 
-void pico_write_low(Pico_t* pico, char* src, size_t size){
-  libusb_bulk_transfer(pico->handle, 0x02, src, size, 0, 0);
+int pico_write_low(Pico_t* pico, char* src, size_t size){
+  return libusb_bulk_transfer(pico->handle, 0x02, src, size, 0, 0);
 }
 
-//void pico_write_low_timeout(Pico_t* pico, char* src, size_t size,
-//                                          unsigned int timeout){
-//  libusb_bulk_transfer(pico->handle, 0x02, src, size, 0, timeout);
-//}
-
-void pico_write_low_timeout(Pico_t* pico, char* src, size_t size, unsigned int timeout, Logger_t* logger) {
-  int transferred = 0;
-  int status = libusb_bulk_transfer(pico->handle, 0x02, src, size, &transferred, timeout);
-
-  if (status != 0) {
-    switch (status) {
-      case LIBUSB_ERROR_TIMEOUT:
-        // Handle timeout - clear the halt condition on the endpoint
-        libusb_clear_halt(pico->handle, 0x02);
-        break;
-      case LIBUSB_ERROR_PIPE:
-        // Handle pipe error - endpoint halted
-        libusb_clear_halt(pico->handle, 0x02);
-        break;
-      case LIBUSB_ERROR_NO_DEVICE:
-        // Device disconnected - nothing we can do
-        break;
-      default:
-        // Other errors - try to reset the device
-        if (libusb_reset_device(pico->handle) != 0) {
-          // If reset fails, close and reopen device
-          libusb_close(pico->handle);
-          pico->handle = libusb_open_device_with_vid_pid(NULL,
-                         pico->id == 0 ? PICO_VENDOR_ID_0 : PICO_VENDOR_ID_1,
-                         PICO_PRODUCT_ID);
-          if (pico->handle != NULL) {
-            libusb_set_auto_detach_kernel_driver(pico->handle, 1);
-            libusb_claim_interface(pico->handle, 1);
-          }
-        }
-        break;
-    }
-  }
+void pico_write_low_timeout(Pico_t* pico, char* src, size_t size,
+                                          unsigned int timeout){
+  libusb_bulk_transfer(pico->handle, 0x02, src, size, 0, timeout);
 }
 
-void pico_read_low(Pico_t* pico, char* buffer, size_t size){
-  libusb_bulk_transfer(pico->handle, 0x82, buffer, size, 0, 0);
+int pico_read_low(Pico_t* pico, char* buffer, size_t size){
+  return libusb_bulk_transfer(pico->handle, 0x82, buffer, size, 0, 0);
 }
 
-//void pico_read_low_timeout(Pico_t* pico, char* buffer, size_t size, unsigned int timeout){
-//  libusb_bulk_transfer(pico->handle, 0x82, buffer, size, 0, timeout);
-//}
-
-void pico_read_low_timeout(Pico_t* pico, char* buffer, size_t size, unsigned int timeout, Logger_t* logger) {
-  int transferred = 0;
-  int status = libusb_bulk_transfer(pico->handle, 0x82, buffer, size, &transferred, timeout);
-
-  if (status != 0) {
-    // Handle based on error type
-    switch (status) {
-      case LIBUSB_ERROR_TIMEOUT:
-        // Clear endpoint
-        libusb_clear_halt(pico->handle, 0x82);
-        memset(buffer, 0, size); // Zero the buffer
-        break;
-      case LIBUSB_ERROR_NO_DEVICE:
-        // Device disconnected
-        memset(buffer, 0, size);
-        // Could mark pico handle as invalid
-        break;
-      default:
-        // Other errors
-        memset(buffer, 0, size);
-        libusb_reset_device(pico->handle);
-        break;
-    }
-  }
+void pico_read_low_timeout(Pico_t* pico, char* buffer, size_t size,
+                                         unsigned int timeout){
+  libusb_bulk_transfer(pico->handle, 0x82, buffer, size, 0, timeout);
 }
 
-void pico_write_read_low(Pico_t* pico, char* src, size_t isize,
+int pico_write_read_low(Pico_t* pico, char* src, size_t isize,
                                        char* buffer, size_t osize){
-  pico_write_low(pico, src, isize);
-  pico_read_low(pico, buffer, osize);
+  int write_status = pico_write_low(pico, src, isize);
+  if (write_status < 0) return write_status;
+
+  int read_status = pico_read_low(pico, buffer, osize);
+  if (read_status < 0) return read_status;
+
+  return 0;
 }
 
 void pico_write_read_low_timeout(Pico_t* pico,
                                  char* src, size_t isize, unsigned int itmout,
-                                 char* buf, size_t osize, unsigned int otmout, Logger_t* logger){
-  pico_write_low_timeout(pico, src, isize, itmout, logger);
-  pico_read_low_timeout(pico, buf, osize, otmout, logger);
+                                 char* buf, size_t osize, unsigned int otmout){
+  pico_write_low_timeout(pico, src, isize, itmout);
+  pico_read_low_timeout(pico, buf, osize, otmout);
 }
 
 Message_t* pico_get_vhv(Pico_t* pico, uint8_t channel, Logger_t* logger){
   char reading = 'V';
   char* buffer = malloc(24);
 
-  //char msg[128];
-  //sprintf(msg, "0");
-  //log_write(logger, msg, LOG_INFO);
+  char msg[128];
+  sprintf(msg, "pico_get_vhv: about to communicate with pico");
+  log_write(logger, msg, LOG_INFO);
 
-  //pico_write_read_low(pico, &reading, 1, buffer, 24);
-  pico_write_read_low_timeout(pico, &reading, 1, 500, buffer, 24, 500, logger);
+  int status = pico_write_read_low(pico, &reading, 1, buffer, 24);
+
+  // error
+  if (status < 0) {
+      free(buffer);
+      return message_wrap_int(status);
+  }
 
   channel -= pico->channel_offset;
   float frv = * (float*) &buffer[4 * channel];
   Message_t* rv = message_wrap_float(frv);
+
   free(buffer);
   return rv;
 }
@@ -291,14 +242,14 @@ Message_t* pico_end_current_buffering(Pico_t* pico){
   return rv;
 }
 
-Message_t* pico_query_current_buffer(Pico_t* pico, uint8_t channel, Logger_t* logger){
+Message_t* pico_query_current_buffer(Pico_t* pico, uint8_t channel){
   char writeable = 89;
   writeable += channel - pico->channel_offset;
 
   const unsigned int count = 10;
   float buffer[count];
   pico_write_read_low_timeout(pico, &writeable, 1, 50,
-                                    (char*) buffer, sizeof(buffer), 500, logger);
+                                    (char*) buffer, sizeof(buffer), 500);
 
   // package into structured message
   MessageBlock_t* block = block_construct('F', count);
@@ -322,8 +273,6 @@ void* pico_loop(void* args){
     while (queue_size(queue) < 1){
       msleep(100);
     }
-    sprintf(msg, "0");
-    log_write(logger, msg, LOG_INFO);
 
     // TODO
     // pop next task off the stack
@@ -334,12 +283,13 @@ void* pico_loop(void* args){
 
     // execute pico operation
     Message_t* rv;
+    sprintf(msg, "null message made");
+    log_write(logger, msg, LOG_INFO);
     // lv commands
     if (task->command.name == COMMAND_get_vhv){
-      uint8_t channel = task->command.char_parameter;
-      sprintf(msg, "pico %d processing get_vhv for channel %u (offset %u, adjusted to %u)",
-        pico->id, channel, pico->channel_offset, channel - pico->channel_offset);
+      sprintf(msg, "about to call get_vhv");
       log_write(logger, msg, LOG_INFO);
+      uint8_t channel = task->command.char_parameter;
       rv = pico_get_vhv(pico, channel, logger);
     }
     else if (task->command.name == COMMAND_get_ihv){
@@ -414,7 +364,7 @@ void* pico_loop(void* args){
       // this returns a length-10 subsequence of a length-8000 buffer
       // TODO return arbitrarily many samples
       uint8_t channel = task->command.char_parameter;
-      rv = pico_query_current_buffer(pico, channel, logger);
+      rv = pico_query_current_buffer(pico, channel);
     }
     // otherwise, have encountered an unexpected command
     else{
@@ -427,6 +377,22 @@ void* pico_loop(void* args){
     // log_write(logger, msg, LOG_VERBOSE);
     pthread_mutex_lock(&(task->mutex));
     task->rv = rv;
+
+    // check error message -- single negative ints
+    // use libusb_error_name() or libusb_strerror() to decode
+    if (rv->count == 1 && rv->blocks[0]->type == 'i') {
+      sprintf(msg, "we're in the error handling though");
+      log_write(logger, msg, LOG_INFO);
+      int result = message_unwrap_int(rv);
+      if (result < 0) {
+        task->error = result;
+      }
+      else {
+        fprintf(stderr, "Warning: Unknown pico error encountered (%d)\n", result);
+        task->error = LIBUSB_ERROR_OTHER;
+      }
+    }
+
     task->complete = 1;
     pthread_mutex_unlock(&(task->mutex));
     pthread_cond_signal(&(task->condition));

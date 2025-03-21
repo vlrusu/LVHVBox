@@ -49,8 +49,8 @@ commands = [
     Command("start_usb", "pico"),
     Command("stop_usb", "pico"),
     Command("trip", "pico"),
-    Command("trip_status", "pico", "Trip status {:}"),
-    Command("trip_enabled", "pico", "Trip enabled {:}"),
+    Command("trip_status", "pico", "Trip status {:d}"),
+    Command("trip_enabled", "pico", "Trip enabled {:d}"),
     Command("update_ped", "pico"),
     Command("pcb_temp", "pico", "PCB Temperature, {:.2f} C", is_channel_cmd=False),
     Command("pico_current", "pico", "Pico Current, {:.2f} A", is_channel_cmd=False),
@@ -144,14 +144,8 @@ def create_command_string_default():
 
 # interpret number from format_string provided and print it
 def process_response(blocks, format_str):
-    # if two blocks are present, assume the value is in the second block.
-    if len(blocks) > 1:
-        number = blocks[1][0]
-    else:
-        number = blocks[0][0]
+    number = blocks[0][0]
     print(format_str.format(number))
-    #number = blocks[0][0]
-    #print(format_str.format(number))
 
 
 # ship it. socket.send(command_string)
@@ -178,8 +172,8 @@ def safe_command_execution(func):
             print("Bad Input:", e)
         except AssertionError:
             print("Channel number is out of allowed range")
-        except Exception as e:
-            print(e)
+        except TypeError:
+            print("Pico not found")
 
     return wrapper
 
@@ -192,23 +186,11 @@ def execute_command(sock, command, channel, val):
             assert -1 <= channel < n_channels[command.type_key]
         else:
             assert -1 <= channel < n_channels[command.type_key]+1
-    try:
-        send_command(sock, command, channel, val)
-        sock.client.settimeout(.1) # seconds
-        cmd_output = sock.recv_message()
-        sock.client.settimeout(0) # seconds
-        if not cmd_output:
-            raise TimeoutError("No response received")
-    except socket.timeout:
-        print("Channel not responding (timeout)")
-        sock.client.send(sock.encode_message(0))
-        sock.client.shutdown(socket.SHUT_RDWR)
-        sock.close()
-        sock.reestablish()
-        return
-    except Exception as e:
-        print(f"Error during command execution: {e}")
-
+    print(0)
+    send_command(sock, command, channel, val)
+    print(1)
+    cmd_output = sock.recv_message()
+    print(2)
     if command.cmd_output_str_format:
         if channel is not None:
             fmt = f"Channel {channel} " + command.cmd_output_str_format
