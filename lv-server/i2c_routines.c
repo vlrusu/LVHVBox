@@ -388,6 +388,14 @@ float i2c_ramp_hv_fixed_rate(int fd, uint8_t channel, float target,
   float remaining = target - current;
   unsigned int tried = 0;
   int stop = 0;
+
+  // ramp down at full speed and return
+  if (target < current) {
+    uint32_t dvalue = i2c_dac_cast(target);
+    i2c_dac_write(channel, dvalue);
+    return i2c_deferred_hv_query(fd, channel);
+  }
+
   while ((tolerance < fabs(remaining)) && (0 < sign*remaining) && (!stop)){
     float next = current + analog_step;
     sprintf(msg, "%s: ramping %f -> %f", pfx, current, next);
