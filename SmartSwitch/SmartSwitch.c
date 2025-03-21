@@ -161,6 +161,14 @@ void variable_init() {
 
 }
 
+
+float get_single_voltage(PIO pio, uint sm) // obtains a single non-averaged voltage measurement
+{
+  uint32_t temp = pio_sm_get_blocking(pio, sm);
+  float voltage = ((int16_t) temp) * adc_to_V;
+  return voltage;
+}
+
 void cdc_task(float channel_current_averaged[6], float channel_voltage[6], uint sm[6], uint16_t *burst_position, float trip_currents[6], uint8_t* trip_mask, uint8_t* trip_status, float average_current_history[6][average_current_history_length], uint16_t* average_store_position, uint32_t full_current_history[6][full_current_history_length], uint16_t* full_position, uint8_t* current_buffer_run, uint8_t* slow_read, int* before_trip_allowed, uint sm_array[6], int trip_requirement[6])
 {
   if ( tud_cdc_available() )
@@ -236,23 +244,22 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6], uint 
         ped_on = 0;
       
       } else if (receive_chars[0] == 86) { // ----- Send Voltages ----- //
+        gpio_put(all_pins.enablePin, 1); // set mux to voltage
+        sleep_ms(10); // longer than ideal. what's minimum?
+
+        // Debug raw values
         uint32_t raw_values[6];
-        for (uint32_t channel = 0; channel < 3; channel++) {
-          raw_values[channel] = pio_sm_get_blocking(pio_0, sm_array[channel]);
-          raw_values[channel+3] = pio_sm_get_blocking(pio_1, sm_array[channel+3]);
-        }
 
-        // Send the raw ADC values instead of calculated voltages
+        raw_values[0] = pio_sm_get_blocking(pio_0, sm_array[0]);
+        raw_values[1] = 1.;
+        raw_values[2] = pio_sm_get_blocking(pio_0, sm_array[2]);
+        raw_values[3] = pio_sm_get_blocking(pio_1, sm_array[3]);
+        raw_values[4] = pio_sm_get_blocking(pio_1, sm_array[4]);
+        raw_values[5] = pio_sm_get_blocking(pio_1, sm_array[5]);
+
         for (uint8_t i=0; i<6; i++) {
-          // Convert to float to maintain compatibility with existing code
-          float raw_value_as_float = (float)raw_values[i];
-          tud_cdc_write(&raw_value_as_float, sizeof(float));
+          tud_cdc_write(&raw_values[i], sizeof(float));
         }
-
-        //for (uint8_t i=0; i<6; i++) {
-        //  tud_cdc_write(&channel_voltage[i],sizeof(&channel_voltage[i]));
-        //}
-
         tud_cdc_write_flush(); // flushes write buffer, data will not actually be sent without this command
 
       } else if (receive_chars[0] == 73) { // ----- Send Averaged Currents ----- //
@@ -405,13 +412,6 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6], uint 
     
     
     }
-}
-
-float get_single_voltage(PIO pio, uint sm) // obtains a single non-averaged voltage measurement
-{
-  uint32_t temp = pio_sm_get_blocking(pio, sm);
-  float voltage = ((int16_t) temp) * adc_to_V;
-  return voltage;
 }
 
 void get_all_averaged_currents(PIO pio_0, PIO pio_1, uint sm[], float current_array[6], uint32_t full_current_array[6][full_current_history_length], uint16_t* full_position, uint8_t* current_buffer_run, int* remaining_buffer_iterations, int* before_trip_allowed) {

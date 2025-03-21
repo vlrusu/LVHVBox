@@ -314,11 +314,7 @@ Message_t* i2c_lv_power_off(uint8_t channel, uint8_t pin_map[6]){
   return rv;
 }
 
-float i2c_deferred_hv_query(int fd, uint8_t channel, Logger_t* logger){
-  char msg[128];
-  sprintf(msg, "  i2c_deferred_hv_query: ENTER fd=%d, channel=%d", fd, channel);
-  log_write(logger, msg, LOG_INFO);
-
+float i2c_deferred_hv_query(int fd, uint8_t channel){
   // first, construct query of hv voltage
   char xc;
   unsigned int xu;
@@ -342,68 +338,19 @@ float i2c_deferred_hv_query(int fd, uint8_t channel, Logger_t* logger){
   block_insert(block, &xf);
   message_append(message, block);
 
-  // Get current time for timeout tracking
-  time_t start_time = time(NULL);
-
   // perform query
   message_send(message, fd);
-
-  sprintf(msg, "  i2c_deferred_hv_query: Sent message with %d blocks", message->count);
-  log_write(logger, msg, LOG_INFO);
-  for (int i = 0; i < message->count; i++) {
-    sprintf(msg, "  Block %d: type=%c, count=%d, used=%d", i,
-            message->blocks[i]->type,
-            message->blocks[i]->count,
-            message->blocks[i]->used);
-    log_write(logger, msg, LOG_INFO);
-  }
   message_destroy(message);
-
-  // Log before read
-  sprintf(msg, "  i2c_deferred_hv_query: About to read 4 bytes from fd %d", fd);
-  log_write(logger, msg, LOG_INFO);
-
 
   float queried = -9.9;
   if (0 < message_recv(&message, fd)){
-    sprintf(msg, "  i2c_deferred_hv_query: Received message with %d blocks", message->count);
-    log_write(logger, msg, LOG_INFO);
-    for (int i = 0; i < message->count; i++) {
-      sprintf(msg, "  Received Block %d: type=%c, count=%d, used=%d", i,
-              message->blocks[i]->type,
-              message->blocks[i]->count,
-              message->blocks[i]->used);
-      log_write(logger, msg, LOG_INFO);
-      if (message->blocks[i]->type == 'F') {
-        float value = block_as_float(message->blocks[i]);
-        sprintf(msg, "  Float value in block %d: %.4f", i, value);
-        log_write(logger, msg, LOG_INFO);
-      }
-    }
-
     if (message->count == 2){
-      //sprintf(msg, "  i2c_deferred_hv_query: message->count == 2");
-      //log_write(logger, msg, LOG_INFO);
       if (message->blocks[1]->type == 'F'){
-        //sprintf(msg, "  i2c_deferred_hv_query: message->blocks[1]->type == 'F'");
-        //log_write(logger, msg, LOG_INFO);
         queried = block_as_float(message->blocks[1]);
-        //sprintf(msg, "  i2c_deferred_hv_query: queried=%.2f", queried);
       }
     }
     message_destroy(message);
   }
-
-  // If we get here, log the read result
-  time_t end_time = time(NULL);
-  double elapsed = difftime(end_time, start_time);
-
-  sprintf(msg, "  i2c_deferred_hv_query: Read returned after %.1f seconds", elapsed);
-  log_write(logger, msg, LOG_INFO);
-
-  // If we got data, print it
-  sprintf(msg, "  i2c_deferred_hv_query: Read successful, value=%.2f", queried);
-  log_write(logger, msg, LOG_INFO);
 
   return queried;
 }
@@ -435,27 +382,21 @@ float i2c_ramp_hv_fixed_rate(int fd, uint8_t channel, float target,
   char pfx[64];
   sprintf(pfx, "%s", "i2c_ramp_hv_fixed_rate");
   char msg[128];
-  float current = i2c_deferred_hv_query(fd, channel, logger);
+  float current = i2c_deferred_hv_query(fd, channel);
   float sign = (target < current) ? -1.0 : +1.0;
   float analog_step = sign * speed * timestep;
   float remaining = target - current;
   unsigned int tried = 0;
   int stop = 0;
-
-  sprintf(msg, "%s: Starting ramp for channel %d to target %.2fV", pfx, channel, target);
-  log_write(logger, msg, LOG_INFO);
-  sprintf(msg, "%s: current %.2f, remaining %.2f", pfx, current, remaining);
-  log_write(logger, msg, LOG_VERBOSE);
-
   while ((tolerance < fabs(remaining)) && (0 < sign*remaining) && (!stop)){
     float next = current + analog_step;
     sprintf(msg, "%s: ramping %f -> %f", pfx, current, next);
-    log_write(logger, msg, LOG_INFO);
+    log_write(logger, msg, LOG_VERBOSE);
     i2c_set_hv(channel, next);
     msleep(timestep);
-    float updated = i2c_deferred_hv_query(fd, channel, logger);
+    float updated = i2c_deferred_hv_query(fd, channel);
     sprintf(msg, "%s: updated readback of %f", pfx, updated);
-    log_write(logger, msg, LOG_INFO);
+    log_write(logger, msg, LOG_VERBOSE);
     float change = updated - current;
     current = updated;
     tried += 1;
@@ -483,10 +424,6 @@ float i2c_ramp_hv_fixed_rate(int fd, uint8_t channel, float target,
 }
 
 float i2c_ramp_hv_impl(int fd, uint8_t channel, float target, Logger_t* logger){
-  char msg[128];
-  sprintf(msg, "i2c_ramp_hv_impl: Starting ramp for channel %d to target %.2fV", channel, target);
-  log_write(logger, msg, LOG_VERBOSE);
-
   // TODO:
   // - two-stage ramping, slow at ``beginning,'' and faster in bulk
   // - ramping rates should be configurable via external reference
@@ -500,15 +437,7 @@ float i2c_ramp_hv_impl(int fd, uint8_t channel, float target, Logger_t* logger){
 }
 
 Message_t* i2c_ramp_hv(int fd, uint8_t channel, float target, Logger_t* logger){
-  char msg[128];
-  sprintf(msg, "i2c_ramp_hv: Starting ramp for channel %d to target %.2fV", channel, target);
-  log_write(logger, msg, LOG_VERBOSE);
-
   float frv = i2c_ramp_hv_impl(fd, channel, target, logger);
-
-  //sprintf(msg, "RAMP_HV: Completed ramp for channel %d, final value: %.2fV", channel, frv);
-  //log_write(logger, msg, LOG_INFO);
-
   Message_t* rv = message_wrap_float(frv);
   return rv;
 }

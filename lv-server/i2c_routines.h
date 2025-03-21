@@ -51,7 +51,7 @@ Message_t* i2c_read_48V_current(unsigned int);
 int i2c_lv_power_control(uint8_t channel, uint8_t pin_map[6], int value);
 Message_t* i2c_lv_power_on(uint8_t, uint8_t[6]);
 Message_t* i2c_lv_power_off(uint8_t, uint8_t[6]);
-float i2c_deferred_hv_query(int, uint8_t, Logger_t*);
+float i2c_deferred_hv_query(int, uint8_t);
 void i2c_dac_write(uint8_t, uint32_t);
 uint32_t i2c_dac_cast(float);
 void i2c_set_hv(uint8_t, float);

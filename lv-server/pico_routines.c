@@ -37,99 +37,73 @@ void pico_write_read_low_timeout(Pico_t* pico,
 
 Message_t* pico_get_vhv(Pico_t* pico, uint8_t channel, Logger_t* logger){
   char msg[128];
-  sprintf(msg, "pico_get_vhv: ENTER pico=%p, channel=%d, offset=%d",
-          (void*)pico, channel, pico->channel_offset);
-  log_write(logger, msg, LOG_INFO);
+  { // run pico_query_trip_status_all manually to test pico handle
+    char trip_cmd = 33;  // Command used in pico_query_trip_status_all
+    int trip_status = 0;
+    int transferred = 0;
+    int result = libusb_bulk_transfer(pico->handle, 0x02, &trip_cmd, 1, &transferred, 0);
+    sprintf(msg, "pico_get_vhv: Trip command send result=%d", result);
+    log_write(logger, msg, LOG_INFO);
 
-  char reading = 'V';
-  char* buffer = malloc(24);
-  memset(buffer, 0xAA, 24);  // Fill with pattern to detect if read fails
+    transferred = 0;
+    result = libusb_bulk_transfer(pico->handle, 0x82, (char*)&trip_status, sizeof(int), &transferred, 0);
+    sprintf(msg, "pico_get_vhv: Trip status read result=%d, status=%d", result, trip_status);
+    log_write(logger, msg, LOG_INFO);
+  }
 
-  // Get direct access to check return values
-  int transferred = 0;
-  int result = libusb_bulk_transfer(pico->handle, 0x02, &reading, 1, &transferred, 0);
-  sprintf(msg, "pico_get_vhv: Write result=%d, transferred=%d", result, transferred);
-  log_write(logger, msg, LOG_INFO);
-
-  transferred = 0;
-  result = libusb_bulk_transfer(pico->handle, 0x82, buffer, 24, &transferred, 0);
-  sprintf(msg, "pico_get_vhv: Read result=%d, transferred=%d", result, transferred);
-  log_write(logger, msg, LOG_INFO);
-
-  // Dump raw buffer for debugging
-  sprintf(msg, "pico_get_vhv: Raw buffer bytes (first 8): %02X %02X %02X %02X %02X %02X %02X %02X",
-          buffer[0] & 0xFF, buffer[1] & 0xFF, buffer[2] & 0xFF, buffer[3] & 0xFF,
-          buffer[4] & 0xFF, buffer[5] & 0xFF, buffer[6] & 0xFF, buffer[7] & 0xFF);
-  log_write(logger, msg, LOG_INFO);
-
-  uint8_t adjusted_channel = channel - pico->channel_offset;
-  float frv = * (float*) &buffer[4 * adjusted_channel];
-  sprintf(msg, "pico_get_vhv: Extracted float value: %.4f", frv);
-  log_write(logger, msg, LOG_INFO);
-  
-  // Add this line to show both integer and float representations
-  sprintf(msg, "pico_get_vhv: Raw value as uint32: %u, as float with high precision: %.9f", 
-          *(uint32_t*)&buffer[4 * adjusted_channel], frv);
-  log_write(logger, msg, LOG_INFO);
-
-  Message_t* rv = message_wrap_float(frv);
-  free(buffer);
-  return rv;
-}
-
-/*
-Message_t* pico_get_vhv(Pico_t* pico, uint8_t channel, Logger_t* logger){
-  char msg[128];
-  sprintf(msg, "pico_get_vhv: ENTER pico=%p, channel=%d, offset=%d",
-          (void*)pico, channel, pico->channel_offset);
-  log_write(logger, msg, LOG_INFO);
-
-  char reading = 'V';
-  char* buffer = malloc(24);
-  memset(buffer, 0xAA, 24);  // Fill with pattern to detect if read fails
-
-  // Get direct access to check return values
-  int transferred = 0;
-  int result = libusb_bulk_transfer(pico->handle, 0x02, &reading, 1, &transferred, 0);
-  sprintf(msg, "pico_get_vhv: Write result=%d, transferred=%d", result, transferred);
-  log_write(logger, msg, LOG_INFO);
-
-  transferred = 0;
-  result = libusb_bulk_transfer(pico->handle, 0x82, buffer, 24, &transferred, 0);
-  sprintf(msg, "pico_get_vhv: Read result=%d, transferred=%d", result, transferred);
-  log_write(logger, msg, LOG_INFO);
-
-  // Dump raw buffer for debugging
-  sprintf(msg, "pico_get_vhv: Raw buffer bytes (first 8): %02X %02X %02X %02X %02X %02X %02X %02X",
-          buffer[0] & 0xFF, buffer[1] & 0xFF, buffer[2] & 0xFF, buffer[3] & 0xFF,
-          buffer[4] & 0xFF, buffer[5] & 0xFF, buffer[6] & 0xFF, buffer[7] & 0xFF);
-  log_write(logger, msg, LOG_INFO);
-
-  uint8_t adjusted_channel = channel - pico->channel_offset;
-  float frv = * (float*) &buffer[4 * adjusted_channel];
-  sprintf(msg, "pico_get_vhv: Extracted float value: %.4f", frv);
-  log_write(logger, msg, LOG_INFO);
-
-  Message_t* rv = message_wrap_float(frv);
-  free(buffer);
-  return rv;
-}
-*/
-
-/*
-Message_t* pico_get_vhv(Pico_t* pico, uint8_t channel){
   char reading = 'V';
   char* buffer = malloc(24);
   pico_write_read_low(pico, &reading, 1, buffer, 24);
 
+  { // run pico_query_trip_status_all manually to test pico handle
+    char trip_cmd = 33;  // Command used in pico_query_trip_status_all
+    int trip_status = 0;
+    int transferred = 0;
+    int result = libusb_bulk_transfer(pico->handle, 0x02, &trip_cmd, 1, &transferred, 0);
+    sprintf(msg, "pico_get_vhv: Trip command send result=%d", result);
+    log_write(logger, msg, LOG_INFO);
+
+    transferred = 0;
+    result = libusb_bulk_transfer(pico->handle, 0x82, (char*)&trip_status, sizeof(int), &transferred, 0);
+    sprintf(msg, "pico_get_vhv: Trip status read result=%d, status=%d", result, trip_status);
+    log_write(logger, msg, LOG_INFO);
+  }
+
+  // After reading the 24-byte buffer, check all channels
+  for (int i = 0; i < 6; i++) {
+    float value = *(float*)&buffer[4 * i];
+    sprintf(msg, "pico_get_vhv: Channel %d value: %.9f",
+            i + pico->channel_offset, value);
+    log_write(logger, msg, LOG_INFO);
+  }
+
+  // Show the raw bytes for all 24 bytes (6 floats)
+  for (int i = 0; i < 6; i++) {
+    sprintf(msg, "pico_get_vhv: Channel %d raw bytes: %02X %02X %02X %02X",
+            i + pico->channel_offset,
+            buffer[4*i] & 0xFF,
+            buffer[4*i+1] & 0xFF,
+            buffer[4*i+2] & 0xFF,
+            buffer[4*i+3] & 0xFF);
+    log_write(logger, msg, LOG_INFO);
+
+    uint32_t raw_int = *(uint32_t*)&buffer[4 * i];
+    sprintf(msg, "pico_get_vhv: Channel %d as uint32: %u",
+            i + pico->channel_offset, raw_int);
+    log_write(logger, msg, LOG_INFO);
+  }
+
+  sprintf(msg, "pico_get_vhv: Channel: %d",channel);
+  log_write(logger, msg, LOG_INFO);
   channel -= pico->channel_offset;
+  sprintf(msg, "pico_get_vhv: Channel: %d",channel);
+  log_write(logger, msg, LOG_INFO);
   float frv = * (float*) &buffer[4 * channel];
   Message_t* rv = message_wrap_float(frv);
 
   free(buffer);
   return rv;
 }
-*/
 
 Message_t* pico_get_ihv(Pico_t* pico, uint8_t channel){
   char reading = 'H';
@@ -216,16 +190,38 @@ Message_t* pico_query_trip_enabled(Pico_t* pico, uint8_t channel){
   return rv;
 }
 
-Message_t* pico_query_trip_status_all(Pico_t* pico){
+Message_t* pico_query_trip_status_all(Pico_t* pico, Logger_t* logger){
   char writeable = 33;
   int irv;
+
+  char msg[128];
+  sprintf(msg, "pico_query_trip_status_all: ENTER pico=%p, id=%d",
+        (void*)pico, pico->id);
+  log_write(logger, msg, LOG_INFO);
+
+  sprintf(msg, "pico_query_trip_status_all: Sending command 33 (!)", writeable);
+  log_write(logger, msg, LOG_INFO);
+
   pico_write_read_low(pico, &writeable, 1, (char*) &irv, sizeof(irv));
+
+  sprintf(msg, "pico_query_trip_status_all: Received raw trip status: %d (0x%08X)", irv, irv);
+  log_write(logger, msg, LOG_INFO);
+
+  sprintf(msg, "pico_query_trip_status_all: Binary: %c%c%c%c%c%c",
+        (irv & 0x20) ? '1' : '0',
+        (irv & 0x10) ? '1' : '0',
+        (irv & 0x08) ? '1' : '0',
+        (irv & 0x04) ? '1' : '0',
+        (irv & 0x02) ? '1' : '0',
+        (irv & 0x01) ? '1' : '0');
+  log_write(logger, msg, LOG_INFO);
+
   Message_t* rv = message_wrap_int(irv);
   return rv;
 }
 
-Message_t* pico_query_trip_status(Pico_t* pico, uint8_t channel){
-  Message_t* message_mask = pico_query_trip_status_all(pico);
+Message_t* pico_query_trip_status(Pico_t* pico, uint8_t channel, Logger_t* logger){
+  Message_t* message_mask = pico_query_trip_status_all(pico, logger);
   int mask = message_unwrap_int(message_mask);
 
   int selection = (1 << (channel - pico->channel_offset));
@@ -346,13 +342,15 @@ void* pico_loop(void* args){
     QueueItem_t* item = queue_pop(queue);
     task_t* task = (task_t*) (item->payload);
     sprintf(msg, "pico %d received command label %u", pico->id, task->command.name);
-    log_write(logger, msg, LOG_VERBOSE);
+    log_write(logger, msg, LOG_INFO);
 
     // execute pico operation
     Message_t* rv;
     // lv commands
     if (task->command.name == COMMAND_get_vhv){
       uint8_t channel = task->command.char_parameter;
+      sprintf(msg, "pico_loop: entering get_vhv with channel %d", channel);
+      log_write(logger, msg, LOG_INFO);
       rv = pico_get_vhv(pico, channel, logger);
     }
     else if (task->command.name == COMMAND_get_ihv){
@@ -391,7 +389,7 @@ void* pico_loop(void* args){
     }
     else if (task->command.name == COMMAND_query_trip_status){
       uint8_t channel = task->command.char_parameter;
-      rv = pico_query_trip_status(pico, channel);
+      rv = pico_query_trip_status(pico, channel, logger);
     }
     else if (task->command.name == COMMAND_query_current){
       rv = pico_query_current(pico);
