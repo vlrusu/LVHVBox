@@ -5,8 +5,6 @@ import socket
 import time
 import struct
 from collections import namedtuple
-import ctypes
-from Connection import Connection
 
 HISTORY_REQUEST_MAX = 100
 current_buffer_len = 8000  # must be divisible by 10
@@ -33,9 +31,9 @@ commands = [
     Command("down_hv", "hv"),
     Command("enable_ped", "pico"),
     Command("enable_trip", "pico"),
-    Command("get_ihv", "pico", "{:.2f} uA"),
+    Command("get_ihv", "hv", "{:.2f} uA"),
     Command("get_slow_read", "pico", "Slow read {:}"),
-    Command("get_vhv", "pico", "{:.2f} V"),
+    Command("get_vhv", "hv", "{:.2f} V"),
     Command("powerOff", "lv"),
     Command("powerOn", "lv"),
     Command("ramp_hv", "hv"),
@@ -93,7 +91,7 @@ def read_commands():
         # print(string)
 
         # command_dict[i[1]] = bstring_to_chars(string)
-        command_dict[i[1]] = int(i[2])
+        command_dict[i[1]] = string
 
     # print(str(command_dict))
     return command_dict
@@ -143,24 +141,34 @@ def create_command_string_default():
 
 
 # interpret number from format_string provided and print it
-def process_response(blocks, format_str):
-    number = blocks[0][0]
+def process_response(number, format_str):
+    if "{:.2f}" in format_str:
+        number = round(process_float(number), 2)
+    elif "{:}" in format_str:
+        number = int(number[0])
     print(format_str.format(number))
 
 
 # ship it. socket.send(command_string)
-def send_command(connection, command, channel=None, val=0.0):
+def send_command(sock, command, channel=None, val=None):
     command_dict = read_commands()
-    cmd = ctypes.c_uint(command_dict["COMMAND_" + command.name])
-    typ = ctypes.c_uint(command_dict["TYPE_" + command.type_key])
-    channel = channel if channel else 0
-    channel = ctypes.c_char(channel)
-    if command.in_val_type == float:
-        value = ctypes.c_float(float(val))
-    else:
-        value = ctypes.c_int(int(val))
+    command_bytes = bitstring_to_bytes(command_dict["COMMAND_" + command.name])
+    type_bytes = bitstring_to_bytes(command_dict["TYPE_" + command.type_key])
+    command_string = command_bytes + type_bytes
+    channel_bytes = channel.to_bytes(1, byteorder="big") if channel else bytearray(1)
 
-    connection.send_message(cmd, typ, channel, value)
+    if command.in_val_type == float:
+        val_bytes = bytearray(struct.pack("f", float(val))) if val else bytearray(4)
+    else:
+        val_bytes = bytearray(struct.pack("I", int(val))) if val else bytearray(4)
+
+    command_string += channel_bytes + val_bytes
+    assert (
+        len(command_string) == COMMAND_BYTE_LENGTH
+    ), f"Invalid command byte length.{command_string} {len(command_string)}"
+    # padding = bytearray(COMMAND_BYTE_LENGTH - len(command_string))
+    # command_string += padding
+    sock.send(command_string)
 
 
 # wrap command execution in a try except to keep it clean
@@ -185,8 +193,8 @@ def execute_command(sock, command, channel, val):
         else:
             assert -1 <= channel < n_channels[command.type_key]+1
     send_command(sock, command, channel, val)
-    cmd_output = sock.recv_message()
     if command.cmd_output_str_format:
+        cmd_output = sock.recv(1024)
         if channel is not None:
             fmt = f"Channel {channel} " + command.cmd_output_str_format
             process_response(cmd_output, fmt)
@@ -199,12 +207,21 @@ def current_burst(keys):
 
     command_dict = read_commands()
 
+    # send command to stop usb
+    command_stop_usb = bitstring_to_bytes(command_dict["COMMAND_stop_usb"])
+    type_pico = bitstring_to_bytes(command_dict["TYPE_pico"])
+    padding_0 = bytearray(4)
+    bits_channel = (channel).to_bytes(1, byteorder="big")
+    command_string = command_stop_usb + type_pico + bits_channel + padding_0
+    sock.send(command_string)
+
+    time.sleep(0.5)
+
     assert 0 <= channel <= 11
 
-    cmd = ctypes.c_uint(command_dict["COMMAND_current_burst"])
-    typ = ctypes.c_uint(command_dict["TYPE_pico"])
-    channel = ctypes.c_char(channel)
-    padding = ctypes.c_float(0.0)
+    padding = bytearray(4)
+    command_current_burst = bitstring_to_bytes(command_dict["COMMAND_current_burst"])
+    bits_channel = (channel).to_bytes(1, byteorder="big")
     command_string = command_current_burst + type_pico + bits_channel + padding
 
     num_cycles = int(current_buffer_len / full_current_chunk)
@@ -215,10 +232,24 @@ def current_burst(keys):
         # time.sleep(0.2) # put into config.txt later
         # sock.send(bytes(command_string,"utf-8"))
 
-        sock.send_message(cmd, typ, channel, padding)
-        samples = socks.recv_message()
-        for sample in samples:
-            full_currents.append(sample)
+        sock.send(command_string)
+
+        temp = sock.recv(64)
+
+        for i in range(full_current_chunk):
+            byte_loop = []
+            for j in range(4):
+                byte_loop.append(temp[4 * i + j])
+            full_currents.append(process_float(byte_loop))
+
+    # send command to start usb
+    time.sleep(0.5)
+    command_start_usb = bitstring_to_bytes(command_dict["COMMAND_start_usb"])
+    type_pico = bitstring_to_bytes(command_dict["TYPE_pico"])
+    padding_0 = bytearray(4)
+    bits_channel = (channel).to_bytes(1, byteorder="big")
+    command_string = command_start_usb + type_pico + bits_channel + padding_0
+    sock.send(command_string)
 
     # write into new file
     filename = "full_currents_" + str(int(time.time())) + ".txt"
@@ -243,7 +274,7 @@ def process_command(line):
 
     if command.is_channel_cmd:
         channel = None
-        in_val = 0.0
+        in_val = None
         try:
             channel = int(keys[1])
         except IndexError:
@@ -251,28 +282,30 @@ def process_command(line):
         try:
             in_val = keys[2]
         except IndexError:
-            in_val = 0.0
+            in_val = None
         # channel = -1 if len(keys) != 2 else int(keys[1])
         # in_val = None if len(keys) != 3 else keys[2]
         if channel == -1:  # Handle all channels
             # Server expects special channel arg for powering off all channels.
             # This works, or we could change how the server works.
             if command.name == "powerOff":
-                execute_command(connection, command, 6, in_val)
+                execute_command(sock, command, 6, in_val)
                 return
             for channel in range(n_channels[command.type_key]):
-                execute_command(connection, command, channel, in_val)
+                execute_command(sock, command, channel, in_val)
                 time.sleep(0.05)
         else:
-            execute_command(connection, command, channel, in_val)
+            execute_command(sock, command, channel, in_val)
     else:
-        execute_command(connection, command)
+        execute_command(sock, command)
 
 
 if __name__ == "__main__":
-    host = '127.0.0.1'
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    # sock.connect('/tmp/serversock')
+    host = "127.0.0.1"
     port = 12000
-    connection = Connection(host, port)
+    sock.connect((host, port))
 
     while True:
         try:
@@ -281,8 +314,5 @@ if __name__ == "__main__":
                 process_command(line)
         except AssertionError:
             print("Ensure that all arguments are valid")
-        # ejc: no cleanup == bad
-        except EOFError:
-            exit(0)
         except Exception as e:
             print((type(e), e))

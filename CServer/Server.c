@@ -346,7 +346,7 @@ int powerOff(uint8_t channel, int client_addr) {
   sprintf(log_message, "powerOff ch%u", channel);
   write_log(command_log, log_message, client_addr);
 
-  //  uint8_t local_powerChMap[6] = {5, 6, 7, 2, 3, 4};
+  uint8_t local_powerChMap[6] = {5, 6, 7, 2, 3, 4};
 
   if (channel < 0 || channel > 6) {
     error_log("Invalid powerOff channel value");
@@ -364,7 +364,7 @@ int powerOff(uint8_t channel, int client_addr) {
     }
     
     for (int i=0; i<6; i++) {
-      if (MCP_pinWrite(lvpgoodMCP, powerChMap[i], LOW) == -1) {
+      if (MCP_pinWrite(lvpgoodMCP, local_powerChMap[i], LOW) == -1) {
         //return -1;
 
         char error_msg[50];
@@ -379,7 +379,7 @@ int powerOff(uint8_t channel, int client_addr) {
       
     }
   } else {
-    if (MCP_pinWrite(lvpgoodMCP, powerChMap[channel], LOW) == -1) {
+    if (MCP_pinWrite(lvpgoodMCP, local_powerChMap[channel], LOW) == -1) {
       //return -1;
 
       char error_msg[50];
@@ -455,6 +455,7 @@ void get_vhv(uint8_t channel, int client_addr) {
   float return_val = 0;
   
   if (0 <= channel && channel < 6 && use_pico0 == 1) {
+    //printf("get_vhv: reading pico0\n");
     //pthread_mutex_lock(&hvv0_mutex_lock);
     return_val = voltages_0[channel];
     //pthread_mutex_unlock(&hvv0_mutex_lock);
@@ -505,12 +506,12 @@ void get_buffer_status(uint8_t channel, int client_addr) {
   if (0 <= channel && channel < 6 && use_pico0 == 1) {
     pthread_mutex_lock(&usb0_mutex_lock);
     libusb_bulk_transfer(device_handle_0, 0x02, &send_val, 1, 0, 0);
-    libusb_bulk_transfer(device_handle_0, 0x82, input_data, sizeof(input_data), 0, 0);
+    libusb_bulk_transfer(device_handle_0, 0x82, input_data, 1, 0, 0);
     pthread_mutex_unlock(&usb0_mutex_lock);
   } else if (5 < channel & channel < 12 && use_pico1 == 1) {
     pthread_mutex_lock(&usb1_mutex_lock);
     libusb_bulk_transfer(device_handle_1, 0x02, &send_val, 1, 0, 0);
-    libusb_bulk_transfer(device_handle_1, 0x82, input_data, sizeof(input_data), 0, 0);
+    libusb_bulk_transfer(device_handle_0, 0x82, input_data, 1, 0, 0);
     pthread_mutex_unlock(&usb1_mutex_lock);
   } else {
     error_log("Invalid get_buffer_status channel value");
@@ -1114,6 +1115,7 @@ void set_trip_count(uint8_t channel, float value, int client_addr) {
 
 // rampHV
 void ramp_hv(uint8_t channel, float voltage, int client_addr) {  
+
   // log command
   char *command_log = load_config("Command_Log_File");
   char log_message[50];
@@ -1136,18 +1138,33 @@ void ramp_hv(uint8_t channel, float voltage, int client_addr) {
   // calculate current digvalue
   digvalue = ((int)(1 * 16383. * (current_value / 1631.3))) & 0x3FFF;
 
+  printf("Ramping HV - Channel: %u, Target: %.2fV, Current: %.2fV\n",
+       channel, voltage, current_value);
+  printf("Initial digvalue: %u, Final target digvalue: %u\n",
+       digvalue, final_digvalue);
+
   if (0 <= channel && channel < 12) {
+
+    digvalue_difference = final_digvalue - digvalue;
+    printf("Digital value difference: %d\n", digvalue_difference);
 
     if (voltage < current_value) {
       DAC8164_writeChannel(&dac[idac], channel, final_digvalue);
+      printf("Ramping down - Wrote digvalue: %u to DAC %d channel %u\n",
+             final_digvalue, idac, channel);
     } else {
 
       int iteration = 0;
       int max_step = 25;
       float speed_divisor = 3;
-      int dac_step;
+      int dac_step = fmin(25, abs(digvalue_difference)/10);
+
+      printf("Iteration: %d, Current digvalue: %u, Difference: %d, Step: %d\n",
+             iteration, digvalue, digvalue_difference, dac_step);
       
       while (abs(digvalue_difference) >= dac_step) {
+        printf("Iteration: %d, Current digvalue: %u, Difference: %d, Step: %d\n",
+               iteration, digvalue, digvalue_difference, dac_step);
         iteration += 1;
       
         if (dac_step != max_step) {
@@ -1166,6 +1183,8 @@ void ramp_hv(uint8_t channel, float voltage, int client_addr) {
       }
 
       DAC8164_writeChannel(&dac[idac], channel, final_digvalue);
+
+      printf("Ramp complete - Final written digvalue: %u\n", final_digvalue);
 
     }    
 
@@ -1279,7 +1298,7 @@ void readMonV48(uint8_t channel, int client_addr) {
     return;
   }
 
-  write(client_addr, &v48[5-channel], sizeof(v48[5-channel]));
+  write(client_addr, &v48[channel], sizeof(v48[channel]));
 }
 
 // readMonI48
@@ -1294,7 +1313,7 @@ void readMonI48(uint8_t channel, int client_addr) {
     return;
   }
 
-  write(client_addr, &i48[5-channel], sizeof(i48[5-channel]));
+  write(client_addr, &i48[channel], sizeof(i48[channel]));
 }
 // readMonV6
 void readMonV6(uint8_t channel, int client_addr) {
@@ -1308,7 +1327,7 @@ void readMonV6(uint8_t channel, int client_addr) {
     return;
   }
 
-  write(client_addr, &v6[5-channel], sizeof(v6[5-channel]));
+  write(client_addr, &v6[channel], sizeof(v6[channel]));
 }
 
 // readMonI6
@@ -1323,7 +1342,7 @@ void readMonI6(uint8_t channel, int client_addr) {
     return;
   }
 
-  write(client_addr, &i6[5-channel], sizeof(v6[5-channel]));
+  write(client_addr, &i6[channel], sizeof(v6[channel]));
 }
 
 void *command_execution() {
@@ -1409,7 +1428,6 @@ void *handle_client(void *args) {
     if (return_val == 0) {
       printf("Thread terminated \n");
       write_log(command_log, "Client Disconnected", inner_socket);
-      close(inner_socket);
       return 0;
     }
 
@@ -1974,15 +1992,16 @@ int request_averaged_currents(float currents[12][HISTORY_LENGTH], int pico) {
 
 
 int request_voltages(int pico) {
+  //printf("request_voltages: enter\n");
   char voltage_char = 'V';
   char *input_data;
   input_data = (char *)malloc(24);
 
-
-
   if (pico == 0) {
+    //printf("request_voltages: pico0\n");
     pthread_mutex_lock(&usb0_mutex_lock);
     libusb_bulk_transfer(device_handle_0, 0x02, &voltage_char, 1, 0, 0);
+    //usleep(100000);  // 100ms delay
     libusb_bulk_transfer(device_handle_0, 0x82, input_data, 24, 0, 0);
     pthread_mutex_unlock(&usb0_mutex_lock);
   } else {
@@ -1992,7 +2011,32 @@ int request_voltages(int pico) {
     pthread_mutex_unlock(&usb1_mutex_lock);
   }
 
+  //printf("Float values with high precision: ");
+  //for (int i = 0; i < 6; i++) {
+  //    printf("%.10f ", *(float *)&input_data[4 * i]);
+  //}
+
+  //for (int i = 0; i < 6; i++) {
+  //  float val = *(float *)&input_data[4 * i];
+  //  if (val != 0.0f) {
+  //      printf("Non-zero value detected: %.10e\n", val);
+  //  }
+  //}
+
+  //printf("Raw input_data bytes: ");
+  //for (int i = 0; i < 24; i++) {
+  //    printf("%02x ", (unsigned char)input_data[i]);
+  //}
+  //printf("\n");
+
+  //printf("Interpreted float values: ");
+  //for (int i = 0; i < 6; i++) {
+  //    printf("%f ", *(float *)&input_data[4 * i]);
+  //}
+  //printf("\n");
+
   if (pico == 0) {
+    //printf("request_voltages: writing to global voltages_0\n");
     for (uint32_t i = 0; i < 6; i++) {
       voltages_0[i] = *(float *)&input_data[4 * i];
     }
@@ -2533,13 +2577,19 @@ int main( int argc, char **argv ) {
     printf("Pico 0 will not be used.\n");
   }
 
+  printf("Device handle 0: %p\n", device_handle_0);
+  // Also print device information
+  struct libusb_device_descriptor desc;
+  libusb_device* dev = libusb_get_device(device_handle_0);
+  libusb_get_device_descriptor(dev, &desc);
+  printf("VID:PID = %04x:%04x\n", desc.idVendor, desc.idProduct);
+
   device_handle_1 = libusb_open_device_with_vid_pid(NULL, VENDOR_ID_1, PRODUCT_ID);
   if (device_handle_1 == NULL) {
     use_pico1 = 0;
     printf("Pico 1 will not be used.\n");
   }
   
-
   // create data acquisition thread
   if (use_pico0 == 1) {
     pthread_create(&acquisition_thread_0, NULL, acquire_data, &args_0);

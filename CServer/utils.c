@@ -222,9 +222,3 @@ int write_log(char* filename, const char *data, int client_addr) {
 
 
 
-// ejc
-void exit_on_error(char* msg){
-//fprintf(stderr, msg);
-  perror(msg);
-  exit(EXIT_FAILURE);
-}
