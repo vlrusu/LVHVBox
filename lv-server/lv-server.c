@@ -123,7 +123,7 @@ int main(int argc, char* argv[]){
   Pico_t pico_a;
   pico_init(&pico_a, PICO_VENDOR_ID_0, 0, 0);
   Pico_t pico_b;
-  pico_init(&pico_b, PICO_VENDOR_ID_1, 1, 6);
+  pico_init(&pico_b, PICO_VENDOR_ID_1, 1, 6); // USING THIS ONE, VENDOR_ID_1
 
   // define queues
   PriorityQueue_t i2c_queue;
