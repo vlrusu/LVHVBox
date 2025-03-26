@@ -37,6 +37,10 @@ struct Pins {
   uint8_t enablePin;
 } all_pins;
 
+typedef struct {
+  uint ids[6];
+} SMArray;
+
 PIO pio_0 = pio0;  // pio block 0 reference
 PIO pio_1 = pio1;  // pio block 1 reference
 
@@ -156,14 +160,87 @@ void variable_init() {
   }
 }
 
+SMArray state_machine_init() {
+  // float clkdiv = 34; // set clock divider for PIO
+  float clkdiv = 45;  // results in 81.967 kHz
+
+  // Start clock state machine for PIO block 0
+  uint sm_clock = pio_claim_unused_sm(pio_0, true);
+  uint offset_clock = pio_add_program(pio_0, &clock_program);
+  clock_0_program_init(pio_0, sm_clock, offset_clock, all_pins.csPin_0,
+                       all_pins.sclk_0, clkdiv);
+
+  // start channel 0 state machine
+  uint sm_channel_0 = pio_claim_unused_sm(pio_0, true);
+  uint offset_channel_0 = pio_add_program(pio_0, &channel_program);
+  channel_program_init(pio_0, sm_channel_0, offset_channel_0,
+                       all_pins.headerPins[0], clkdiv);
+
+  // start channel 1 state machine
+  uint sm_channel_1 = pio_claim_unused_sm(pio_0, true);
+  uint offset_channel_1 = pio_add_program(pio_0, &channel_program);
+  channel_program_init(pio_0, sm_channel_1, offset_channel_1,
+                       all_pins.headerPins[1], clkdiv);
+
+  // start channel 2 state machine
+  uint sm_channel_2 = pio_claim_unused_sm(pio_0, true);
+  uint offset_channel_2 = pio_add_program(pio_0, &channel_program);
+  channel_program_init(pio_0, sm_channel_2, offset_channel_2,
+                       all_pins.headerPins[2], clkdiv);
+
+  // Start clock state machien for PIO block 1
+  uint sm_clock_1 = pio_claim_unused_sm(pio_1, true);
+  uint offset_clock_1 = pio_add_program(pio_1, &clock_program);
+  clock_1_program_init(pio_1, sm_clock_1, offset_clock_1, all_pins.csPin_1,
+                       all_pins.sclk_1, clkdiv);
+
+  // start channel 3 state machine
+  uint sm_channel_3 = pio_claim_unused_sm(pio_1, true);
+  uint offset_channel_3 = pio_add_program(pio_1, &channel_program);
+  channel_program_init(pio_1, sm_channel_3, offset_channel_3,
+                       all_pins.headerPins[3], clkdiv);
+
+  // start channel 4 state machine
+  uint sm_channel_4 = pio_claim_unused_sm(pio_1, true);
+  uint offset_channel_4 = pio_add_program(pio_1, &channel_program);
+  channel_program_init(pio_1, sm_channel_4, offset_channel_4,
+                       all_pins.headerPins[4], clkdiv);
+
+  // start channel 5 state machine
+  uint sm_channel_5 = pio_claim_unused_sm(pio_1, true);
+  uint offset_channel_5 = pio_add_program(pio_1, &channel_program);
+  channel_program_init(pio_1, sm_channel_5, offset_channel_5,
+                       all_pins.headerPins[5], clkdiv);
+
+  // create array of state machines
+  // this is used to acquire data from DAQ state machines in other areas of
+  // this code
+  SMArray sm_array;
+  sm_array.ids[0] = sm_channel_0;
+  sm_array.ids[1] = sm_channel_1;
+  sm_array.ids[2] = sm_channel_2;
+  sm_array.ids[3] = sm_channel_3;
+  sm_array.ids[4] = sm_channel_4;
+  sm_array.ids[5] = sm_channel_5;
+
+  // mask to select which state machines in each PIO block are started
+  uint32_t pio_start_mask = -1;
+
+  // start all state machines in pio block in sync
+  pio_enable_sm_mask_in_sync(pio_0, pio_start_mask);
+  pio_enable_sm_mask_in_sync(pio_1, pio_start_mask);
+
+  return sm_array;
+}
+
 void cdc_task(float channel_current_averaged[6], float channel_voltage[6],
-              uint sm[6], uint16_t* burst_position, float trip_currents[6],
+              SMArray sm, uint16_t* burst_position, float trip_currents[6],
               uint8_t* trip_mask, uint8_t* trip_status,
               float average_current_history[6][average_current_history_length],
               uint16_t* average_store_position,
               uint32_t full_current_history[6][full_current_history_length],
               uint16_t* full_position, uint8_t* current_buffer_run,
-              uint8_t* slow_read, int* before_trip_allowed, uint sm_array[6],
+              uint8_t* slow_read, int* before_trip_allowed, SMArray sm_array,
               int trip_requirement[6]) {
   if (tud_cdc_available()) {
     // read in commands from Server on Pi
@@ -383,8 +460,8 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6],
 
         // clear rx fifos
         for (uint32_t i = 0; i < 3; i++) {
-          pio_sm_clear_fifos(pio_0, sm_array[i]);
-          pio_sm_clear_fifos(pio_1, sm_array[i + 3]);
+          pio_sm_clear_fifos(pio_0, sm_array.ids[i]);
+          pio_sm_clear_fifos(pio_1, sm_array.ids[i + 3]);
         }
 
         int32_t pre_ped_subtraction[6] = {0, 0, 0, 0, 0, 0};
@@ -392,9 +469,9 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6],
         for (int ped_count = 0; ped_count < 200; ped_count++) {
           for (int i = 0; i < 3; i++) {
             pre_ped_subtraction[i] +=
-                (int16_t)pio_sm_get_blocking(pio_0, sm_array[i]);
+                (int16_t)pio_sm_get_blocking(pio_0, sm_array.ids[i]);
             pre_ped_subtraction[i + 3] +=
-                (int16_t)pio_sm_get_blocking(pio_1, sm_array[i + 3]);
+                (int16_t)pio_sm_get_blocking(pio_1, sm_array.ids[i + 3]);
           }
         }
 
@@ -438,7 +515,7 @@ float get_single_voltage(
 }
 
 void get_all_averaged_currents(
-    PIO pio_0, PIO pio_1, uint sm[], float current_array[6],
+    PIO pio_0, PIO pio_1, SMArray sm, float current_array[6],
     uint32_t full_current_array[6][full_current_history_length],
     uint16_t* full_position, uint8_t* current_buffer_run,
     int* remaining_buffer_iterations, int* before_trip_allowed) {
@@ -459,8 +536,8 @@ void get_all_averaged_currents(
        i++)  // adds current measurements to current_array
   {
     for (uint32_t channel = 0; channel < 3; channel++) {
-      if (pio_sm_is_rx_fifo_full(pio_0, sm[channel]) ||
-          pio_sm_is_rx_fifo_full(pio_0, sm[channel + 3])) {
+      if (pio_sm_is_rx_fifo_full(pio_0, sm.ids[channel]) ||
+          pio_sm_is_rx_fifo_full(pio_0, sm.ids[channel + 3])) {
         if (i > 10 && *before_trip_allowed == 0) {
           slow_read = 1;
         }
@@ -469,8 +546,9 @@ void get_all_averaged_currents(
       // NOTE: with an average of 200, overflow does not occur
       // However, if this average is increased later on, it may be necessary to
       // divide earlier/increase to 32 bit integers
-      latest_current_0 = (int16_t)pio_sm_get_blocking(pio_0, sm[channel]);
-      latest_current_1 = (int16_t)pio_sm_get_blocking(pio_1, sm[channel + 3]);
+      latest_current_0 = (int16_t)pio_sm_get_blocking(pio_0, sm.ids[channel]);
+      latest_current_1 =
+          (int16_t)pio_sm_get_blocking(pio_1, sm.ids[channel + 3]);
 
       current_array[channel] += latest_current_0;
       current_array[channel + 3] += latest_current_1;
@@ -590,11 +668,6 @@ int main() {
 
   board_init();  // tinyUSB formality
 
-  // float clkdiv = 34; // set clock divider for PIO
-  float clkdiv = 45;  // results in 81.967 kHz
-  uint32_t pio_start_mask =
-      -1;  // mask to select which state machines in each PIO block are started
-
   adc_init();
   adc_gpio_init(28);
   adc_select_input(2);
@@ -610,68 +683,7 @@ int main() {
   uint16_t average_position = 0;
   uint16_t average_store_position = 0;
 
-  // Start clock state machine for PIO block 0
-  uint sm_clock = pio_claim_unused_sm(pio_0, true);
-  uint offset_clock = pio_add_program(pio_0, &clock_program);
-  clock_0_program_init(pio_0, sm_clock, offset_clock, all_pins.csPin_0,
-                       all_pins.sclk_0, clkdiv);
-
-  // start channel 0 state machine
-  uint sm_channel_0 = pio_claim_unused_sm(pio_0, true);
-  uint offset_channel_0 = pio_add_program(pio_0, &channel_program);
-  channel_program_init(pio_0, sm_channel_0, offset_channel_0,
-                       all_pins.headerPins[0], clkdiv);
-
-  // start channel 1 state machine
-  uint sm_channel_1 = pio_claim_unused_sm(pio_0, true);
-  uint offset_channel_1 = pio_add_program(pio_0, &channel_program);
-  channel_program_init(pio_0, sm_channel_1, offset_channel_1,
-                       all_pins.headerPins[1], clkdiv);
-
-  // start channel 2 state machine
-  uint sm_channel_2 = pio_claim_unused_sm(pio_0, true);
-  uint offset_channel_2 = pio_add_program(pio_0, &channel_program);
-  channel_program_init(pio_0, sm_channel_2, offset_channel_2,
-                       all_pins.headerPins[2], clkdiv);
-
-  // Start clock state machien for PIO block 1
-  uint sm_clock_1 = pio_claim_unused_sm(pio_1, true);
-  uint offset_clock_1 = pio_add_program(pio_1, &clock_program);
-  clock_1_program_init(pio_1, sm_clock_1, offset_clock_1, all_pins.csPin_1,
-                       all_pins.sclk_1, clkdiv);
-
-  // start channel 3 state machine
-  uint sm_channel_3 = pio_claim_unused_sm(pio_1, true);
-  uint offset_channel_3 = pio_add_program(pio_1, &channel_program);
-  channel_program_init(pio_1, sm_channel_3, offset_channel_3,
-                       all_pins.headerPins[3], clkdiv);
-
-  // start channel 4 state machine
-  uint sm_channel_4 = pio_claim_unused_sm(pio_1, true);
-  uint offset_channel_4 = pio_add_program(pio_1, &channel_program);
-  channel_program_init(pio_1, sm_channel_4, offset_channel_4,
-                       all_pins.headerPins[4], clkdiv);
-
-  // start channel 5 state machine
-  uint sm_channel_5 = pio_claim_unused_sm(pio_1, true);
-  uint offset_channel_5 = pio_add_program(pio_1, &channel_program);
-  channel_program_init(pio_1, sm_channel_5, offset_channel_5,
-                       all_pins.headerPins[5], clkdiv);
-
-  // create array of state machines
-  // this is used to acquire data from DAQ state machines in other areas of this
-  // code
-  uint sm_array[6];
-  sm_array[0] = sm_channel_0;
-  sm_array[1] = sm_channel_1;
-  sm_array[2] = sm_channel_2;
-  sm_array[3] = sm_channel_3;
-  sm_array[4] = sm_channel_4;
-  sm_array[5] = sm_channel_5;
-
-  // start all state machines in pio block in sync
-  pio_enable_sm_mask_in_sync(pio_0, pio_start_mask);
-  pio_enable_sm_mask_in_sync(pio_1, pio_start_mask);
+  SMArray sm_array = state_machine_init();
 
   for (uint8_t i = 0; i < 6;
        i++)  // ensure that all crowbar pins are initially off
@@ -696,8 +708,8 @@ int main() {
 
       // clear rx fifos
       for (uint32_t i = 0; i < 3; i++) {
-        pio_sm_clear_fifos(pio_0, sm_array[i]);
-        pio_sm_clear_fifos(pio_1, sm_array[i + 3]);
+        pio_sm_clear_fifos(pio_0, sm_array.ids[i]);
+        pio_sm_clear_fifos(pio_1, sm_array.ids[i + 3]);
       }
 
       // acquire averaged current values
@@ -753,17 +765,18 @@ int main() {
       // clear rx fifos, otherwise data can be polluted by previous current
       // measurements
       for (uint32_t i = 0; i < 3; i++) {
-        pio_sm_clear_fifos(pio_0, sm_array[i]);
-        pio_sm_clear_fifos(pio_1, sm_array[i + 3]);
+        pio_sm_clear_fifos(pio_0, sm_array.ids[i]);
+        pio_sm_clear_fifos(pio_1, sm_array.ids[i + 3]);
       }
 
       for (uint32_t channel = 0; channel < 3;
            channel++)  // read in a single voltage value for each of 6 channels
       {
-        channel_voltage[channel] = get_single_voltage(pio_0, sm_array[channel]);
+        channel_voltage[channel] =
+            get_single_voltage(pio_0, sm_array.ids[channel]);
 
         channel_voltage[channel + 3] =
-            get_single_voltage(pio_1, sm_array[channel + 3]);
+            get_single_voltage(pio_1, sm_array.ids[channel + 3]);
       }
 
       gpio_put(all_pins.enablePin, 0);  // set mux to current
