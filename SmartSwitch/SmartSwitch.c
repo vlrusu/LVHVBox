@@ -670,9 +670,78 @@ void get_all_averaged_currents(
   }
 }
 
+// repeatedly make current and voltage measurements
 void core1_entry(void) {
+
+  SharedState* shared = (SharedState*)multicore_fifo_pop_blocking();
+
   while(true) {
-    sleep_ms(1000);
+    for (int j = 0; j < 35; j++) {
+      gpio_put(all_pins.enablePin, 0);  // set mux to current
+      sleep_ms(1);  // delay is longer than ideal, but seems to be necessary, or
+                    // current data will be polluted
+
+      // clear rx fifos
+      for (uint32_t i = 0; i < 3; i++) {
+        pio_sm_clear_fifos(pio_0, shared->sm_array.ids[i]);
+        pio_sm_clear_fifos(pio_1, shared->sm_array.ids[i + 3]);
+      }
+
+      // acquire averaged current values
+      for (uint32_t i = 0; i < 1000; i++) {
+        get_all_averaged_currents(
+            pio_0, pio_1, shared->sm_array, shared->channel_current_averaged,
+            full_current_array, &full_position, &current_buffer_run,
+            &remaining_buffer_iterations,
+            &before_trip_allowed);  // get average of 200 full speed current
+                                    // measurements
+
+        // store averaged currents
+        if (shared->average_store_position <
+            1999)  // check that current buffer size has not been exceeded
+        {
+          for (uint8_t i = 0; i < 6; i++) {
+            shared->average_current_history[i][shared->average_store_position] =
+                shared->channel_current_averaged[i];
+          }
+          shared->average_store_position +=
+              1;  // increment pointer to current storage position
+        } else {  // begin overwriting current data, starting
+          shared->average_store_position =
+              0;  // set pointer to beginning of current storage buffer
+          for (uint8_t i = 0; i < 6; i++) {
+            memset(shared->average_current_history[i], 0,
+                   sizeof(shared->average_current_history[i]));
+          }
+        }
+      }
+
+      // ----- Collect single voltage measurements ----- //
+
+      gpio_put(all_pins.enablePin, 1);  // set mux to voltage
+      sleep_ms(1);  // delay is longer than ideal, but seems to be necessary, or
+                    // voltage data will be polluted
+
+      // clear rx fifos, otherwise data can be polluted by previous current
+      // measurements
+      for (uint32_t i = 0; i < 3; i++) {
+        pio_sm_clear_fifos(pio_0, shared->sm_array.ids[i]);
+        pio_sm_clear_fifos(pio_1, shared->sm_array.ids[i + 3]);
+      }
+
+      for (uint32_t channel = 0; channel < 3;
+           channel++)  // read in a single voltage value for each of 6 channels
+      {
+        shared->channel_voltage[channel] =
+            get_single_voltage(pio_0, shared->sm_array.ids[channel]);
+
+        shared->channel_voltage[channel + 3] =
+            get_single_voltage(pio_1, shared->sm_array.ids[channel + 3]);
+      }
+
+      gpio_put(all_pins.enablePin, 0);  // set mux to current
+      sleep_ms(1);
+    }
   }
 }
 
@@ -695,6 +764,16 @@ int main() {
   variable_init();
   port_init();
 
+  for (uint8_t i = 0; i < 6;
+       i++)  // ensure that all crowbar pins are initially off
+  {
+    gpio_put(all_pins.crowbarPins[i], 1);
+  }
+
+  gpio_put(all_pins.P1_0, 1);  // put pedestal pin high
+  gpio_put(all_pins.P1_1, 1);  // put pedestal pin high
+  sleep_ms(2000);
+
   static SharedState shared;
 
   memset(shared.channel_current_averaged, 0, sizeof(shared.channel_current_averaged));
@@ -711,103 +790,17 @@ int main() {
   // Pass the address of shared data to core1
   multicore_fifo_push_blocking((uintptr_t)&shared);
 
-  for (uint8_t i = 0; i < 6;
-       i++)  // ensure that all crowbar pins are initially off
-  {
-    gpio_put(all_pins.crowbarPins[i], 1);
-  }
-
-  gpio_put(all_pins.P1_0, 1);  // put pedestal pin high
-  gpio_put(all_pins.P1_1, 1);  // put pedestal pin high
-  sleep_ms(2000);
-
   tud_init(BOARD_TUD_RHPORT);  // tinyUSB formality
 
-  while (true)  // DAQ & USB communication Loop, runs forever
-  {
-    // ----- Collect averaged current measurements ----- //
-
-    for (int j = 0; j < 35; j++) {
-      gpio_put(all_pins.enablePin, 0);  // set mux to current
-      sleep_ms(1);  // delay is longer than ideal, but seems to be necessary, or
-                    // current data will be polluted
-
-      // clear rx fifos
-      for (uint32_t i = 0; i < 3; i++) {
-        pio_sm_clear_fifos(pio_0, shared.sm_array.ids[i]);
-        pio_sm_clear_fifos(pio_1, shared.sm_array.ids[i + 3]);
-      }
-
-      // acquire averaged current values
-      for (uint32_t i = 0; i < 1000; i++) {
-        get_all_averaged_currents(
-            pio_0, pio_1, shared.sm_array, shared.channel_current_averaged,
-            full_current_array, &full_position, &current_buffer_run,
-            &remaining_buffer_iterations,
-            &before_trip_allowed);  // get average of 200 full speed current
-                                    // measurements
-
-        // store averaged currents
-        if (shared.average_store_position <
-            1999)  // check that current buffer size has not been exceeded
-        {
-          for (uint8_t i = 0; i < 6; i++) {
-            shared.average_current_history[i][shared.average_store_position] =
-                shared.channel_current_averaged[i];
-          }
-          shared.average_store_position +=
-              1;  // increment pointer to current storage position
-        } else {  // begin overwriting current data, starting
-          shared.average_store_position =
-              0;  // set pointer to beginning of current storage buffer
-          for (uint8_t i = 0; i < 6; i++) {
-            memset(shared.average_current_history[i], 0,
-                   sizeof(shared.average_current_history[i]));
-          }
-        }
-
-        // cdc_task reads in commands from PI via usb and responds appropriately
-        cdc_task(shared.channel_current_averaged, shared.channel_voltage,
-                 &shared.burst_position, trip_currents, &trip_mask, &trip_status,
-                 shared.average_current_history, &shared.average_store_position,
-                 full_current_array, &full_position, &current_buffer_run,
-                 &slow_read, &before_trip_allowed, shared.sm_array, trip_requirement);
-        tud_task();  // tinyUSB formality
-      }
-
-      // ----- Collect single voltage measurements ----- //
-
-      gpio_put(all_pins.enablePin, 1);  // set mux to voltage
-      sleep_ms(1);  // delay is longer than ideal, but seems to be necessary, or
-                    // voltage data will be polluted
-
-      cdc_task(shared.channel_current_averaged, shared.channel_voltage,
-               &shared.burst_position, trip_currents, &trip_mask, &trip_status,
-               shared.average_current_history, &shared.average_store_position,
-               full_current_array, &full_position, &current_buffer_run,
-               &slow_read, &before_trip_allowed, shared.sm_array, trip_requirement);
-      tud_task();
-
-      // clear rx fifos, otherwise data can be polluted by previous current
-      // measurements
-      for (uint32_t i = 0; i < 3; i++) {
-        pio_sm_clear_fifos(pio_0, shared.sm_array.ids[i]);
-        pio_sm_clear_fifos(pio_1, shared.sm_array.ids[i + 3]);
-      }
-
-      for (uint32_t channel = 0; channel < 3;
-           channel++)  // read in a single voltage value for each of 6 channels
-      {
-        shared.channel_voltage[channel] =
-            get_single_voltage(pio_0, shared.sm_array.ids[channel]);
-
-        shared.channel_voltage[channel + 3] =
-            get_single_voltage(pio_1, shared.sm_array.ids[channel + 3]);
-      }
-
-      gpio_put(all_pins.enablePin, 0);  // set mux to current
-      sleep_ms(1);
-    }
+  // Repeatedly listen for a command from the server, coming over USB
+  while (true) {
+    // cdc_task reads in commands from PI via usb and responds appropriately
+    cdc_task(shared.channel_current_averaged, shared.channel_voltage,
+             &shared.burst_position, trip_currents, &trip_mask, &trip_status,
+             shared.average_current_history, &shared.average_store_position,
+             full_current_array, &full_position, &current_buffer_run,
+             &slow_read, &before_trip_allowed, shared.sm_array, trip_requirement);
+    tud_task();  // tinyUSB formality
   }
   return 0;
 }
