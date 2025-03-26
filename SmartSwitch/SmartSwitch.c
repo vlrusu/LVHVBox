@@ -13,11 +13,14 @@
 #include "hardware/pio.h"
 #include "hardware/sync.h"
 #include "pico/bootrom.h"
+#include "pico/multicore.h"
 #include "pico/platform.h"
 #include "pico/stdlib.h"
 #include "pico/types.h"
 #include "string.h"
 #include "tusb.h"
+
+#define DATA_LOCK 0
 
 // Channel count
 #define nAdc 6  // Number of SmartSwitches
@@ -41,6 +44,17 @@ typedef struct {
   uint ids[6];
 } SMArray;
 
+uint32_t average_current_history_length = 2000;
+
+typedef struct {
+    float channel_current_averaged[6];
+    float channel_voltage[6];
+    uint16_t burst_position;
+    float average_current_history[6][average_current_history_length];
+    uint16_t average_store_position;
+    SMArray sm_array;
+} SharedState;
+
 PIO pio_0 = pio0;  // pio block 0 reference
 PIO pio_1 = pio1;  // pio block 1 reference
 
@@ -63,7 +77,6 @@ const float adc_to_V =
     1000;  // ADC full-scale voltage / ADC full scale reading * divider ratio
 const float adc_to_uA = (2.5 / pow(2, 15)) / (100 * 101) * 1.E6;
 
-uint32_t average_current_history_length = 2000;
 #define full_current_history_length 8000
 uint8_t current_buffer_run = 1;
 uint16_t full_position = 0;
@@ -657,6 +670,12 @@ void get_all_averaged_currents(
   }
 }
 
+void core1_entry(void) {
+  while(true) {
+    sleep_ms(1000);
+  }
+}
+
 //******************************************************************************
 // Standard loop function, called repeatedly
 int main() {
@@ -676,15 +695,28 @@ int main() {
   variable_init();
   port_init();
 
+  // Initialize Shared Variables
   float channel_current_averaged[6] = {0, 0, 0, 0, 0, 0};
   float channel_voltage[6] = {0, 0, 0, 0, 0, 0};
-  uint16_t burst_position = 0;
 
   float average_current_history[6][average_current_history_length];
   uint16_t average_position = 0;
-  uint16_t average_store_position = 0;
 
-  SMArray sm_array = state_machine_init();
+  static SharedState shared;
+
+  memset(shared.channel_current_averaged, 0, sizeof(shared.channel_current_averaged));
+  memset(shared.channel_voltage, 0, sizeof(shared.channel_voltage));
+  shared.burst_position = 0;
+  shared.average_store_position = 0;
+  shared.sm_array = state_machine_init();
+
+  spin_lock_init(DATA_LOCK);
+
+  // Start the second core
+  multicore_launch_core1(core1_entry);
+
+  // Pass the address of shared data to core1
+  multicore_fifo_push_blocking((uintptr_t)&shared);
 
   for (uint8_t i = 0; i < 6;
        i++)  // ensure that all crowbar pins are initially off
