@@ -26,6 +26,7 @@ function(compile_and_flash target pico USB_VID)
                         pico_stdlib
                         hardware_adc
                         hardware_pio
+                        pico_multicore
                         tinyusb_device
                         tinyusb_board)
   pico_add_extra_outputs(${target})
