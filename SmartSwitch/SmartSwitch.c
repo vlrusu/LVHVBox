@@ -234,7 +234,7 @@ SMArray state_machine_init() {
 }
 
 void cdc_task(float channel_current_averaged[6], float channel_voltage[6],
-              SMArray sm, uint16_t* burst_position, float trip_currents[6],
+              uint16_t* burst_position, float trip_currents[6],
               uint8_t* trip_mask, uint8_t* trip_status,
               float average_current_history[6][average_current_history_length],
               uint16_t* average_store_position,
@@ -242,267 +242,268 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6],
               uint16_t* full_position, uint8_t* current_buffer_run,
               uint8_t* slow_read, int* before_trip_allowed, SMArray sm_array,
               int trip_requirement[6]) {
-  if (tud_cdc_available()) {
-    // read in commands from Server on Pi
-    uint8_t receive_chars[5];
-    tud_cdc_read(
-        &receive_chars,
-        sizeof(receive_chars));  // acquire 5 chars from tinyUSB input buffer
-    tud_cdc_read_flush();        // clear tinyUSB input buffer
+  if (!tud_cdc_available()) {
+    return;
+  }
+  // read in commands from Server on Pi
+  uint8_t receive_chars[5];
+  tud_cdc_read(
+      &receive_chars,
+      sizeof(receive_chars));  // acquire 5 chars from tinyUSB input buffer
+  tud_cdc_read_flush();        // clear tinyUSB input buffer
 
-    // determine response based upon Server command
-    if (102 < receive_chars[0] &&
-        receive_chars[0] < 109) {  // ----- Trip ----- //
-      uint8_t tripPin = all_pins.crowbarPins[receive_chars[0] - 103];
+  // determine response based upon Server command
+  if (102 < receive_chars[0] &&
+      receive_chars[0] < 109) {  // ----- Trip ----- //
+    uint8_t tripPin = all_pins.crowbarPins[receive_chars[0] - 103];
 
-      if (*trip_mask &
-          (1 << (receive_chars[0] -
-                 103))) {  // store ped subtract values from time of trip
-        *current_buffer_run = 0;
-        *before_trip_allowed = 20;
-
-        memcpy(ped_subtraction_stored, ped_subtraction,
-               sizeof(ped_subtraction));
-        gpio_put(tripPin, 1);
-        *trip_status = *trip_status | (1 << (receive_chars[0] - 103));
-
-        // store ped subtract values from time of trip
-        memcpy(ped_subtraction_stored, ped_subtraction,
-               sizeof(ped_subtraction));
-      }
-
-    } else if (108 < receive_chars[0] &&
-               receive_chars[0] < 115) {  // ----- Reset Trip ----- //
-      *current_buffer_run = 1;
-      remaining_buffer_iterations = floor(full_current_history_length / 2);
-
-      uint8_t tripPin =
-          all_pins.crowbarPins[receive_chars[0] -
-                               109];  // acquire proper crowbar pin
-
-      if (*trip_mask & (1 << (receive_chars[0] - 109))) {
-        *trip_mask = *trip_mask & ~(1 << (receive_chars[0] - 109));
-        gpio_put(tripPin, 0);  // set relevant crowbar pin low
-        *trip_status =
-            *trip_status &
-            ~(1 << receive_chars[0] - 109);  // store information that channel
-                                             // is no longer tripped
-        sleep_ms(250);
-        *trip_mask = *trip_mask | (1 << (receive_chars[0] - 109));
-      } else {
-        gpio_put(tripPin, 0);  // set relevant crowbar pin low
-        *trip_status =
-            *trip_status &
-            ~(1 << receive_chars[0] - 109);  // store information that channel
-                                             // is no longer tripped
-      }
-
-    } else if (114 < receive_chars[0] &&
-               receive_chars[0] < 121) {  // ----- Disable Trip ----- //
-      *trip_mask =
-          *trip_mask &
-          ~(1 << (receive_chars[0] -
-                  115));  // store that channel is no longer capable of tripping
-
-    } else if (120 < receive_chars[0] &&
-               receive_chars[0] < 127) {  // ----- Enable Trip ----- //
-      *trip_mask =
-          *trip_mask |
-          (1 << (receive_chars[0] -
-                 121));  // store that channel is now capable of tripping
-
-    } else if (receive_chars[0] == 33) {  // ----- Send Trip Statuses ----- //
-      tud_cdc_write(&*trip_status, sizeof(&*trip_status));
-      tud_cdc_write_flush();  // flushes write buffer, data will not actually be
-                              // sent without this command
-
-    } else if (receive_chars[0] ==
-               99) {  // ----- Send trip enabled statuses ----- //
-      tud_cdc_write(&*trip_mask, sizeof(&*trip_mask));
-      tud_cdc_write_flush();
-    } else if (75 < receive_chars[0] &&
-               receive_chars[0] < 82) {  // ----- Set new trip value ----- //
-
-      // join receive_chars into a single 16 bit unsigned integer
-      uint16_t one = receive_chars[1] << 8;
-      uint16_t two = receive_chars[2] + one;
-
-      trip_currents[receive_chars[0] - 76] =
-          (float)two / 65535 *
-          1000;  // 1000 is the max value, probably change later
-
-    } else if (receive_chars[0] == 37) {  // ----- Put Pedestal High ----- //
-      gpio_put(all_pins.P1_0, 1);
-      gpio_put(all_pins.P1_1, 1);
-      ped_on = 1;
-
-    } else if (receive_chars[0] == 38) {  // ----- Put Pedestal Low ----- //
-      gpio_put(all_pins.P1_0, 0);
-      gpio_put(all_pins.P1_1, 0);
-      ped_on = 0;
-
-    } else if (receive_chars[0] == 86) {  // ----- Send Voltages ----- //
-      for (uint8_t i = 0; i < 6; i++) {
-        tud_cdc_write(&channel_voltage[i], sizeof(&channel_voltage[i]));
-      }
-      tud_cdc_write_flush();  // flushes write buffer, data will not actually be
-                              // sent without this command
-
-    } else if (receive_chars[0] ==
-               73) {  // ----- Send Averaged Currents ----- //
-
-      for (uint8_t i = 0; i < 6; i++) {
-        tud_cdc_write(&channel_current_averaged[i],
-                      sizeof(&channel_current_averaged[i]));
-      }
-      tud_cdc_write_flush();  // flushes write buffer, data will not actually be
-                              // sent without this command
-
-    } else if (receive_chars[0] == 87) {  // ----- start current buffer ----- //
-      *current_buffer_run = 1;
-      remaining_buffer_iterations = floor(full_current_history_length / 2);
-
-    } else if (receive_chars[0] == 88) {  // ----- stop current buffer ----- //
+    if (*trip_mask &
+        (1 << (receive_chars[0] -
+               103))) {  // store ped subtract values from time of trip
       *current_buffer_run = 0;
+      *before_trip_allowed = 20;
 
-    } else if (receive_chars[0] > 88 &&
-               receive_chars[0] <
-                   95) {  // ----- Send chunk of current buffer ----- //
-      float temp_currents[10];
-      int channel = receive_chars[0] - 89;
+      memcpy(ped_subtraction_stored, ped_subtraction,
+             sizeof(ped_subtraction));
+      gpio_put(tripPin, 1);
+      *trip_status = *trip_status | (1 << (receive_chars[0] - 103));
 
-      *current_buffer_run = 0;
-
-      int send_index;
-
-      for (int i = 0; i < 10; i++) {
-        if (*full_position + i < full_current_history_length) {
-          send_index = *full_position + i;
-        } else {
-          send_index = i - (full_current_history_length - *full_position);
-        }
-
-        if (ped_on == 1) {
-          temp_currents[i] =
-              full_current_history[channel][send_index] * adc_to_uA -
-              ped_subtraction_stored[channel];
-        } else {
-          temp_currents[i] =
-              full_current_history[channel][send_index] * adc_to_uA;
-        }
-      }
-
-      tud_cdc_write(temp_currents, sizeof(temp_currents));
-      tud_cdc_write_flush();
-
-      *full_position += 10;
-      if (*full_position >= full_current_history_length) {
-        *full_position -= full_current_history_length;
-      }
-
-    } else if (receive_chars[0] == 97) {  // send value of slow_read to server
-      tud_cdc_write(&*slow_read, sizeof(&*slow_read));
-      tud_cdc_write_flush();
-    } else if (receive_chars[0] == 95) {  // Send current buffer status ----- //
-      tud_cdc_write(&*current_buffer_run, sizeof(&*current_buffer_run));
-      tud_cdc_write_flush();  // flushes write buffer, data will not actually be
-                              // sent without this command
-    } else if (receive_chars[0] == 96) {  // move full position forward 10 //
-      *full_position += 10;
-      if (*full_position >= full_current_history_length) {
-        *full_position -= full_current_history_length;
-      }
-    } else if (receive_chars[0] ==
-               72) {  // Send chunk of average currents ----- //
-      // check if data needs to be sent
-      if (*average_store_position > 1) {
-        for (uint8_t time_index = 0; time_index < 2; time_index++) {
-          for (uint8_t channel_index = 0; channel_index < 6; channel_index++) {
-            // write to usb buffer
-            tud_cdc_write(
-                &average_current_history[channel_index][time_index],
-                sizeof(&average_current_history[channel_index][time_index]));
-          }
-        }
-        tud_cdc_write_flush();  // tinyUSB formality
-
-        // update average current_list
-        for (uint16_t i = 0; i < (*average_store_position - 2); i++) {
-          for (uint16_t channel = 0; channel < 6; channel++) {
-            average_current_history[channel][i] =
-                average_current_history[channel][i + 2];
-          }
-        }
-        // update store position
-        *average_store_position -= 2;
-      } else {
-        float none_var = -100;
-        tud_cdc_write(&none_var, sizeof(&none_var));
-        tud_cdc_write_flush();  // tinyUSB formality
-      }
-
-    } else if (receive_chars[0] == 98) {  // Send value hv adc value //
-      float return_val = 0;
-
-      for (int i = 0; i < 50; i++) {
-        return_val += (float)adc_read();
-      }
-      return_val /= 50;
-
-      tud_cdc_write(&return_val, sizeof(return_val));
-      tud_cdc_write_flush();
-
-    } else if (receive_chars[0] > 38 && receive_chars[0] < 45) {
-      if (ped_on == 1) {
-        gpio_put(all_pins.P1_0, 0);  // put pedestal pin low
-        gpio_put(all_pins.P1_1, 0);  // put pedestal pin low
-        sleep_ms(1400);
-
-        // clear rx fifos
-        for (uint32_t i = 0; i < 3; i++) {
-          pio_sm_clear_fifos(pio_0, sm_array.ids[i]);
-          pio_sm_clear_fifos(pio_1, sm_array.ids[i + 3]);
-        }
-
-        int32_t pre_ped_subtraction[6] = {0, 0, 0, 0, 0, 0};
-
-        for (int ped_count = 0; ped_count < 200; ped_count++) {
-          for (int i = 0; i < 3; i++) {
-            pre_ped_subtraction[i] +=
-                (int16_t)pio_sm_get_blocking(pio_0, sm_array.ids[i]);
-            pre_ped_subtraction[i + 3] +=
-                (int16_t)pio_sm_get_blocking(pio_1, sm_array.ids[i + 3]);
-          }
-        }
-
-        for (int i = 0; i < 6; i++) {
-          ped_subtraction[i] = (float)pre_ped_subtraction[i] / 200 * adc_to_uA;
-        }
-
-        gpio_put(all_pins.P1_0, 1);  // put pedestal pin high
-        gpio_put(all_pins.P1_1, 1);  // put pedestal pin high
-
-        // update ped_subtraction_stored
-        if (*current_buffer_run == 1) {
-          memcpy(ped_subtraction_stored, ped_subtraction,
-                 sizeof(ped_subtraction));
-        }
-
-        sleep_ms(700);
-      }
-    } else if (receive_chars[0] > 44 &&
-               receive_chars[0] < 51) {  // set new trip count requirement
-
-      // join receive_chars into a single 16 bit unsigned integer
-      uint16_t one = receive_chars[2] << 8;
-      uint16_t two = receive_chars[1] + one;
-      int intval = (int)two;
-
-      memcpy(&trip_requirement[receive_chars[0] - 45], &intval, 4);
-    } else if (receive_chars[0] == 255) {
-      // force reboot into BOOTSEL mode
-      reset_usb_boot(0, 0);
+      // store ped subtract values from time of trip
+      memcpy(ped_subtraction_stored, ped_subtraction,
+             sizeof(ped_subtraction));
     }
+
+  } else if (108 < receive_chars[0] &&
+             receive_chars[0] < 115) {  // ----- Reset Trip ----- //
+    *current_buffer_run = 1;
+    remaining_buffer_iterations = floor(full_current_history_length / 2);
+
+    uint8_t tripPin =
+        all_pins.crowbarPins[receive_chars[0] -
+                             109];  // acquire proper crowbar pin
+
+    if (*trip_mask & (1 << (receive_chars[0] - 109))) {
+      *trip_mask = *trip_mask & ~(1 << (receive_chars[0] - 109));
+      gpio_put(tripPin, 0);  // set relevant crowbar pin low
+      *trip_status =
+          *trip_status &
+          ~(1 << receive_chars[0] - 109);  // store information that channel
+                                           // is no longer tripped
+      sleep_ms(250);
+      *trip_mask = *trip_mask | (1 << (receive_chars[0] - 109));
+    } else {
+      gpio_put(tripPin, 0);  // set relevant crowbar pin low
+      *trip_status =
+          *trip_status &
+          ~(1 << receive_chars[0] - 109);  // store information that channel
+                                           // is no longer tripped
+    }
+
+  } else if (114 < receive_chars[0] &&
+             receive_chars[0] < 121) {  // ----- Disable Trip ----- //
+    *trip_mask =
+        *trip_mask &
+        ~(1 << (receive_chars[0] -
+                115));  // store that channel is no longer capable of tripping
+
+  } else if (120 < receive_chars[0] &&
+             receive_chars[0] < 127) {  // ----- Enable Trip ----- //
+    *trip_mask =
+        *trip_mask |
+        (1 << (receive_chars[0] -
+               121));  // store that channel is now capable of tripping
+
+  } else if (receive_chars[0] == 33) {  // ----- Send Trip Statuses ----- //
+    tud_cdc_write(&*trip_status, sizeof(&*trip_status));
+    tud_cdc_write_flush();  // flushes write buffer, data will not actually be
+                            // sent without this command
+
+  } else if (receive_chars[0] ==
+             99) {  // ----- Send trip enabled statuses ----- //
+    tud_cdc_write(&*trip_mask, sizeof(&*trip_mask));
+    tud_cdc_write_flush();
+  } else if (75 < receive_chars[0] &&
+             receive_chars[0] < 82) {  // ----- Set new trip value ----- //
+
+    // join receive_chars into a single 16 bit unsigned integer
+    uint16_t one = receive_chars[1] << 8;
+    uint16_t two = receive_chars[2] + one;
+
+    trip_currents[receive_chars[0] - 76] =
+        (float)two / 65535 *
+        1000;  // 1000 is the max value, probably change later
+
+  } else if (receive_chars[0] == 37) {  // ----- Put Pedestal High ----- //
+    gpio_put(all_pins.P1_0, 1);
+    gpio_put(all_pins.P1_1, 1);
+    ped_on = 1;
+
+  } else if (receive_chars[0] == 38) {  // ----- Put Pedestal Low ----- //
+    gpio_put(all_pins.P1_0, 0);
+    gpio_put(all_pins.P1_1, 0);
+    ped_on = 0;
+
+  } else if (receive_chars[0] == 86) {  // ----- Send Voltages ----- //
+    for (uint8_t i = 0; i < 6; i++) {
+      tud_cdc_write(&channel_voltage[i], sizeof(&channel_voltage[i]));
+    }
+    tud_cdc_write_flush();  // flushes write buffer, data will not actually be
+                            // sent without this command
+
+  } else if (receive_chars[0] ==
+             73) {  // ----- Send Averaged Currents ----- //
+
+    for (uint8_t i = 0; i < 6; i++) {
+      tud_cdc_write(&channel_current_averaged[i],
+                    sizeof(&channel_current_averaged[i]));
+    }
+    tud_cdc_write_flush();  // flushes write buffer, data will not actually be
+                            // sent without this command
+
+  } else if (receive_chars[0] == 87) {  // ----- start current buffer ----- //
+    *current_buffer_run = 1;
+    remaining_buffer_iterations = floor(full_current_history_length / 2);
+
+  } else if (receive_chars[0] == 88) {  // ----- stop current buffer ----- //
+    *current_buffer_run = 0;
+
+  } else if (receive_chars[0] > 88 &&
+             receive_chars[0] <
+                 95) {  // ----- Send chunk of current buffer ----- //
+    float temp_currents[10];
+    int channel = receive_chars[0] - 89;
+
+    *current_buffer_run = 0;
+
+    int send_index;
+
+    for (int i = 0; i < 10; i++) {
+      if (*full_position + i < full_current_history_length) {
+        send_index = *full_position + i;
+      } else {
+        send_index = i - (full_current_history_length - *full_position);
+      }
+
+      if (ped_on == 1) {
+        temp_currents[i] =
+            full_current_history[channel][send_index] * adc_to_uA -
+            ped_subtraction_stored[channel];
+      } else {
+        temp_currents[i] =
+            full_current_history[channel][send_index] * adc_to_uA;
+      }
+    }
+
+    tud_cdc_write(temp_currents, sizeof(temp_currents));
+    tud_cdc_write_flush();
+
+    *full_position += 10;
+    if (*full_position >= full_current_history_length) {
+      *full_position -= full_current_history_length;
+    }
+
+  } else if (receive_chars[0] == 97) {  // send value of slow_read to server
+    tud_cdc_write(&*slow_read, sizeof(&*slow_read));
+    tud_cdc_write_flush();
+  } else if (receive_chars[0] == 95) {  // Send current buffer status ----- //
+    tud_cdc_write(&*current_buffer_run, sizeof(&*current_buffer_run));
+    tud_cdc_write_flush();  // flushes write buffer, data will not actually be
+                            // sent without this command
+  } else if (receive_chars[0] == 96) {  // move full position forward 10 //
+    *full_position += 10;
+    if (*full_position >= full_current_history_length) {
+      *full_position -= full_current_history_length;
+    }
+  } else if (receive_chars[0] ==
+             72) {  // Send chunk of average currents ----- //
+    // check if data needs to be sent
+    if (*average_store_position > 1) {
+      for (uint8_t time_index = 0; time_index < 2; time_index++) {
+        for (uint8_t channel_index = 0; channel_index < 6; channel_index++) {
+          // write to usb buffer
+          tud_cdc_write(
+              &average_current_history[channel_index][time_index],
+              sizeof(&average_current_history[channel_index][time_index]));
+        }
+      }
+      tud_cdc_write_flush();  // tinyUSB formality
+
+      // update average current_list
+      for (uint16_t i = 0; i < (*average_store_position - 2); i++) {
+        for (uint16_t channel = 0; channel < 6; channel++) {
+          average_current_history[channel][i] =
+              average_current_history[channel][i + 2];
+        }
+      }
+      // update store position
+      *average_store_position -= 2;
+    } else {
+      float none_var = -100;
+      tud_cdc_write(&none_var, sizeof(&none_var));
+      tud_cdc_write_flush();  // tinyUSB formality
+    }
+
+  } else if (receive_chars[0] == 98) {  // Send value hv adc value //
+    float return_val = 0;
+
+    for (int i = 0; i < 50; i++) {
+      return_val += (float)adc_read();
+    }
+    return_val /= 50;
+
+    tud_cdc_write(&return_val, sizeof(return_val));
+    tud_cdc_write_flush();
+
+  } else if (receive_chars[0] > 38 && receive_chars[0] < 45) {
+    if (ped_on == 1) {
+      gpio_put(all_pins.P1_0, 0);  // put pedestal pin low
+      gpio_put(all_pins.P1_1, 0);  // put pedestal pin low
+      sleep_ms(1400);
+
+      // clear rx fifos
+      for (uint32_t i = 0; i < 3; i++) {
+        pio_sm_clear_fifos(pio_0, sm_array.ids[i]);
+        pio_sm_clear_fifos(pio_1, sm_array.ids[i + 3]);
+      }
+
+      int32_t pre_ped_subtraction[6] = {0, 0, 0, 0, 0, 0};
+
+      for (int ped_count = 0; ped_count < 200; ped_count++) {
+        for (int i = 0; i < 3; i++) {
+          pre_ped_subtraction[i] +=
+              (int16_t)pio_sm_get_blocking(pio_0, sm_array.ids[i]);
+          pre_ped_subtraction[i + 3] +=
+              (int16_t)pio_sm_get_blocking(pio_1, sm_array.ids[i + 3]);
+        }
+      }
+
+      for (int i = 0; i < 6; i++) {
+        ped_subtraction[i] = (float)pre_ped_subtraction[i] / 200 * adc_to_uA;
+      }
+
+      gpio_put(all_pins.P1_0, 1);  // put pedestal pin high
+      gpio_put(all_pins.P1_1, 1);  // put pedestal pin high
+
+      // update ped_subtraction_stored
+      if (*current_buffer_run == 1) {
+        memcpy(ped_subtraction_stored, ped_subtraction,
+               sizeof(ped_subtraction));
+      }
+
+      sleep_ms(700);
+    }
+  } else if (receive_chars[0] > 44 &&
+             receive_chars[0] < 51) {  // set new trip count requirement
+
+    // join receive_chars into a single 16 bit unsigned integer
+    uint16_t one = receive_chars[2] << 8;
+    uint16_t two = receive_chars[1] + one;
+    int intval = (int)two;
+
+    memcpy(&trip_requirement[receive_chars[0] - 45], &intval, 4);
+  } else if (receive_chars[0] == 255) {
+    // force reboot into BOOTSEL mode
+    reset_usb_boot(0, 0);
   }
 }
 
@@ -741,7 +742,7 @@ int main() {
         }
 
         // cdc_task reads in commands from PI via usb and responds appropriately
-        cdc_task(channel_current_averaged, channel_voltage, sm_array,
+        cdc_task(channel_current_averaged, channel_voltage,
                  &burst_position, trip_currents, &trip_mask, &trip_status,
                  average_current_history, &average_store_position,
                  full_current_array, &full_position, &current_buffer_run,
@@ -755,7 +756,7 @@ int main() {
       sleep_ms(1);  // delay is longer than ideal, but seems to be necessary, or
                     // voltage data will be polluted
 
-      cdc_task(channel_current_averaged, channel_voltage, sm_array,
+      cdc_task(channel_current_averaged, channel_voltage,
                &burst_position, trip_currents, &trip_mask, &trip_status,
                average_current_history, &average_store_position,
                full_current_array, &full_position, &current_buffer_run,
