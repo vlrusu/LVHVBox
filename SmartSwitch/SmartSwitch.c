@@ -20,7 +20,13 @@
 #include "string.h"
 #include "tusb.h"
 
-#define DATA_LOCK 0
+queue_t core0_to_core1_queue;
+
+enum core1_command {
+  CMD_NONE,
+  CMD_CALCULATE_PEDESTAL,
+  CMD_N_CMDS
+};
 
 // Channel count
 #define nAdc 6  // Number of SmartSwitches
@@ -246,6 +252,44 @@ SMArray state_machine_init() {
   return sm_array;
 }
 
+
+void calculate_pedestal_subtraction(SMArray sm_array) {
+  gpio_put(all_pins.P1_0, 0);  // put pedestal pin low
+  gpio_put(all_pins.P1_1, 0);  // put pedestal pin low
+  sleep_ms(1400);
+
+  // clear rx fifos
+  for (uint32_t i = 0; i < 3; i++) {
+    pio_sm_clear_fifos(pio_0, sm_array.ids[i]);
+    pio_sm_clear_fifos(pio_1, sm_array.ids[i + 3]);
+  }
+
+  int32_t pre_ped_subtraction[6] = {0, 0, 0, 0, 0, 0};
+
+  for (int ped_count = 0; ped_count < 200; ped_count++) {
+    for (int i = 0; i < 3; i++) {
+      pre_ped_subtraction[i] +=
+          (int16_t)pio_sm_get_blocking(pio_0, sm_array.ids[i]);
+      pre_ped_subtraction[i + 3] +=
+          (int16_t)pio_sm_get_blocking(pio_1, sm_array.ids[i + 3]);
+    }
+  }
+
+  for (int i = 0; i < 6; i++) {
+    ped_subtraction[i] = (float)pre_ped_subtraction[i] / 200 * adc_to_uA;
+  }
+
+  gpio_put(all_pins.P1_0, 1);  // put pedestal pin high
+  gpio_put(all_pins.P1_1, 1);  // put pedestal pin high
+
+  if (current_buffer_run == 1) {
+    memcpy(ped_subtraction_stored, ped_subtraction,
+           sizeof(ped_subtraction));
+  }
+
+  sleep_ms(700);
+}
+
 void cdc_task(float channel_current_averaged[6], float channel_voltage[6],
               uint16_t* burst_position, float trip_currents[6],
               uint8_t* trip_mask, uint8_t* trip_status,
@@ -253,7 +297,7 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6],
               uint16_t* average_store_position,
               uint32_t full_current_history[6][full_current_history_length],
               uint16_t* full_position, uint8_t* current_buffer_run,
-              uint8_t* slow_read, int* before_trip_allowed, SMArray sm_array,
+              uint8_t* slow_read, int* before_trip_allowed,
               int trip_requirement[6]) {
   if (!tud_cdc_available()) {
     return;
@@ -467,43 +511,11 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6],
     tud_cdc_write(&return_val, sizeof(return_val));
     tud_cdc_write_flush();
 
-  } else if (receive_chars[0] > 38 && receive_chars[0] < 45) {
+  } else if (receive_chars[0] > 38 && receive_chars[0] < 45) { // update pedestal subtraction
+    // instruct core1 to do this
     if (ped_on == 1) {
-      gpio_put(all_pins.P1_0, 0);  // put pedestal pin low
-      gpio_put(all_pins.P1_1, 0);  // put pedestal pin low
-      sleep_ms(1400);
-
-      // clear rx fifos
-      for (uint32_t i = 0; i < 3; i++) {
-        pio_sm_clear_fifos(pio_0, sm_array.ids[i]);
-        pio_sm_clear_fifos(pio_1, sm_array.ids[i + 3]);
-      }
-
-      int32_t pre_ped_subtraction[6] = {0, 0, 0, 0, 0, 0};
-
-      for (int ped_count = 0; ped_count < 200; ped_count++) {
-        for (int i = 0; i < 3; i++) {
-          pre_ped_subtraction[i] +=
-              (int16_t)pio_sm_get_blocking(pio_0, sm_array.ids[i]);
-          pre_ped_subtraction[i + 3] +=
-              (int16_t)pio_sm_get_blocking(pio_1, sm_array.ids[i + 3]);
-        }
-      }
-
-      for (int i = 0; i < 6; i++) {
-        ped_subtraction[i] = (float)pre_ped_subtraction[i] / 200 * adc_to_uA;
-      }
-
-      gpio_put(all_pins.P1_0, 1);  // put pedestal pin high
-      gpio_put(all_pins.P1_1, 1);  // put pedestal pin high
-
-      // update ped_subtraction_stored
-      if (*current_buffer_run == 1) {
-        memcpy(ped_subtraction_stored, ped_subtraction,
-               sizeof(ped_subtraction));
-      }
-
-      sleep_ms(700);
+      enum core1_command cmd = CMD_CALCULATE_PEDESTAL;
+      queue_add_blocking(&core0_to_core1_queue, &cmd);
     }
   } else if (receive_chars[0] > 44 &&
              receive_chars[0] < 51) {  // set new trip count requirement
@@ -672,10 +684,24 @@ void get_all_averaged_currents(
 
 // repeatedly make current and voltage measurements
 void core1_entry(void) {
-
   SharedState* shared = (SharedState*)multicore_fifo_pop_blocking();
 
   while(true) {
+    // Listen for commands from core0
+    enum core1_command cmd = CMD_NONE;
+    queue_remove_blocking(&core0_to_core1_queue, &cmd);
+
+    switch(cmd) {
+      case CMD_NONE:
+        break;
+      case CMD_CALCULATE_PEDESTAL:
+        calculate_pedestal_subtraction(shared->sm_array);
+        break;
+      default:
+        break;
+    }
+
+    // update currents/voltage/trips
     for (int j = 0; j < 35; j++) {
       gpio_put(all_pins.enablePin, 0);  // set mux to current
       sleep_ms(1);  // delay is longer than ideal, but seems to be necessary, or
@@ -782,7 +808,8 @@ int main() {
   shared.average_store_position = 0;
   shared.sm_array = state_machine_init();
 
-  spin_lock_init(DATA_LOCK);
+  const uint queue_capacity = 8;
+  queue_init(&core0_to_core1_queue, sizeof(enum core1_command), queue_capacity);
 
   // Start the second core
   multicore_launch_core1(core1_entry);
@@ -799,7 +826,7 @@ int main() {
              &shared.burst_position, trip_currents, &trip_mask, &trip_status,
              shared.average_current_history, &shared.average_store_position,
              full_current_array, &full_position, &current_buffer_run,
-             &slow_read, &before_trip_allowed, shared.sm_array, trip_requirement);
+             &slow_read, &before_trip_allowed, trip_requirement);
     tud_task();  // tinyUSB formality
   }
   return 0;
