@@ -19,6 +19,7 @@
 #include "pico/types.h"
 #include "string.h"
 #include "tusb.h"
+#include "pico/util/queue.h"
 
 queue_t core0_to_core1_queue;
 
@@ -64,37 +65,53 @@ typedef struct {
 PIO pio_0 = pio0;  // pio block 0 reference
 PIO pio_1 = pio1;  // pio block 1 reference
 
-uint8_t trip_mask = -1;  // tracks which channels have trips enabled/disabled
+// tracks which channels have trips enabled/disabled
+uint8_t trip_mask = -1;
 // all channels start out with trips enabled
 
 // tracks if any state machines are reading data faster than they're being read
 uint8_t slow_read = 0;
 
-uint8_t trip_status = -1;  // all channels start out tripped
+// all channels start out tripped
+uint8_t trip_status = -1;
 
-uint16_t num_trigger[6] = {0, 0, 0, 0,
-                           0, 0};  // increments/decrements based upon whether
-                                   // trip_currents are exceeded
-float trip_currents[6] = {20, 20, 20,
-                          20, 20, 20};  // tripping threshold currents
+// increment/decrement # of times trip_current has exceeded trip threshold
+uint16_t num_trigger[6] = {0, 0, 0, 0, 0, 0};
+                                 
+// tripping threshold currents
+float trip_currents[6] = {20, 20, 20, 20, 20, 20};
 
+// adc -> voltage/current conversion consts
 const float adc_to_V =
     2.5 / pow(2, 15) *
     1000;  // ADC full-scale voltage / ADC full scale reading * divider ratio
 const float adc_to_uA = (2.5 / pow(2, 15)) / (100 * 101) * 1.E6;
 
 #define full_current_history_length 8000
-uint8_t current_buffer_run = 1;
-uint16_t full_position = 0;
-int before_trip_allowed = 0;
-
-int trip_requirement[6] = {100, 100, 100, 100, 100, 100};
-int remaining_buffer_iterations = 4000;
-
 uint32_t full_current_array[6][full_current_history_length];
 
+// Normally: record continuously into full_current_array.
+// After trip (or manually): record [remaining_buffer_iterations] more
+// measurements and then stop.
+uint8_t current_buffer_run = 1; // on: record normally. off: begin countdown
+int remaining_buffer_iterations = 4000; // n current measurements after trip
+
+// Current position in full_current_array buffer.
+// Maxes at full_current_history_length before resetting to 0.
+uint16_t full_position = 0;
+
+// cooldown counter between trips to prevent cascading trips
+int before_trip_allowed = 0;
+
+// number of times current can exceed threshold before tripping
+int trip_requirement[6] = {100, 100, 100, 100, 100, 100};
+
+// these are the same, except in the case of a trip, when _stored keeps the
+// value at the time of the trip.
 float ped_subtraction[6] = {0, 0, 0, 0, 0, 0};
 float ped_subtraction_stored[6] = {0, 0, 0, 0, 0, 0};
+
+// do pedestal update and subtraction
 int ped_on = 1;
 
 void port_init() {
@@ -314,9 +331,8 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6],
       receive_chars[0] < 109) {  // ----- Trip ----- //
     uint8_t tripPin = all_pins.crowbarPins[receive_chars[0] - 103];
 
-    if (*trip_mask &
-        (1 << (receive_chars[0] -
-               103))) {  // store ped subtract values from time of trip
+    // store ped subtract values from time of trip
+    if (*trip_mask & (1 << (receive_chars[0] - 103))) {
       *current_buffer_run = 0;
       *before_trip_allowed = 20;
 
@@ -579,8 +595,12 @@ void get_all_averaged_currents(
       current_array[channel] += latest_current_0;
       current_array[channel + 3] += latest_current_1;
 
-      if ((latest_current_0 * adc_to_uA >
-           trip_currents[channel] - ped_subtraction[channel]) &&
+      // does current exceed trip threshold? if so, increment trip count
+      //   1. does current exceed threshold?
+      //   2. is tripping enabled for this channel? 
+      //   3. are we already tripped?
+      //   4. are we considering trips right now?
+      if ((latest_current_0 * adc_to_uA > trip_currents[channel] - ped_subtraction[channel]) &&
           ((trip_mask & (1 << channel))) && ((~trip_status & (1 << channel))) &&
           *before_trip_allowed == 0) {
         num_trigger[channel] += 1;
@@ -597,9 +617,8 @@ void get_all_averaged_currents(
         num_trigger[channel + 3] -= 1;
       }
 
+      // update latest full current, along with its position in rotating buffer
       if (*remaining_buffer_iterations > 0) {
-        // update latest full current, along with its position in rotating
-        // buffer
         full_current_array[channel][*full_position] =
             (uint32_t)latest_current_0;
         full_current_array[channel + 3][*full_position] =
