@@ -49,8 +49,8 @@ commands = [
     Command("start_usb", "pico"),
     Command("stop_usb", "pico"),
     Command("trip", "pico"),
-    Command("trip_status", "pico", "Trip status {:}"),
-    Command("trip_enabled", "pico", "Trip enabled {:}"),
+    Command("trip_status", "pico", "Trip status {:d}"),
+    Command("trip_enabled", "pico", "Trip enabled {:d}"),
     Command("update_ped", "pico"),
     Command("pcb_temp", "pico", "PCB Temperature, {:.2f} C", is_channel_cmd=False),
     Command("pico_current", "pico", "Pico Current, {:.2f} A", is_channel_cmd=False),
@@ -172,6 +172,8 @@ def safe_command_execution(func):
             print("Bad Input:", e)
         except AssertionError:
             print("Channel number is out of allowed range")
+        except TypeError:
+            print("Pico not found")
 
     return wrapper
 
