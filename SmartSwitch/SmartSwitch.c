@@ -75,11 +75,11 @@ uint8_t slow_read = 0;
 // all channels start out tripped
 uint8_t trip_status = -1;
 
+// current trip thresholds
+float trip_currents[6] = {20, 20, 20, 20, 20, 20};
+
 // increment/decrement # of times trip_current has exceeded trip threshold
 uint16_t num_trigger[6] = {0, 0, 0, 0, 0, 0};
-                                 
-// tripping threshold currents
-float trip_currents[6] = {20, 20, 20, 20, 20, 20};
 
 // adc -> voltage/current conversion consts
 const float adc_to_V =
@@ -561,22 +561,23 @@ void get_all_averaged_currents(
     uint32_t full_current_array[6][full_current_history_length],
     uint16_t* full_position, uint8_t* current_buffer_run,
     int* remaining_buffer_iterations, int* before_trip_allowed) {
+
+  const int n_measurements = 200;
   if (*before_trip_allowed > 0) {
     *before_trip_allowed -= 1;
   }
 
-  for (uint32_t channel = 0; channel < 6;
-       channel++)  // initializes each element of current array to zero
-  {
+  // initializes each element of current array to zero
+  for (uint32_t channel = 0; channel < 6; channel++) {
     current_array[channel] = 0;
   }
 
   float latest_current_0;
   float latest_current_1;
 
-  for (uint32_t i = 0; i < 200;
-       i++)  // adds current measurements to current_array
-  {
+  // adds current measurements to current_array
+  for (uint32_t i = 0; i < n_measurements; i++) {
+    // update currents in current_array and increment trip counts
     for (uint32_t channel = 0; channel < 3; channel++) {
       if (pio_sm_is_rx_fifo_full(pio_0, sm.ids[channel]) ||
           pio_sm_is_rx_fifo_full(pio_0, sm.ids[channel + 3])) {
@@ -626,8 +627,6 @@ void get_all_averaged_currents(
       }
     }
 
-    // if tripping is necessary, trip correct channel
-
     // check if any trip counts have been exceeded
     int trip_required = 0;
     for (int channel = 0; channel < 6; channel++) {
@@ -640,12 +639,17 @@ void get_all_averaged_currents(
         }
       }
     }
+
+    // we have tripped
     if (trip_required == 1) {
+      // take only so many more measurements before stopping
       if (*current_buffer_run == 1) {
         *remaining_buffer_iterations = floor(full_current_history_length / 2);
         *current_buffer_run = 0;
       }
 
+      // Sum the total amount of current over the threshold for the past 25
+      // measurements
       float current_sums[6] = {0, 0, 0, 0, 0, 0};
       int read_index;
       for (int channel_index = 0; channel_index < 6; channel_index++) {
@@ -661,6 +665,7 @@ void get_all_averaged_currents(
         }
       }
 
+      // which channel, of those not already tripped, had the highest sum
       int max_channel;
       float max_value = 0;
       for (int i = 0; i < 6; i++) {
@@ -670,33 +675,38 @@ void get_all_averaged_currents(
         }
       }
 
+
+      // trip pin
       gpio_put(all_pins.crowbarPins[max_channel], 1);
+
+      // 20 counts before we can trip again
       *before_trip_allowed = 20;
+
+      // trip it
       trip_status = trip_status | (1 << max_channel);
     }
 
+    // continue collecting data but possibly not for much longer
     if (*remaining_buffer_iterations > 0) {
       *full_position += 1;
       if (*full_position >= full_current_history_length) {
         *full_position = 0;
       }
 
+      // decrement the remaining number of measurements
       if (*current_buffer_run == 0 && *remaining_buffer_iterations > 0) {
         *remaining_buffer_iterations -= 1;
       }
     }
   }
 
-  for (uint32_t channel = 0; channel < 6;
-       channel++)  // divide & multiply summed current values by appropriate
-                   // factors
-  {
-    // ped_on == 1
+  // calculate average current, adc scale, and ped sup
+  for (uint32_t channel = 0; channel < 6; channel++) {
     if (ped_on == 1) {
       current_array[channel] =
-          current_array[channel] * adc_to_uA / 200 - ped_subtraction[channel];
+          current_array[channel] * adc_to_uA / n_measurements - ped_subtraction[channel];
     } else {
-      current_array[channel] = current_array[channel] * adc_to_uA / 200;
+      current_array[channel] = current_array[channel] * adc_to_uA / n_measurements;
     }
   }
 }
