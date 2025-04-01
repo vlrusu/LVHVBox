@@ -6,7 +6,7 @@ import time
 import struct
 from collections import namedtuple
 import ctypes
-from Connection import Connection
+from MessagingConnection import MessagingConnection
 
 HISTORY_REQUEST_MAX = 100
 current_buffer_len = 8000  # must be divisible by 10
@@ -277,7 +277,7 @@ def process_command(line):
 if __name__ == "__main__":
     host = '127.0.0.1'
     port = 12000
-    connection = Connection(host, port)
+    connection = MessagingConnection(host, port)
 
     while True:
         try:
