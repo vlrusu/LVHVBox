@@ -65,46 +65,42 @@ typedef struct {
 PIO pio_0 = pio0;  // pio block 0 reference
 PIO pio_1 = pio1;  // pio block 1 reference
 
-// tracks which channels have trips enabled/disabled
-uint8_t trip_mask = -1;
+// bitfield, tracks which channels have trips enabled/disabled
 // all channels start out with trips enabled
+uint8_t trip_mask = -1;
 
-// tracks if any state machines are reading data faster than they're being read
+// bool, tracks if /any/ state machines are reading data faster than they're being
+// read
 uint8_t slow_read = 0;
 
-// all channels start out tripped
+// bitfield, all channels start out tripped
 uint8_t trip_status = -1;
 
-// current trip thresholds
+// current trip thresholds, (mA or uA)?
 float trip_currents[6] = {20, 20, 20, 20, 20, 20};
 
-// increment/decrement # of times trip_current has exceeded trip threshold
+// trip current counter, incremented and decremented each sample
 uint16_t num_trigger[6] = {0, 0, 0, 0, 0, 0};
 
-// adc -> voltage/current conversion consts
-const float adc_to_V =
-    2.5 / pow(2, 15) *
-    1000;  // ADC full-scale voltage / ADC full scale reading * divider ratio
-const float adc_to_uA = (2.5 / pow(2, 15)) / (100 * 101) * 1.E6;
+// number of times current can exceed threshold before tripping
+int trip_requirement[6] = {100, 100, 100, 100, 100, 100};
 
+// record of past 8000 individual current samples
 #define full_current_history_length 8000
 uint32_t full_current_array[6][full_current_history_length];
-
-// Normally: record continuously into full_current_array.
-// After trip (or manually): record [remaining_buffer_iterations] more
-// measurements and then stop.
-uint8_t current_buffer_run = 1; // on: record normally. off: begin countdown
-int remaining_buffer_iterations = 4000; // n current measurements after trip
 
 // Current position in full_current_array buffer.
 // Maxes at full_current_history_length before resetting to 0.
 uint16_t full_position = 0;
 
+// Normally: we record continuously into full_current_array.
+// After trip (or manually): record [remaining_buffer_iterations] more
+// measurements and then stop recording into full_current_array.
+uint8_t current_buffer_run = 1; // on: record normally. off: begin countdown
+int remaining_buffer_iterations = 4000; // n current measurements after trip
+
 // cooldown counter between trips to prevent cascading trips
 int before_trip_allowed = 0;
-
-// number of times current can exceed threshold before tripping
-int trip_requirement[6] = {100, 100, 100, 100, 100, 100};
 
 // these are the same, except in the case of a trip, when _stored keeps the
 // value at the time of the trip.
@@ -113,6 +109,12 @@ float ped_subtraction_stored[6] = {0, 0, 0, 0, 0, 0};
 
 // do pedestal update and subtraction
 int ped_on = 1;
+
+// adc -> voltage/current conversion consts
+const float adc_to_V =
+    2.5 / pow(2, 15) *
+    1000;  // ADC full-scale voltage / ADC full scale reading * divider ratio
+const float adc_to_uA = (2.5 / pow(2, 15)) / (100 * 101) * 1.E6;
 
 void port_init() {
   uint8_t port;
