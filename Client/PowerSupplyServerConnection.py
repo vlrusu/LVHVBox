@@ -3,6 +3,7 @@
 # October 2024
 
 import ctypes
+import os.path
 import time
 from MessagingConnection import MessagingConnection
 from WireAnalogDigitalConversion import WireAnalogDigitalConversion
@@ -39,7 +40,8 @@ class PowerSupplyServerConnection():
         self.types['set_hv_by_dac'] = 'hv'
         self.MS_PER_NS = 1e-6
 
-        path = '/home/mu2e/ejc/nominal-hv-dac-calibration.json'
+        cdir = os.path.join(os.path.dirname(cpath), 'Client')
+        path = os.path.join(cdir, 'nominal-hv-dac-calibration.json')
         key = 'nominal'
         self.wire_analog_digital_conversions = {
             i: WireAnalogDigitalConversion(path, key) for i in range(12)
@@ -76,22 +78,22 @@ class PowerSupplyServerConnection():
 
     def QueryPowerVoltage(self, channel):
         rvs = self.WriteRead('readMonV48', channel)
-        rv = rv[0][0]
+        rv = rvs[0][0]
         return rv
 
     def QueryPowerCurrent(self, channel):
         rvs = self.WriteRead('readMonI48', channel)
-        rv = rv[0][0]
+        rv = rvs[0][0]
         return rv
 
     def QuerySwitchingVoltage(self, channel):
         rvs = self.WriteRead('readMonV6', channel)
-        rv = rv[0][0]
+        rv = rvs[0][0]
         return rv
 
     def QuerySwitchingCurrent(self, channel):
         rvs = self.WriteRead('readMonI6', channel)
-        rv = rv[0][0]
+        rv = rvs[0][0]
         return rv
 
     def QueryWireVoltage(self, channel):
