@@ -6,7 +6,7 @@ import ctypes
 import socket
 import struct
 
-class Connection:
+class MessagingConnection:
     def __init__(self, host, port):
         self.host = host
         self.port = port

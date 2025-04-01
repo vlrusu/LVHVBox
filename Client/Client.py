@@ -156,6 +156,8 @@ def send_command(connection, command, channel=None, val=0.0):
     channel = channel if channel else 0
     channel = ctypes.c_char(channel)
     if command.in_val_type == float:
+        if val is None:
+            val = 0.0
         value = ctypes.c_float(float(val))
     else:
         value = ctypes.c_int(int(val))
@@ -196,7 +198,7 @@ def execute_command(sock, command, channel, val):
             process_response(cmd_output, command.cmd_output_str_format)
 
 
-def current_burst(keys):
+def current_burst(sock, keys):
     channel = int(keys[1])
 
     command_dict = read_commands()
@@ -207,7 +209,7 @@ def current_burst(keys):
     typ = ctypes.c_uint(command_dict["TYPE_pico"])
     channel = ctypes.c_char(channel)
     padding = ctypes.c_float(0.0)
-    command_string = command_current_burst + type_pico + bits_channel + padding
+    #command_string = command_current_burst + type_pico + bits_channel + padding
 
     num_cycles = int(current_buffer_len / full_current_chunk)
     full_currents = []
@@ -218,7 +220,8 @@ def current_burst(keys):
         # sock.send(bytes(command_string,"utf-8"))
 
         sock.send_message(cmd, typ, channel, padding)
-        samples = socks.recv_message()
+        samples = sock.recv_message()
+        print(samples)
         for sample in samples:
             full_currents.append(sample)
 
@@ -241,7 +244,7 @@ def process_command(line):
         return
 
     if command.name == "current_burst":
-        return current_burst(keys)
+        return current_burst(connection, keys)
 
     if command.is_channel_cmd:
         channel = None
