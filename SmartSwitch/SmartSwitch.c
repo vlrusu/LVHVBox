@@ -456,7 +456,7 @@ void get_all_averaged_currents(
   {
     for (uint32_t channel = 0; channel < 3; channel++) {
       if (pio_sm_is_rx_fifo_full(pio_0, sm[channel]) ||
-          pio_sm_is_rx_fifo_full(pio_0, sm[channel + 3])) {
+          pio_sm_is_rx_fifo_full(pio_1, sm[channel + 3])) {
         if (i > 10 && *before_trip_allowed == 0) {
           slow_read = 1;
         }
@@ -497,7 +497,7 @@ void get_all_averaged_currents(
         full_current_array[channel + 3][*full_position] =
             (uint32_t)latest_current_1;
       }
-    }
+    } // channel loop
 
     // if tripping is necessary, trip correct channel
 
@@ -519,22 +519,22 @@ void get_all_averaged_currents(
         *current_buffer_run = 0;
       }
 
+      // Sum the total amount of current over the threshold for the past 25
+      // measurements
       float current_sums[6] = {0, 0, 0, 0, 0, 0};
       int read_index;
       for (int channel_index = 0; channel_index < 6; channel_index++) {
         for (int current_index = 0; current_index < 25; current_index++) {
-          if (*full_position - current_index < 0) {
-            read_index = full_current_history_length - current_index;
-          } else {
-            read_index = *full_position - current_index;
-          }
+          read_index = (*full_position - current_index + full_current_history_length) % full_current_history_length;
           current_sums[channel_index] +=
               full_current_array[channel_index][read_index] * adc_to_uA -
               trip_currents[channel_index];
         }
       }
 
-      int max_channel;
+      // which channel (not already tripped) had the highest
+      // current-over-threshold sum?
+      int max_channel = 0;
       float max_value = 0;
       for (int i = 0; i < 6; i++) {
         if (current_sums[i] > max_value && ((~trip_status & (1 << i)))) {
@@ -558,7 +558,7 @@ void get_all_averaged_currents(
         *remaining_buffer_iterations -= 1;
       }
     }
-  }
+  } // end of i 200 samples loop
 
   for (uint32_t channel = 0; channel < 6;
        channel++)  // divide & multiply summed current values by appropriate
