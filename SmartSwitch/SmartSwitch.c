@@ -10,8 +10,10 @@
 #include "hardware/adc.h"
 #include "hardware/clocks.h"
 #include "hardware/gpio.h"
+#include "hardware/irq.h"
 #include "hardware/pio.h"
 #include "hardware/sync.h"
+#include "pico/multicore.h"
 #include "pico/platform.h"
 #include "pico/stdlib.h"
 #include "pico/types.h"
@@ -73,6 +75,31 @@ float ped_subtraction[6] = {0, 0, 0, 0, 0, 0};
 float ped_subtraction_stored[6] = {0, 0, 0, 0, 0, 0};
 int ped_on = 1;
 
+//==============================================================================
+// Interrupt handler for core1
+//==============================================================================
+void core1_interrupt_handler() {
+  // This is the interrupt-style handler
+  while (multicore_fifo_rvalid()) {
+    uint32_t msg = multicore_fifo_pop_blocking();
+    // Handle the "interrupt" from core1
+    printf("Core0 got interrupt-style message: %u\n", msg);
+  }
+}
+
+void setup_core0_fifo_interrupt() {
+  // Clear any pending FIFO interrupt
+  multicore_fifo_clear_irq();
+  // Set our handler
+  irq_set_exclusive_handler(SIO_IRQ_PROC0, core1_interrupt_handler);
+  irq_set_enabled(SIO_IRQ_PROC0, true);
+  // Enable FIFO interrupt
+  multicore_fifo_irq_enable();
+}
+
+//==============================================================================
+// init
+//==============================================================================
 void port_init() {
   uint8_t port;
   // Reset all trips
@@ -155,6 +182,9 @@ void variable_init() {
   }
 }
 
+//==============================================================================
+// Server communication
+//==============================================================================
 void cdc_task(float channel_current_averaged[6], float channel_voltage[6],
               uint sm[6], uint16_t* burst_position, float trip_currents[6],
               uint8_t* trip_mask, uint8_t* trip_status,
@@ -425,6 +455,9 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6],
   }
 }
 
+//==============================================================================
+// current and voltage sampling routines
+//==============================================================================
 float get_single_voltage(
     PIO pio, uint sm)  // obtains a single non-averaged voltage measurement
 {
@@ -480,6 +513,7 @@ void get_all_averaged_currents(
         num_trigger[channel] -= 1;
       }
 
+      // !! is this correct ped sup??
       if ((latest_current_1 * adc_to_uA >
            trip_currents[channel + 3] - ped_subtraction[channel]) &&
           ((trip_mask & (1 << channel + 3))) &&
@@ -497,7 +531,7 @@ void get_all_averaged_currents(
         full_current_array[channel + 3][*full_position] =
             (uint32_t)latest_current_1;
       }
-    } // channel loop
+    }  // channel loop
 
     // if tripping is necessary, trip correct channel
 
@@ -513,6 +547,11 @@ void get_all_averaged_currents(
         }
       }
     }
+
+    // Handle the trip (put the crowbar pin high)
+    //
+    // NB: only trip the channel with the highest over-threshold current and
+    // reset the trip counter for all channels regardless
     if (trip_required == 1) {
       if (*current_buffer_run == 1) {
         *remaining_buffer_iterations = floor(full_current_history_length / 2);
@@ -525,10 +564,12 @@ void get_all_averaged_currents(
       int read_index;
       for (int channel_index = 0; channel_index < 6; channel_index++) {
         for (int current_index = 0; current_index < 25; current_index++) {
-          read_index = (*full_position - current_index + full_current_history_length) % full_current_history_length;
+          read_index =
+              (*full_position - current_index + full_current_history_length) %
+              full_current_history_length;
           current_sums[channel_index] +=
               full_current_array[channel_index][read_index] * adc_to_uA -
-              trip_currents[channel_index];
+              trip_currents[channel_index];  // !! should we subtract ped here?
         }
       }
 
@@ -543,11 +584,13 @@ void get_all_averaged_currents(
         }
       }
 
+      // trip only that channel with the highest over-threshold current
       gpio_put(all_pins.crowbarPins[max_channel], 1);
       *before_trip_allowed = 20;
       trip_status = trip_status | (1 << max_channel);
     }
 
+    // Increment index in the current buffer
     if (*remaining_buffer_iterations > 0) {
       *full_position += 1;
       if (*full_position >= full_current_history_length) {
@@ -558,7 +601,7 @@ void get_all_averaged_currents(
         *remaining_buffer_iterations -= 1;
       }
     }
-  } // end of i 200 samples loop
+  }  // end of i 200 samples loop
 
   for (uint32_t channel = 0; channel < 6;
        channel++)  // divide & multiply summed current values by appropriate
@@ -575,7 +618,18 @@ void get_all_averaged_currents(
 }
 
 //******************************************************************************
-// Standard loop function, called repeatedly
+// core 1 entry
+//******************************************************************************
+void core1_entry() {
+  while (true) {
+    sleep_ms(10000);                   // Simulate doing something
+    multicore_fifo_push_blocking(42);  // Simulate interrupt request
+  }
+}
+
+//******************************************************************************
+// Standard loop function, called repeatedly on core 0
+//******************************************************************************
 int main() {
 #define PICO_XOSC_STARTUP_DELAY_MULTIPLIER 64
 
@@ -680,6 +734,10 @@ int main() {
   sleep_ms(2000);
 
   tud_init(BOARD_TUD_RHPORT);  // tinyUSB formality
+
+  // Launch core1 loop
+  setup_core0_fifo_interrupt();
+  multicore_launch_core1(core1_entry);
 
   while (true)  // DAQ & USB communication Loop, runs forever
   {
