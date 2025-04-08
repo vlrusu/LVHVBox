@@ -12,13 +12,18 @@
 #include "hardware/gpio.h"
 #include "hardware/irq.h"
 #include "hardware/pio.h"
+#include "hardware/structs/sio.h"
 #include "hardware/sync.h"
+#include "pico/bootrom.h"
 #include "pico/multicore.h"
 #include "pico/platform.h"
 #include "pico/stdlib.h"
 #include "pico/types.h"
 #include "string.h"
 #include "tusb.h"
+
+static int core0_rx_val = 0;
+
 
 // Channel count
 #define nAdc 6  // Number of SmartSwitches
@@ -79,6 +84,7 @@ int ped_on = 1;
 // Interrupt handler for core1
 //==============================================================================
 void core1_interrupt_handler() {
+  multicore_fifo_clear_irq();
   // This is the interrupt-style handler
   while (multicore_fifo_rvalid()) {
     uint32_t msg = multicore_fifo_pop_blocking();
@@ -88,13 +94,11 @@ void core1_interrupt_handler() {
 }
 
 void setup_core0_fifo_interrupt() {
-  // Clear any pending FIFO interrupt
+
   multicore_fifo_clear_irq();
-  // Set our handler
   irq_set_exclusive_handler(SIO_IRQ_PROC0, core1_interrupt_handler);
   irq_set_enabled(SIO_IRQ_PROC0, true);
-  // Enable FIFO interrupt
-  multicore_fifo_irq_enable();
+
 }
 
 //==============================================================================
@@ -451,6 +455,9 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6],
       int intval = (int)two;
 
       memcpy(&trip_requirement[receive_chars[0] - 45], &intval, 4);
+    } else if (receive_chars[0] == 255){
+      // force reboot into BOOTSEL mode
+      reset_usb_boot(0, 0);
     }
   }
 }
@@ -617,15 +624,35 @@ void get_all_averaged_currents(
   }
 }
 
+void core0_sio_irq() {
+  // Just record the latest entry
+  while (multicore_fifo_rvalid()) {
+    core0_rx_val = multicore_fifo_pop_blocking();
+  }
+
+  tud_cdc_write(&core0_rx_val, sizeof(core0_rx_val));
+  tud_cdc_write_flush();
+
+  multicore_fifo_clear_irq();
+}
+
 //******************************************************************************
 // core 1 entry
 //******************************************************************************
 void core1_entry() {
-  while (true) {
-    sleep_ms(10000);                   // Simulate doing something
-    multicore_fifo_push_blocking(42);  // Simulate interrupt request
+  //multicore_fifo_clear_irq();
+  //irq_set_exclusive_handler(SIO_FIFO_IRQ_NUM(1), core1_sio_irq);
+  //irq_set_enabled(SIO_FIFO_IRQ_NUM(1), true);
+  sleep_ms(5000);
+
+  // Send something to Core0, this should fire the interrupt.
+  multicore_fifo_push_blocking(42);
+
+  while (1) {
+    tight_loop_contents();
   }
 }
+
 
 //******************************************************************************
 // Standard loop function, called repeatedly on core 0
@@ -736,8 +763,11 @@ int main() {
   tud_init(BOARD_TUD_RHPORT);  // tinyUSB formality
 
   // Launch core1 loop
-  setup_core0_fifo_interrupt();
   multicore_launch_core1(core1_entry);
+
+  multicore_fifo_clear_irq();
+  irq_set_exclusive_handler(SIO_IRQ_PROC0, core0_sio_irq);
+  irq_set_enabled(SIO_IRQ_PROC0, true);
 
   while (true)  // DAQ & USB communication Loop, runs forever
   {
