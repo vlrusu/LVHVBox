@@ -133,7 +133,6 @@ void variable_init() {
 
   // pinouts for old muxers/hv board
   // pinouts/ins same for both picos
-  /*
   uint8_t crowbarPins[6] = { 2, 5, 8, 11, 14, 21};
   uint8_t headerPins[6] = { 1, 3, 6, 10, 12, 9};
   for (int i = 0; i < 6; i++) {
@@ -147,8 +146,8 @@ void variable_init() {
   all_pins.sclk_1 = 26;    // SPI clock
   all_pins.csPin_1 = 15;   // SPI Chip select for I
   all_pins.enablePin = 7;  // enable pin for MUX
-  */
 
+  /*
   // pico1 pinout
   if (pico == 1) {
     uint8_t crowbarPins[6] = {1, 4, 9, 18, 13, 10};
@@ -184,6 +183,7 @@ void variable_init() {
     all_pins.csPin_1 = 18;   // SPI Chip select for I
     all_pins.enablePin = 8;  // enable pin for MUX
   }
+  */
 }
 
 //==============================================================================
@@ -643,7 +643,7 @@ void core1_entry() {
   //multicore_fifo_clear_irq();
   //irq_set_exclusive_handler(SIO_FIFO_IRQ_NUM(1), core1_sio_irq);
   //irq_set_enabled(SIO_FIFO_IRQ_NUM(1), true);
-  sleep_ms(5000);
+  sleep_ms(20000);
 
   // Send something to Core0, this should fire the interrupt.
   multicore_fifo_push_blocking(42);
