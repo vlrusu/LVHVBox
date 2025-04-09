@@ -4,6 +4,7 @@ cmake_minimum_required(VERSION 3.13)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
+set(PICO_BOARD pico_w)
 
 # Initialise pico_sdk from installed location
 # (note this can come from environment, CMake cache etc)
@@ -23,8 +24,11 @@ function(compile_and_flash target pico USB_VID)
   target_compile_definitions(${target} PRIVATE USB_VID=${USB_VID})
   target_include_directories(${target} PUBLIC ${CMAKE_CURRENT_LIST_DIR})
   target_link_libraries(${target}
+                        pico_cyw43_arch_none
+                        pico_multicore
                         pico_stdlib
                         hardware_adc
+                        hardware_irq
                         hardware_pio
                         tinyusb_device
                         tinyusb_board)

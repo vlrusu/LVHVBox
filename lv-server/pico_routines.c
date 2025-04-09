@@ -255,6 +255,24 @@ void* pico_loop(void* args){
   char msg[128];
   while (1) {
     while (queue_size(queue) < 1){
+      unsigned char buf[4];
+      int transferred;
+      int res = libusb_bulk_transfer(pico->handle, 0x82, (char*)buf, 4, &transferred, 1000); // 1 sec timeout
+      if (res == 0) {
+        printf("Received %d bytes: %02x %02x %02x %02x\n", transferred, buf[0], buf[1], buf[2], buf[3]);
+      } else if (res == LIBUSB_ERROR_TIMEOUT) {
+        sprintf(msg, "Timeout waiting for data\n");
+        log_write(logger, msg, LOG_VERBOSE);
+      } else {
+        sprintf(msg, "libusb error: %s\n", libusb_error_name(res));
+        log_write(logger, msg, LOG_VERBOSE);
+      }
+      ////libusb_bulk_transfer(pico->handle, 0x82, (char*)buf, 4, &transferred, 0);
+      //printf("Raw bytes: %02x %02x %02x %02x\n", buf[0], buf[1], buf[2], buf[3]);
+      //int irv = *(int*)buf;
+      //sprintf(msg, "%d", irv);
+      //sprintf(msg, "test");
+      //log_write(logger, msg, LOG_VERBOSE);
       msleep(100);
     }
 

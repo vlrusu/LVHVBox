@@ -3,6 +3,7 @@
 #include <pico/platform.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include "pico/cyw43_arch.h"
 
 #include "bsp/board.h"
 #include "channel.pio.h"
@@ -10,20 +11,26 @@
 #include "hardware/adc.h"
 #include "hardware/clocks.h"
 #include "hardware/gpio.h"
+#include "hardware/irq.h"
 #include "hardware/pio.h"
+#include "hardware/structs/sio.h"
 #include "hardware/sync.h"
 #include "pico/bootrom.h"
+#include "pico/multicore.h"
 #include "pico/platform.h"
 #include "pico/stdlib.h"
 #include "pico/types.h"
 #include "string.h"
 #include "tusb.h"
 
+static int core0_rx_val = 0;
+
+
 // Channel count
 #define nAdc 6  // Number of SmartSwitches
 #define mChn 6  // Number of channels for trip processing
 
-// #define pico 1 or 2, configured externally
+//#define pico 1  // which pico (1 or 2)
 
 struct Pins {
   uint8_t crowbarPins[mChn];
@@ -74,6 +81,32 @@ float ped_subtraction[6] = {0, 0, 0, 0, 0, 0};
 float ped_subtraction_stored[6] = {0, 0, 0, 0, 0, 0};
 int ped_on = 1;
 
+volatile int blink_requested = 0;
+
+//==============================================================================
+// Interrupt handler for core1
+//==============================================================================
+void core1_interrupt_handler() {
+  multicore_fifo_clear_irq();
+  // This is the interrupt-style handler
+  while (multicore_fifo_rvalid()) {
+    uint32_t msg = multicore_fifo_pop_blocking();
+    // Handle the "interrupt" from core1
+    printf("Core0 got interrupt-style message: %u\n", msg);
+  }
+}
+
+void setup_core0_fifo_interrupt() {
+
+  multicore_fifo_clear_irq();
+  irq_set_exclusive_handler(SIO_IRQ_PROC0, core1_interrupt_handler);
+  irq_set_enabled(SIO_IRQ_PROC0, true);
+
+}
+
+//==============================================================================
+// init
+//==============================================================================
 void port_init() {
   uint8_t port;
   // Reset all trips
@@ -103,7 +136,6 @@ void variable_init() {
 
   // pinouts for old muxers/hv board
   // pinouts/ins same for both picos
-  /*
   uint8_t crowbarPins[6] = { 2, 5, 8, 11, 14, 21};
   uint8_t headerPins[6] = { 1, 3, 6, 10, 12, 9};
   for (int i = 0; i < 6; i++) {
@@ -117,8 +149,8 @@ void variable_init() {
   all_pins.sclk_1 = 26;    // SPI clock
   all_pins.csPin_1 = 15;   // SPI Chip select for I
   all_pins.enablePin = 7;  // enable pin for MUX
-  */
 
+  /*
   // pico1 pinout
   if (pico == 1) {
     uint8_t crowbarPins[6] = {1, 4, 9, 18, 13, 10};
@@ -154,8 +186,12 @@ void variable_init() {
     all_pins.csPin_1 = 18;   // SPI Chip select for I
     all_pins.enablePin = 8;  // enable pin for MUX
   }
+  */
 }
 
+//==============================================================================
+// Server communication
+//==============================================================================
 void cdc_task(float channel_current_averaged[6], float channel_voltage[6],
               uint sm[6], uint16_t* burst_position, float trip_currents[6],
               uint8_t* trip_mask, uint8_t* trip_status,
@@ -422,13 +458,16 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6],
       int intval = (int)two;
 
       memcpy(&trip_requirement[receive_chars[0] - 45], &intval, 4);
-    } else if (receive_chars[0] == 255) {
+    } else if (receive_chars[0] == 255){
       // force reboot into BOOTSEL mode
       reset_usb_boot(0, 0);
     }
   }
 }
 
+//==============================================================================
+// current and voltage sampling routines
+//==============================================================================
 float get_single_voltage(
     PIO pio, uint sm)  // obtains a single non-averaged voltage measurement
 {
@@ -460,7 +499,7 @@ void get_all_averaged_currents(
   {
     for (uint32_t channel = 0; channel < 3; channel++) {
       if (pio_sm_is_rx_fifo_full(pio_0, sm[channel]) ||
-          pio_sm_is_rx_fifo_full(pio_0, sm[channel + 3])) {
+          pio_sm_is_rx_fifo_full(pio_1, sm[channel + 3])) {
         if (i > 10 && *before_trip_allowed == 0) {
           slow_read = 1;
         }
@@ -484,6 +523,7 @@ void get_all_averaged_currents(
         num_trigger[channel] -= 1;
       }
 
+      // !! is this correct ped sup??
       if ((latest_current_1 * adc_to_uA >
            trip_currents[channel + 3] - ped_subtraction[channel]) &&
           ((trip_mask & (1 << channel + 3))) &&
@@ -501,7 +541,7 @@ void get_all_averaged_currents(
         full_current_array[channel + 3][*full_position] =
             (uint32_t)latest_current_1;
       }
-    }
+    }  // channel loop
 
     // if tripping is necessary, trip correct channel
 
@@ -517,28 +557,35 @@ void get_all_averaged_currents(
         }
       }
     }
+
+    // Handle the trip (put the crowbar pin high)
+    //
+    // NB: only trip the channel with the highest over-threshold current and
+    // reset the trip counter for all channels regardless
     if (trip_required == 1) {
       if (*current_buffer_run == 1) {
         *remaining_buffer_iterations = floor(full_current_history_length / 2);
         *current_buffer_run = 0;
       }
 
+      // Sum the total amount of current over the threshold for the past 25
+      // measurements
       float current_sums[6] = {0, 0, 0, 0, 0, 0};
       int read_index;
       for (int channel_index = 0; channel_index < 6; channel_index++) {
         for (int current_index = 0; current_index < 25; current_index++) {
-          if (*full_position - current_index < 0) {
-            read_index = full_current_history_length - current_index;
-          } else {
-            read_index = *full_position - current_index;
-          }
+          read_index =
+              (*full_position - current_index + full_current_history_length) %
+              full_current_history_length;
           current_sums[channel_index] +=
               full_current_array[channel_index][read_index] * adc_to_uA -
-              trip_currents[channel_index];
+              trip_currents[channel_index];  // !! should we subtract ped here?
         }
       }
 
-      int max_channel;
+      // which channel (not already tripped) had the highest
+      // current-over-threshold sum?
+      int max_channel = 0;
       float max_value = 0;
       for (int i = 0; i < 6; i++) {
         if (current_sums[i] > max_value && ((~trip_status & (1 << i)))) {
@@ -547,11 +594,13 @@ void get_all_averaged_currents(
         }
       }
 
+      // trip only that channel with the highest over-threshold current
       gpio_put(all_pins.crowbarPins[max_channel], 1);
       *before_trip_allowed = 20;
       trip_status = trip_status | (1 << max_channel);
     }
 
+    // Increment index in the current buffer
     if (*remaining_buffer_iterations > 0) {
       *full_position += 1;
       if (*full_position >= full_current_history_length) {
@@ -562,7 +611,7 @@ void get_all_averaged_currents(
         *remaining_buffer_iterations -= 1;
       }
     }
-  }
+  }  // end of i 200 samples loop
 
   for (uint32_t channel = 0; channel < 6;
        channel++)  // divide & multiply summed current values by appropriate
@@ -578,17 +627,88 @@ void get_all_averaged_currents(
   }
 }
 
+/*
+void core0_sio_irq() {
+  multicore_fifo_clear_irq();
+  for(int i = 0; i < 10; ++i) {
+  //while (1) {
+    cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN,1);
+    sleep_ms(1000);
+    cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN,0);
+    sleep_ms(1000);
+    //tight_loop_contents();
+  }
+  //// Just record the latest entry
+  //while (multicore_fifo_rvalid()) {
+  //  core0_rx_val = multicore_fifo_pop_blocking();
+  //}
+
+  //int x = 42;
+
+  //tud_cdc_write(&x, sizeof(x));
+  //tud_cdc_write_flush();
+  return;
+}
+*/
+
+void core0_sio_irq() {
+  blink_requested = true;
+
+  while (multicore_fifo_rvalid())
+    core0_rx_val = multicore_fifo_pop_blocking();
+
+  multicore_fifo_clear_irq();
+  return;
+}
+
+
 //******************************************************************************
-// Standard loop function, called repeatedly
+// core 1 entry
+//******************************************************************************
+void core1_entry() {
+  multicore_fifo_clear_irq();
+  //multicore_fifo_clear_irq();
+  //irq_set_exclusive_handler(SIO_FIFO_IRQ_NUM(1), core1_sio_irq);
+  //irq_set_enabled(SIO_FIFO_IRQ_NUM(1), true);
+
+  // Send something to Core0, this should fire the interrupt.
+  multicore_fifo_push_blocking(42);
+
+  while (1) {
+    tight_loop_contents();
+  }
+}
+
+
+//******************************************************************************
+// Standard loop function, called repeatedly on core 0
+//******************************************************************************
 int main() {
-#define PICO_XOSC_STARTUP_DELAY_MULTIPLIER 64
+//#define PICO_XOSC_STARTUP_DELAY_MULTIPLIER 64
 
   stdio_init_all();
 
-  set_sys_clock_khz(
-      280000, true);  // Overclocking is necessary to keep up with reading PIO
+  //board_init();  // tinyUSB formality
 
-  board_init();  // tinyUSB formality
+  cyw43_arch_init();
+
+  tusb_init();  // <-- Init USB without board_init
+
+  //for (int i = 0; i < 4; ++i) {
+  //  cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
+  //  sleep_ms(1000);
+  //  cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);
+  //  sleep_ms(1000);
+  //}
+
+  // 1
+  cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
+  sleep_ms(1000);
+  cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);
+  sleep_ms(500);
+
+  //set_sys_clock_khz(
+  //    280000, true);  // Overclocking is necessary to keep up with reading PIO
 
   // float clkdiv = 34; // set clock divider for PIO
   float clkdiv = 45;  // results in 81.967 kHz
@@ -628,11 +748,23 @@ int main() {
   channel_program_init(pio_0, sm_channel_1, offset_channel_1,
                        all_pins.headerPins[1], clkdiv);
 
+  // 2
+  cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
+  sleep_ms(1000);
+  cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);
+  sleep_ms(500);
+
   // start channel 2 state machine
   uint sm_channel_2 = pio_claim_unused_sm(pio_0, true);
   uint offset_channel_2 = pio_add_program(pio_0, &channel_program);
   channel_program_init(pio_0, sm_channel_2, offset_channel_2,
                        all_pins.headerPins[2], clkdiv);
+
+  // 3
+  cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
+  sleep_ms(1000);
+  cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);
+  sleep_ms(500);
 
   // Start clock state machien for PIO block 1
   uint sm_clock_1 = pio_claim_unused_sm(pio_1, true);
@@ -640,11 +772,23 @@ int main() {
   clock_1_program_init(pio_1, sm_clock_1, offset_clock_1, all_pins.csPin_1,
                        all_pins.sclk_1, clkdiv);
 
+  // 4
+  cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
+  sleep_ms(1000);
+  cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);
+  sleep_ms(500);
+
   // start channel 3 state machine
   uint sm_channel_3 = pio_claim_unused_sm(pio_1, true);
   uint offset_channel_3 = pio_add_program(pio_1, &channel_program);
   channel_program_init(pio_1, sm_channel_3, offset_channel_3,
                        all_pins.headerPins[3], clkdiv);
+
+  // 5
+  cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
+  sleep_ms(1000);
+  cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);
+  sleep_ms(500);
 
   // start channel 4 state machine
   uint sm_channel_4 = pio_claim_unused_sm(pio_1, true);
@@ -652,11 +796,18 @@ int main() {
   channel_program_init(pio_1, sm_channel_4, offset_channel_4,
                        all_pins.headerPins[4], clkdiv);
 
-  // start channel 5 state machine
-  uint sm_channel_5 = pio_claim_unused_sm(pio_1, true);
-  uint offset_channel_5 = pio_add_program(pio_1, &channel_program);
-  channel_program_init(pio_1, sm_channel_5, offset_channel_5,
-                       all_pins.headerPins[5], clkdiv);
+  //// start channel 5 state machine
+  //uint sm_channel_5 = pio_claim_unused_sm(pio_1, true);
+  //uint offset_channel_5 = pio_add_program(pio_1, &channel_program);
+  //channel_program_init(pio_1, sm_channel_5, offset_channel_5,
+  //                     all_pins.headerPins[5], clkdiv);
+
+  // 6
+  cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
+  sleep_ms(1000);
+  cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);
+  sleep_ms(500);
+
 
   // create array of state machines
   // this is used to acquire data from DAQ state machines in other areas of this
@@ -667,11 +818,18 @@ int main() {
   sm_array[2] = sm_channel_2;
   sm_array[3] = sm_channel_3;
   sm_array[4] = sm_channel_4;
-  sm_array[5] = sm_channel_5;
+  //sm_array[5] = sm_channel_5;
+
+  // 7
+  cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
+  sleep_ms(1000);
+  cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);
+  sleep_ms(500);
 
   // start all state machines in pio block in sync
   pio_enable_sm_mask_in_sync(pio_0, pio_start_mask);
   pio_enable_sm_mask_in_sync(pio_1, pio_start_mask);
+
 
   for (uint8_t i = 0; i < 6;
        i++)  // ensure that all crowbar pins are initially off
@@ -685,8 +843,55 @@ int main() {
 
   tud_init(BOARD_TUD_RHPORT);  // tinyUSB formality
 
+  // 8
+  cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
+  sleep_ms(1000);
+  cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);
+  sleep_ms(500);
+
+  //cyw43_arch_enable_sta_mode();
+
+  // Launch core1 loop
+  multicore_launch_core1(core1_entry);
+
+  //if (multicore_fifo_rvalid()) {
+  //  uint32_t val = multicore_fifo_pop_blocking();
+  //  blink_requested = true;
+  //}
+
+  //if (blink_requested) {
+  //  blink_requested = false;
+  //  for (int i = 0; i < 20; ++i) {
+  //    cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
+  //    sleep_ms(100);
+  //    cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);
+  //    sleep_ms(100);
+  //  }
+  //}
+
+  multicore_fifo_clear_irq();
+  irq_set_exclusive_handler(SIO_IRQ_PROC0, core0_sio_irq);
+  irq_set_enabled(SIO_IRQ_PROC0, true);
+
   while (true)  // DAQ & USB communication Loop, runs forever
   {
+    //if (multicore_fifo_rvalid()) {
+    //  uint32_t val = multicore_fifo_pop_blocking();
+    //  blink_requested = true;
+    //}
+
+    if (blink_requested) {
+      blink_requested = false;
+      for (int i = 0; i < 20; ++i) {
+        cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
+        sleep_ms(3000);
+        cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);
+        sleep_ms(500);
+      }
+    }
+
+    tud_task();  // tinyUSB formality
+
     // ----- Collect averaged current measurements ----- //
 
     for (int j = 0; j < 35; j++) {
