@@ -3,7 +3,6 @@
 #include <pico/platform.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include "pico/cyw43_arch.h"
 
 #include "bsp/board.h"
 #include "channel.pio.h"
@@ -16,6 +15,7 @@
 #include "hardware/structs/sio.h"
 #include "hardware/sync.h"
 #include "pico/bootrom.h"
+#include "pico/cyw43_arch.h"
 #include "pico/multicore.h"
 #include "pico/platform.h"
 #include "pico/stdlib.h"
@@ -25,12 +25,11 @@
 
 static int core0_rx_val = 0;
 
-
 // Channel count
 #define nAdc 6  // Number of SmartSwitches
 #define mChn 6  // Number of channels for trip processing
 
-//#define pico 1  // which pico (1 or 2)
+// #define pico 1  // which pico (1 or 2)
 
 struct Pins {
   uint8_t crowbarPins[mChn];
@@ -97,11 +96,9 @@ void core1_interrupt_handler() {
 }
 
 void setup_core0_fifo_interrupt() {
-
   multicore_fifo_clear_irq();
   irq_set_exclusive_handler(SIO_IRQ_PROC0, core1_interrupt_handler);
   irq_set_enabled(SIO_IRQ_PROC0, true);
-
 }
 
 //==============================================================================
@@ -136,8 +133,8 @@ void variable_init() {
 
   // pinouts for old muxers/hv board
   // pinouts/ins same for both picos
-  uint8_t crowbarPins[6] = { 2, 5, 8, 11, 14, 21};
-  uint8_t headerPins[6] = { 1, 3, 6, 10, 12, 9};
+  uint8_t crowbarPins[6] = {2, 5, 8, 11, 14, 21};
+  uint8_t headerPins[6] = {1, 3, 6, 10, 12, 9};
   for (int i = 0; i < 6; i++) {
     all_pins.crowbarPins[i] = crowbarPins[i];
     all_pins.headerPins[i] = headerPins[i];
@@ -458,7 +455,7 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6],
       int intval = (int)two;
 
       memcpy(&trip_requirement[receive_chars[0] - 45], &intval, 4);
-    } else if (receive_chars[0] == 255){
+    } else if (receive_chars[0] == 255) {
       // force reboot into BOOTSEL mode
       reset_usb_boot(0, 0);
     }
@@ -654,22 +651,20 @@ void core0_sio_irq() {
 void core0_sio_irq() {
   blink_requested = true;
 
-  while (multicore_fifo_rvalid())
-    core0_rx_val = multicore_fifo_pop_blocking();
+  while (multicore_fifo_rvalid()) core0_rx_val = multicore_fifo_pop_blocking();
 
   multicore_fifo_clear_irq();
   return;
 }
-
 
 //******************************************************************************
 // core 1 entry
 //******************************************************************************
 void core1_entry() {
   multicore_fifo_clear_irq();
-  //multicore_fifo_clear_irq();
-  //irq_set_exclusive_handler(SIO_FIFO_IRQ_NUM(1), core1_sio_irq);
-  //irq_set_enabled(SIO_FIFO_IRQ_NUM(1), true);
+  // multicore_fifo_clear_irq();
+  // irq_set_exclusive_handler(SIO_FIFO_IRQ_NUM(1), core1_sio_irq);
+  // irq_set_enabled(SIO_FIFO_IRQ_NUM(1), true);
 
   // Send something to Core0, this should fire the interrupt.
   multicore_fifo_push_blocking(42);
@@ -679,27 +674,20 @@ void core1_entry() {
   }
 }
 
-
 //******************************************************************************
 // Standard loop function, called repeatedly on core 0
 //******************************************************************************
 int main() {
-//#define PICO_XOSC_STARTUP_DELAY_MULTIPLIER 64
+  // #define PICO_XOSC_STARTUP_DELAY_MULTIPLIER 64
 
   stdio_init_all();
 
-  //board_init();  // tinyUSB formality
+  // board_init();  // tinyUSB formality
 
   cyw43_arch_init();
 
-  tusb_init();  // <-- Init USB without board_init
-
-  //for (int i = 0; i < 4; ++i) {
-  //  cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
-  //  sleep_ms(1000);
-  //  cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);
-  //  sleep_ms(1000);
-  //}
+  // replace board_init with this. Full board_init somehow interferes with LED.
+  tusb_init();
 
   // 1
   cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
@@ -707,8 +695,8 @@ int main() {
   cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);
   sleep_ms(500);
 
-  //set_sys_clock_khz(
-  //    280000, true);  // Overclocking is necessary to keep up with reading PIO
+  set_sys_clock_khz(
+      280000, true);  // Overclocking is necessary to keep up with reading PIO
 
   // float clkdiv = 34; // set clock divider for PIO
   float clkdiv = 45;  // results in 81.967 kHz
@@ -748,23 +736,11 @@ int main() {
   channel_program_init(pio_0, sm_channel_1, offset_channel_1,
                        all_pins.headerPins[1], clkdiv);
 
-  // 2
-  cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
-  sleep_ms(1000);
-  cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);
-  sleep_ms(500);
-
   // start channel 2 state machine
   uint sm_channel_2 = pio_claim_unused_sm(pio_0, true);
   uint offset_channel_2 = pio_add_program(pio_0, &channel_program);
   channel_program_init(pio_0, sm_channel_2, offset_channel_2,
                        all_pins.headerPins[2], clkdiv);
-
-  // 3
-  cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
-  sleep_ms(1000);
-  cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);
-  sleep_ms(500);
 
   // Start clock state machien for PIO block 1
   uint sm_clock_1 = pio_claim_unused_sm(pio_1, true);
@@ -772,23 +748,11 @@ int main() {
   clock_1_program_init(pio_1, sm_clock_1, offset_clock_1, all_pins.csPin_1,
                        all_pins.sclk_1, clkdiv);
 
-  // 4
-  cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
-  sleep_ms(1000);
-  cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);
-  sleep_ms(500);
-
   // start channel 3 state machine
   uint sm_channel_3 = pio_claim_unused_sm(pio_1, true);
   uint offset_channel_3 = pio_add_program(pio_1, &channel_program);
   channel_program_init(pio_1, sm_channel_3, offset_channel_3,
                        all_pins.headerPins[3], clkdiv);
-
-  // 5
-  cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
-  sleep_ms(1000);
-  cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);
-  sleep_ms(500);
 
   // start channel 4 state machine
   uint sm_channel_4 = pio_claim_unused_sm(pio_1, true);
@@ -796,18 +760,18 @@ int main() {
   channel_program_init(pio_1, sm_channel_4, offset_channel_4,
                        all_pins.headerPins[4], clkdiv);
 
+  // This 5th sm is the last one available to us. When we start it, it blocks
+  // the LED from flashing. I presume this is some resource issue -- the LED
+  // somehow makes use of an available SM to do its business.
+  //
+  // For the purposes of this test (determine whether the IRQ works based on
+  // LED flashing) we remove it.
+
   //// start channel 5 state machine
-  //uint sm_channel_5 = pio_claim_unused_sm(pio_1, true);
-  //uint offset_channel_5 = pio_add_program(pio_1, &channel_program);
-  //channel_program_init(pio_1, sm_channel_5, offset_channel_5,
-  //                     all_pins.headerPins[5], clkdiv);
-
-  // 6
-  cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
-  sleep_ms(1000);
-  cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);
-  sleep_ms(500);
-
+  // uint sm_channel_5 = pio_claim_unused_sm(pio_1, true);
+  // uint offset_channel_5 = pio_add_program(pio_1, &channel_program);
+  // channel_program_init(pio_1, sm_channel_5, offset_channel_5,
+  //                      all_pins.headerPins[5], clkdiv);
 
   // create array of state machines
   // this is used to acquire data from DAQ state machines in other areas of this
@@ -818,18 +782,11 @@ int main() {
   sm_array[2] = sm_channel_2;
   sm_array[3] = sm_channel_3;
   sm_array[4] = sm_channel_4;
-  //sm_array[5] = sm_channel_5;
-
-  // 7
-  cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
-  sleep_ms(1000);
-  cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);
-  sleep_ms(500);
+  // sm_array[5] = sm_channel_5; // Remove for IRQ-LED test. See note above.
 
   // start all state machines in pio block in sync
   pio_enable_sm_mask_in_sync(pio_0, pio_start_mask);
   pio_enable_sm_mask_in_sync(pio_1, pio_start_mask);
-
 
   for (uint8_t i = 0; i < 6;
        i++)  // ensure that all crowbar pins are initially off
@@ -843,31 +800,8 @@ int main() {
 
   tud_init(BOARD_TUD_RHPORT);  // tinyUSB formality
 
-  // 8
-  cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
-  sleep_ms(1000);
-  cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);
-  sleep_ms(500);
-
-  //cyw43_arch_enable_sta_mode();
-
   // Launch core1 loop
   multicore_launch_core1(core1_entry);
-
-  //if (multicore_fifo_rvalid()) {
-  //  uint32_t val = multicore_fifo_pop_blocking();
-  //  blink_requested = true;
-  //}
-
-  //if (blink_requested) {
-  //  blink_requested = false;
-  //  for (int i = 0; i < 20; ++i) {
-  //    cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
-  //    sleep_ms(100);
-  //    cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);
-  //    sleep_ms(100);
-  //  }
-  //}
 
   multicore_fifo_clear_irq();
   irq_set_exclusive_handler(SIO_IRQ_PROC0, core0_sio_irq);
@@ -875,11 +809,8 @@ int main() {
 
   while (true)  // DAQ & USB communication Loop, runs forever
   {
-    //if (multicore_fifo_rvalid()) {
-    //  uint32_t val = multicore_fifo_pop_blocking();
-    //  blink_requested = true;
-    //}
-
+    // When core1 triggers the IRQ, core0 IRQ handler sets blink_requested to
+    // true
     if (blink_requested) {
       blink_requested = false;
       for (int i = 0; i < 20; ++i) {
@@ -972,6 +903,7 @@ int main() {
       }
 
       gpio_put(all_pins.enablePin, 0);  // set mux to current
+
       sleep_ms(1);
     }
   }
