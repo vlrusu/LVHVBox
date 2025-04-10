@@ -9,6 +9,7 @@
 #include "clock.pio.h"
 #include "hardware/adc.h"
 #include "hardware/clocks.h"
+#include "hardware/dma.h"
 #include "hardware/gpio.h"
 #include "hardware/pio.h"
 #include "hardware/sync.h"
@@ -73,6 +74,9 @@ uint32_t full_current_array[6][full_current_history_length];
 float ped_subtraction[6] = {0, 0, 0, 0, 0, 0};
 float ped_subtraction_stored[6] = {0, 0, 0, 0, 0, 0};
 int ped_on = 1;
+
+int16_t dma_current_buffers[6][200];
+int dma_channels[6];
 
 void port_init() {
   uint8_t port;
@@ -154,6 +158,35 @@ void variable_init() {
     all_pins.csPin_1 = 18;   // SPI Chip select for I
     all_pins.enablePin = 8;  // enable pin for MUX
   }
+}
+
+void dma_init(PIO pio, uint sm, uint channel) {
+  int dma_chan = dma_channel_claim_unused(true);  // or manually assign
+  dma_channels[channel] = dma_chan;
+  dma_channel_config config = dma_channel_get_default_config(dma_chan);
+
+  // Read from fixed address (the PIO FIFO)
+  channel_config_set_read_increment(&config, false);
+
+  // Write to incrementing addresses in the buffer
+  channel_config_set_write_increment(&config, true);
+
+  // Trigger on RX FIFO having data available
+  channel_config_set_dreq(
+      &config, pio == pio_0 ? DREQ_PIO0_RX0 + sm : DREQ_PIO1_RX0 + sm);
+  // channel_config_set_dreq(&config, pio_get_dreq(pio, sm, false));
+
+  //// Transfer size: word (32 bits)
+  // channel_config_set_transfer_data_size(&config, DMA_SIZE_32);
+
+  // Configure the channel with above settings
+  dma_channel_configure(dma_chan,                 // Channel to configure
+                        &config,                  // Configuration
+                        dma_current_buffers[sm],  // Destination buffer
+                        &pio->rxf[sm],            // Source: PIO RX FIFO
+                        200,                      // Number of transfers
+                        false                     // Don't start immediately
+  );
 }
 
 void cdc_task(float channel_current_averaged[6], float channel_voltage[6],
@@ -446,31 +479,62 @@ void get_all_averaged_currents(
     *before_trip_allowed -= 1;
   }
 
+  // ==========================================================================
+  // Dump 200 current measurements into dma_current_buffers[6][200]
+  // Faster alternative to pio_sm_get_blocking.
+  // ==========================================================================
+  for (uint32_t i = 0; i < 6; i++) {
+    dma_channel_start(dma_channels[i]);
+  }
+
+  // wait (alternative: dma_channel_is_busy or an irq)
+  for (int i = 0; i < 6; i++) {
+    dma_channel_wait_for_finish_blocking(dma_channels[i]);
+  }
+
+  // DMA performance metrics
+  // overflow on any sm
+  if (pio_0->fdebug & PIO_FDEBUG_RXOVER_BITS ||
+      pio_1->fdebug & PIO_FDEBUG_RXOVER_BITS) {
+    slow_read = 1;
+  }
+  for (int i = 0; i < 3; i++) {
+    // overflow on each sm
+    int overflowed_0 =
+        (pio_0->fdebug & (1u << (PIO_FDEBUG_RXOVER_LSB + i))) != 0;
+    int overflowed_1 =
+        (pio_1->fdebug & (1u << (PIO_FDEBUG_RXOVER_LSB + i))) != 0;
+    // number of samples in the RX FIFO
+    int level_0 = pio_sm_get_rx_fifo_level(pio_0, i);
+    int level_1 = pio_sm_get_rx_fifo_level(pio_1, i);
+    // also number of samples in the RX FIFO?
+    int xfered_0 = dma_channel_hw_addr(dma_channels[i])->transfer_count;
+    int xfered_1 = dma_channel_hw_addr(dma_channels[i + 3])->transfer_count;
+  }
+
+  // clear the overflow bits
+  pio_0->fdebug = PIO_FDEBUG_RXOVER_BITS;
+  pio_1->fdebug = PIO_FDEBUG_RXOVER_BITS;
+
+  // ==========================================================================
+  // Process the current measurements -- average, trips, etc.
+  // ==========================================================================
   for (uint32_t channel = 0; channel < 6;
        channel++)  // initializes each element of current array to zero
   {
     current_array[channel] = 0;
   }
 
-  float latest_current_0;
-  float latest_current_1;
-
+  // Loop measurements, sum, handle trip
   for (uint32_t i = 0; i < 200;
        i++)  // adds current measurements to current_array
   {
     for (uint32_t channel = 0; channel < 3; channel++) {
-      if (pio_sm_is_rx_fifo_full(pio_0, sm[channel]) ||
-          pio_sm_is_rx_fifo_full(pio_1, sm[channel + 3])) {
-        if (i > 10 && *before_trip_allowed == 0) {
-          slow_read = 1;
-        }
-      }
-
       // NOTE: with an average of 200, overflow does not occur
       // However, if this average is increased later on, it may be necessary to
       // divide earlier/increase to 32 bit integers
-      latest_current_0 = (int16_t)pio_sm_get_blocking(pio_0, sm[channel]);
-      latest_current_1 = (int16_t)pio_sm_get_blocking(pio_1, sm[channel + 3]);
+      float latest_current_0 = (int16_t)dma_current_buffers[channel][i];
+      float latest_current_1 = (int16_t)dma_current_buffers[channel + 3][i];
 
       current_array[channel] += latest_current_0;
       current_array[channel + 3] += latest_current_1;
@@ -574,6 +638,7 @@ void get_all_averaged_currents(
     }
   }  // end of i 200 samples loop
 
+  // Average
   for (uint32_t channel = 0; channel < 6;
        channel++)  // divide & multiply summed current values by appropriate
                    // factors
@@ -692,6 +757,14 @@ int main() {
   gpio_put(all_pins.P1_0, 1);  // put pedestal pin high
   gpio_put(all_pins.P1_1, 1);  // put pedestal pin high
   sleep_ms(2000);
+
+  // dma
+  dma_init(pio_0, 0, 0);
+  dma_init(pio_0, 1, 1);
+  dma_init(pio_0, 2, 2);
+  dma_init(pio_1, 0, 3);
+  dma_init(pio_1, 1, 4);
+  dma_init(pio_1, 2, 5);
 
   tud_init(BOARD_TUD_RHPORT);  // tinyUSB formality
 
