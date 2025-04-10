@@ -165,4 +165,5 @@ void* client_handler(void* args){
   sprintf(msg, "closing client session for fd %d", addr);
   log_write(logger, msg, LOG_INFO);
   close(addr);
+  pthread_exit(NULL);
 }

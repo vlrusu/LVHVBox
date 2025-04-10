@@ -3,6 +3,7 @@
 # January 2025
 
 import ctypes
+import select
 import socket
 import struct
 
@@ -101,15 +102,26 @@ class MessagingConnection:
         encoded = self.encode_message(self.header, *items)
         self.client.send(encoded)
 
+    def safe_recv(self, chunk):
+        rv = None
+        self.client.setblocking(False)
+        while rv is None:
+            ready = select.select([self.client], [], [], 1)
+            if ready[0]:
+                rv = self.client.recv(chunk)
+            else:
+                rv = b''
+        return rv
+
     # TODO disable timeout and calculate rolling size for exact read
     def recv_message(self):
         chunk = 1024
         rv = b''
-        recv = self.client.recv(chunk)
+        recv = self.safe_recv(chunk)
         while 0 < len(recv):
             rv += recv
             try:
-                recv = self.client.recv(chunk)
+                recv = self.safe_recv(chunk)
             except:
                 recv = b''
 

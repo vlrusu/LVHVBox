@@ -93,6 +93,7 @@ void* foyer(void* args){
     cargs->pico_b_queue = pico_b_queue;
     cargs->logger = logger;
     pthread_t thread;
+    pthread_detach(thread);
     pthread_create(&thread, NULL, client_handler, cargs);
   }
 }

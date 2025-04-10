@@ -137,8 +137,7 @@ void message_blocks_realloc(Message_t* message){
     target = 2;
   }
   else{
-//  target = 2 * message->space;
-    target = message->space + 1;
+    target = 2 * message->space;
   }
   message->blocks = realloc(message->blocks, target * sizeof(MessageBlock_t*));
   message->space = target;
