@@ -12,6 +12,7 @@
 #include "hardware/gpio.h"
 #include "hardware/pio.h"
 #include "hardware/sync.h"
+#include "pico/bootrom.h"
 #include "pico/platform.h"
 #include "pico/stdlib.h"
 #include "pico/types.h"
@@ -421,6 +422,9 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6],
       int intval = (int)two;
 
       memcpy(&trip_requirement[receive_chars[0] - 45], &intval, 4);
+    } else if (receive_chars[0] == 255) {
+      // force reboot into BOOTSEL mode
+      reset_usb_boot(0, 0);
     }
   }
 }
@@ -456,7 +460,7 @@ void get_all_averaged_currents(
   {
     for (uint32_t channel = 0; channel < 3; channel++) {
       if (pio_sm_is_rx_fifo_full(pio_0, sm[channel]) ||
-          pio_sm_is_rx_fifo_full(pio_0, sm[channel + 3])) {
+          pio_sm_is_rx_fifo_full(pio_1, sm[channel + 3])) {
         if (i > 10 && *before_trip_allowed == 0) {
           slow_read = 1;
         }
@@ -471,6 +475,7 @@ void get_all_averaged_currents(
       current_array[channel] += latest_current_0;
       current_array[channel + 3] += latest_current_1;
 
+      // !! is this correct ped sup??
       if ((latest_current_0 * adc_to_uA >
            trip_currents[channel] - ped_subtraction[channel]) &&
           ((trip_mask & (1 << channel))) && ((~trip_status & (1 << channel))) &&
@@ -497,7 +502,7 @@ void get_all_averaged_currents(
         full_current_array[channel + 3][*full_position] =
             (uint32_t)latest_current_1;
       }
-    }
+    }  // channel loop
 
     // if tripping is necessary, trip correct channel
 
@@ -513,28 +518,35 @@ void get_all_averaged_currents(
         }
       }
     }
+
+    // Handle the trip (put the crowbar pin high)
+    //
+    // NB: only trip the channel with the highest over-threshold current and
+    // reset the trip counter for all channels regardless
     if (trip_required == 1) {
       if (*current_buffer_run == 1) {
         *remaining_buffer_iterations = floor(full_current_history_length / 2);
         *current_buffer_run = 0;
       }
 
+      // Sum the total amount of current over the threshold for the past 25
+      // measurements
       float current_sums[6] = {0, 0, 0, 0, 0, 0};
       int read_index;
       for (int channel_index = 0; channel_index < 6; channel_index++) {
         for (int current_index = 0; current_index < 25; current_index++) {
-          if (*full_position - current_index < 0) {
-            read_index = full_current_history_length - current_index;
-          } else {
-            read_index = *full_position - current_index;
-          }
+          read_index =
+              (*full_position - current_index + full_current_history_length) %
+              full_current_history_length;
           current_sums[channel_index] +=
               full_current_array[channel_index][read_index] * adc_to_uA -
-              trip_currents[channel_index];
+              trip_currents[channel_index];  // !! should we subtract ped here?
         }
       }
 
-      int max_channel;
+      // which channel (not already tripped) had the highest
+      // current-over-threshold sum?
+      int max_channel = 0;
       float max_value = 0;
       for (int i = 0; i < 6; i++) {
         if (current_sums[i] > max_value && ((~trip_status & (1 << i)))) {
@@ -543,11 +555,13 @@ void get_all_averaged_currents(
         }
       }
 
+      // trip only that channel with the highest over-threshold current
       gpio_put(all_pins.crowbarPins[max_channel], 1);
       *before_trip_allowed = 20;
       trip_status = trip_status | (1 << max_channel);
     }
 
+    // Increment index in the current buffer
     if (*remaining_buffer_iterations > 0) {
       *full_position += 1;
       if (*full_position >= full_current_history_length) {
@@ -558,7 +572,7 @@ void get_all_averaged_currents(
         *remaining_buffer_iterations -= 1;
       }
     }
-  }
+  }  // end of i 200 samples loop
 
   for (uint32_t channel = 0; channel < 6;
        channel++)  // divide & multiply summed current values by appropriate
