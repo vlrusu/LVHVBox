@@ -108,21 +108,9 @@ void* client_handler(void* args){
       if (!pico_is_connected(pico_id)) {
         sprintf(msg, "WARNING: command issued to invalid pico %d channel %d", pico_id, channel);
         log_write(logger, msg, LOG_INFO);
-
-        Message_t* error_msg = message_initialize();
-        const char* error_str = "ERROR";
-        size_t str_len = strlen(error_str);
-        MessageBlock_t* block = block_construct('C', str_len);
-        for (size_t i = 0; i < str_len; i++) {
-            block_insert(block, (void*)&error_str[i]);
-        }
-
-        message_append(error_msg, block);
-
-        message_send(error_msg, task.addr);
-        message_destroy(error_msg);
-        continue;
-      } else {
+        task.rv = message_wrap_chars("ERROR");
+      }
+      else{
         // first, global slow controls are split between the two picos...
         if (task.command.name == COMMAND_query_current){
           queue_push(pico_a_queue, item);
@@ -146,7 +134,6 @@ void* client_handler(void* args){
           log_write(logger, msg, LOG_INFO);
         }
       }
-
     }
     else{
       sprintf(msg, "client %d command of unknown type %u", addr, task.command.type);

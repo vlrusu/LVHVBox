@@ -127,6 +127,7 @@ void message_destroy(Message_t* message){
   for (unsigned int i = 0 ; i < message->count ; i++){
     block_destroy(message->blocks[i]);
   }
+  free(message->blocks);
   free(message);
 }
 
@@ -136,7 +137,8 @@ void message_blocks_realloc(Message_t* message){
     target = 2;
   }
   else{
-    target = 2 * message->space;
+//  target = 2 * message->space;
+    target = message->space + 1;
   }
   message->blocks = realloc(message->blocks, target * sizeof(MessageBlock_t*));
   message->space = target;
@@ -259,6 +261,16 @@ Message_t* message_wrap_float(float x){
   Message_t* rv = message_initialize();
   MessageBlock_t* block = block_construct('F', 1);
   block_insert(block, &x);
+  message_append(rv, block);
+  return rv;
+}
+
+Message_t* message_wrap_chars(char* x){
+  Message_t* rv = message_initialize();
+  MessageBlock_t* block = block_construct('C', strlen(x));
+  sprintf(block->bytes, x);
+  block_insert(block, &x);
+  block->used = strlen(x);
   message_append(rv, block);
   return rv;
 }

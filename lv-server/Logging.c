@@ -6,6 +6,7 @@
 
 void log_init(Logger_t* logger, char* path,
               unsigned int print_limit, int print){
+  logger->path = NULL;
   if (path != NULL){
     logger->path = malloc(strlen(path));
     sprintf(logger->path, "%s", path);
