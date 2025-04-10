@@ -81,28 +81,7 @@ float ped_subtraction_stored[6] = {0, 0, 0, 0, 0, 0};
 int ped_on = 1;
 
 //==============================================================================
-// Interrupt handler for core1
-//==============================================================================
-void core1_interrupt_handler() {
-  multicore_fifo_clear_irq();
-  // This is the interrupt-style handler
-  while (multicore_fifo_rvalid()) {
-    uint32_t msg = multicore_fifo_pop_blocking();
-    // Handle the "interrupt" from core1
-    printf("Core0 got interrupt-style message: %u\n", msg);
-  }
-}
-
-void setup_core0_fifo_interrupt() {
-
-  multicore_fifo_clear_irq();
-  irq_set_exclusive_handler(SIO_IRQ_PROC0, core1_interrupt_handler);
-  irq_set_enabled(SIO_IRQ_PROC0, true);
-
-}
-
-//==============================================================================
-// init
+// Init
 //==============================================================================
 void port_init() {
   uint8_t port;
@@ -123,7 +102,6 @@ void port_init() {
   gpio_set_dir(all_pins.enablePin, GPIO_OUT);
 }
 
-// Variables
 void variable_init() {
   for (int channel = 0; channel < 6; channel++) {
     for (int index = 0; index < full_current_history_length; index++) {
@@ -187,7 +165,32 @@ void variable_init() {
 }
 
 //==============================================================================
-// Server communication
+// Intercore communication
+//==============================================================================
+void core1_interrupt_handler() {
+  multicore_fifo_clear_irq();
+  // This is the interrupt-style handler
+  while (multicore_fifo_rvalid()) {
+    uint32_t msg = multicore_fifo_pop_blocking();
+    // Handle the "interrupt" from core1
+    printf("Core0 got interrupt-style message: %u\n", msg);
+  }
+}
+
+void setup_core0_fifo_interrupt() {
+  multicore_fifo_clear_irq();
+  irq_set_exclusive_handler(SIO_IRQ_PROC0, core1_interrupt_handler);
+  irq_set_enabled(SIO_IRQ_PROC0, true);
+}
+
+void core0_sio_irq() {
+  while (multicore_fifo_rvalid()) core0_rx_val = multicore_fifo_pop_blocking();
+
+  multicore_fifo_clear_irq();
+}
+
+//==============================================================================
+// Server usb communication handling
 //==============================================================================
 void cdc_task(float channel_current_averaged[6], float channel_voltage[6],
               uint sm[6], uint16_t* burst_position, float trip_currents[6],
@@ -463,11 +466,9 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6],
 }
 
 //==============================================================================
-// current and voltage sampling routines
+// Voltage and current sampling
 //==============================================================================
-float get_single_voltage(
-    PIO pio, uint sm)  // obtains a single non-averaged voltage measurement
-{
+float get_single_voltage(PIO pio, uint sm) {
   uint32_t temp = pio_sm_get_blocking(pio, sm);
   float voltage = ((int16_t)temp) * adc_to_V;
   return voltage;
@@ -624,28 +625,11 @@ void get_all_averaged_currents(
   }
 }
 
-void core0_sio_irq() {
-  // Just record the latest entry
-  while (multicore_fifo_rvalid()) {
-    core0_rx_val = multicore_fifo_pop_blocking();
-  }
-
-  tud_cdc_write(&core0_rx_val, sizeof(core0_rx_val));
-  tud_cdc_write_flush();
-
-  multicore_fifo_clear_irq();
-}
 
 //******************************************************************************
-// core 1 entry
+// Core 1 main -- sample I, V, and pedestal (on demand), signal core0 re trips
 //******************************************************************************
 void core1_entry() {
-  //multicore_fifo_clear_irq();
-  //irq_set_exclusive_handler(SIO_FIFO_IRQ_NUM(1), core1_sio_irq);
-  //irq_set_enabled(SIO_FIFO_IRQ_NUM(1), true);
-  sleep_ms(20000);
-
-  // Send something to Core0, this should fire the interrupt.
   multicore_fifo_push_blocking(42);
 
   while (1) {
@@ -653,12 +637,10 @@ void core1_entry() {
   }
 }
 
-
 //******************************************************************************
 // Standard loop function, called repeatedly on core 0
 //******************************************************************************
 int main() {
-#define PICO_XOSC_STARTUP_DELAY_MULTIPLIER 64
 
   stdio_init_all();
 
