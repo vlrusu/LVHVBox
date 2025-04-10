@@ -26,6 +26,8 @@
 
 #define pico 1  // which pico (1 or 2)
 
+#define PIO_RXOVER_BITS ((1u << 0) | (1u << 1) | (1u << 2) | (1u << 3) | (1u << 4))
+
 struct Pins {
   uint8_t crowbarPins[mChn];
   uint8_t headerPins[nAdc];
@@ -161,7 +163,7 @@ void variable_init() {
 }
 
 void dma_init(PIO pio, uint sm, uint channel) {
-  int dma_chan = dma_channel_claim_unused(true);  // or manually assign
+  int dma_chan = dma_claim_unused_channel(true);
   dma_channels[channel] = dma_chan;
   dma_channel_config config = dma_channel_get_default_config(dma_chan);
 
@@ -494,16 +496,13 @@ void get_all_averaged_currents(
 
   // DMA performance metrics
   // overflow on any sm
-  if (pio_0->fdebug & PIO_FDEBUG_RXOVER_BITS ||
-      pio_1->fdebug & PIO_FDEBUG_RXOVER_BITS) {
-    slow_read = 1;
+  if ((pio0->fdebug & PIO_RXOVER_BITS) || (pio1->fdebug & PIO_RXOVER_BITS)) {
+      slow_read = 1;
   }
   for (int i = 0; i < 3; i++) {
     // overflow on each sm
-    int overflowed_0 =
-        (pio_0->fdebug & (1u << (PIO_FDEBUG_RXOVER_LSB + i))) != 0;
-    int overflowed_1 =
-        (pio_1->fdebug & (1u << (PIO_FDEBUG_RXOVER_LSB + i))) != 0;
+    int overflowed_0 = (pio_0->fdebug & (1u << i)) != 0;
+    int overflowed_1 = (pio_1->fdebug & (1u << i)) != 0;
     // number of samples in the RX FIFO
     int level_0 = pio_sm_get_rx_fifo_level(pio_0, i);
     int level_1 = pio_sm_get_rx_fifo_level(pio_1, i);
@@ -513,8 +512,8 @@ void get_all_averaged_currents(
   }
 
   // clear the overflow bits
-  pio_0->fdebug = PIO_FDEBUG_RXOVER_BITS;
-  pio_1->fdebug = PIO_FDEBUG_RXOVER_BITS;
+  pio_0->fdebug = PIO_RXOVER_BITS;
+  pio_1->fdebug = PIO_RXOVER_BITS;
 
   // ==========================================================================
   // Process the current measurements -- average, trips, etc.

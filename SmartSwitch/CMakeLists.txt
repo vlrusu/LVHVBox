@@ -36,6 +36,6 @@ target_include_directories(SmartSwitch PUBLIC
 
 
 # Add the standard library to the build
-target_link_libraries(SmartSwitch pico_stdlib hardware_adc hardware_pio tinyusb_device tinyusb_board)
+target_link_libraries(SmartSwitch pico_stdlib hardware_adc hardware_dma hardware_pio tinyusb_device tinyusb_board)
 
 pico_add_extra_outputs(SmartSwitch)
