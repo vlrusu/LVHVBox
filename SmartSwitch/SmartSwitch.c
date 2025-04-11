@@ -9,6 +9,7 @@
 #include "clock.pio.h"
 #include "hardware/adc.h"
 #include "hardware/clocks.h"
+#include "hardware/dma.h"
 #include "hardware/gpio.h"
 #include "hardware/pio.h"
 #include "hardware/sync.h"
@@ -74,6 +75,11 @@ float ped_subtraction[6] = {0, 0, 0, 0, 0, 0};
 float ped_subtraction_stored[6] = {0, 0, 0, 0, 0, 0};
 int ped_on = 1;
 
+#define n_current_samples 5
+
+__attribute__((aligned(8))) int32_t dma_current_buffers[6][n_current_samples];
+int dma_channels[6];
+
 void port_init() {
   uint8_t port;
   // Reset all trips
@@ -103,7 +109,6 @@ void variable_init() {
 
   // pinouts for old muxers/hv board
   // pinouts/ins same for both picos
-  /*
   uint8_t crowbarPins[6] = { 2, 5, 8, 11, 14, 21};
   uint8_t headerPins[6] = { 1, 3, 6, 10, 12, 9};
   for (int i = 0; i < 6; i++) {
@@ -117,8 +122,8 @@ void variable_init() {
   all_pins.sclk_1 = 26;    // SPI clock
   all_pins.csPin_1 = 15;   // SPI Chip select for I
   all_pins.enablePin = 7;  // enable pin for MUX
-  */
 
+  /*
   // pico1 pinout
   if (pico == 1) {
     uint8_t crowbarPins[6] = {1, 4, 9, 18, 13, 10};
@@ -154,6 +159,38 @@ void variable_init() {
     all_pins.csPin_1 = 18;   // SPI Chip select for I
     all_pins.enablePin = 8;  // enable pin for MUX
   }
+  */
+}
+
+void dma_init(PIO pio, uint sm, uint channel) {
+  int dma_chan = dma_claim_unused_channel(true);
+  dma_channels[channel] = dma_chan;
+  dma_channel_config config = dma_channel_get_default_config(dma_chan);
+
+  // Read from fixed address (the PIO FIFO)
+  channel_config_set_read_increment(&config, false);
+
+  // Write to incrementing addresses in the buffer
+  channel_config_set_write_increment(&config, true);
+
+  // Trigger on RX FIFO having data available
+  //channel_config_set_dreq(
+  //    &config, pio == pio_0 ? DREQ_PIO0_RX0 + sm : DREQ_PIO1_RX0 + sm);
+  channel_config_set_dreq(&config, pio_get_dreq(pio, sm, false));
+
+  //// Transfer size: word (32 bits)
+  channel_config_set_transfer_data_size(&config, DMA_SIZE_32);
+  //channel_config_set_transfer_data_size(&config, DMA_SIZE_16);
+
+
+  // Configure the channel with above settings
+  dma_channel_configure(dma_chan,                     // Channel to configure
+                        &config,                      // Configuration
+                        dma_current_buffers[channel], // Destination buffer
+                        &pio->rxf[sm],                // Source: PIO RX FIFO
+                        n_current_samples,            // Number of transfers
+                        false                         // Don't start immediately
+  );
 }
 
 void cdc_task(float channel_current_averaged[6], float channel_voltage[6],
@@ -389,7 +426,7 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6],
 
         int32_t pre_ped_subtraction[6] = {0, 0, 0, 0, 0, 0};
 
-        for (int ped_count = 0; ped_count < 200; ped_count++) {
+        for (int ped_count = 0; ped_count < n_current_samples; ped_count++) {
           for (int i = 0; i < 3; i++) {
             pre_ped_subtraction[i] +=
                 (int16_t)pio_sm_get_blocking(pio_0, sm_array[i]);
@@ -399,7 +436,7 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6],
         }
 
         for (int i = 0; i < 6; i++) {
-          ped_subtraction[i] = (float)pre_ped_subtraction[i] / 200 * adc_to_uA;
+          ped_subtraction[i] = (float)pre_ped_subtraction[i] / n_current_samples * adc_to_uA;
         }
 
         gpio_put(all_pins.P1_0, 1);  // put pedestal pin high
@@ -446,6 +483,56 @@ void get_all_averaged_currents(
     *before_trip_allowed -= 1;
   }
 
+  // ==========================================================================
+  // Dump n_current_samples current measurements into dma_current_buffers[6][n_current_samples]
+  // In parallel, background -- faster alternative to pio_sm_get_blocking.
+  // ==========================================================================
+  /*
+  for (uint32_t i = 0; i < 6; i++) {
+    dma_channel_start(dma_channels[i]);
+  }
+
+  // wait for dmas to finish or break
+  absolute_time_t timeout_time = make_timeout_time_ms(500);
+  while (!time_reached(timeout_time)) {
+    bool all_complete = true;
+    for (int i = 0; i < 6; i++) {
+      if (dma_channel_is_busy(dma_channels[i])) {
+        all_complete = false;
+        break;
+      }
+    }
+
+    if (all_complete) {
+      break;  // All transfers completed successfully
+    }
+
+    tud_task();  // Keep USB alive
+  }
+  */
+
+  //if (!pio_sm_is_rx_fifo_empty(pio_0, sm[0])) {
+  //  dma_channel_start(dma_channels[0]);
+  //  absolute_time_t timeout_time = make_timeout_time_ms(500); // 500ms timeout
+  //  while (dma_channel_is_busy(dma_channels[0])) {
+  //    if (time_reached(timeout_time)) {
+  //      dma_channel_abort(dma_channels[0]); // Stop the DMA
+  //      break;
+  //    }
+  //    tud_task();
+  //  }
+  //}
+
+  dma_channel_start(dma_channels[0]);
+  dma_channel_wait_for_finish_blocking(dma_channels[0]);
+
+  //// wait for dma to finish
+  //for (int i = 0; i < 6; i++) {
+  //  dma_channel_wait_for_finish_blocking(dma_channels[i]);
+  //  // alternative: dma_channel_is_busy or an irq
+  //}
+
+/*
   for (uint32_t channel = 0; channel < 6;
        channel++)  // initializes each element of current array to zero
   {
@@ -455,7 +542,7 @@ void get_all_averaged_currents(
   float latest_current_0;
   float latest_current_1;
 
-  for (uint32_t i = 0; i < 200;
+  for (uint32_t i = 0; i < n_current_samples;
        i++)  // adds current measurements to current_array
   {
     for (uint32_t channel = 0; channel < 3; channel++) {
@@ -572,7 +659,7 @@ void get_all_averaged_currents(
         *remaining_buffer_iterations -= 1;
       }
     }
-  }  // end of i 200 samples loop
+  }  // end of i n_current_samples samples loop
 
   for (uint32_t channel = 0; channel < 6;
        channel++)  // divide & multiply summed current values by appropriate
@@ -581,11 +668,12 @@ void get_all_averaged_currents(
     // ped_on == 1
     if (ped_on == 1) {
       current_array[channel] =
-          current_array[channel] * adc_to_uA / 200 - ped_subtraction[channel];
+          current_array[channel] * adc_to_uA / n_current_samples - ped_subtraction[channel];
     } else {
-      current_array[channel] = current_array[channel] * adc_to_uA / 200;
+      current_array[channel] = current_array[channel] * adc_to_uA / n_current_samples;
     }
   }
+*/
 }
 
 //******************************************************************************
@@ -595,13 +683,19 @@ int main() {
 
   stdio_init_all();
 
-  set_sys_clock_khz(
-      280000, true);  // Overclocking is necessary to keep up with reading PIO
+  //set_sys_clock_khz(
+  //    280000, true);  // Overclocking is necessary to keep up with reading PIO
+  set_sys_clock_khz(133000, true);
+
 
   board_init();  // tinyUSB formality
 
-  // float clkdiv = 34; // set clock divider for PIO
-  float clkdiv = 45;  // results in 81.967 kHz
+  //float clkdiv = 1;
+  //float clkdiv = 34; // set clock divider for PIO
+  //float clkdiv = 45;  // results in 81.967 kHz
+  float clkdiv = 90;  // 40.984 kHz (?)
+  //float clkdiv = 180;
+  //float clkdiv = 250;
   uint32_t pio_start_mask =
       -1;  // mask to select which state machines in each PIO block are started
 
@@ -693,12 +787,23 @@ int main() {
   gpio_put(all_pins.P1_1, 1);  // put pedestal pin high
   sleep_ms(2000);
 
+  // dma
+  dma_init(pio_0, sm_array[0], 0);
+  dma_init(pio_0, sm_array[1], 1);
+  dma_init(pio_0, sm_array[2], 2);
+  dma_init(pio_1, sm_array[3], 3);
+  dma_init(pio_1, sm_array[4], 4);
+  dma_init(pio_1, sm_array[5], 5);
+
   tud_init(BOARD_TUD_RHPORT);  // tinyUSB formality
+
+  sleep_ms(2000);
 
   while (true)  // DAQ & USB communication Loop, runs forever
   {
     // ----- Collect averaged current measurements ----- //
 
+    tud_task();
     for (int j = 0; j < 35; j++) {
       gpio_put(all_pins.enablePin, 0);  // set mux to current
       sleep_ms(1);  // delay is longer than ideal, but seems to be necessary, or
@@ -716,7 +821,7 @@ int main() {
             pio_0, pio_1, sm_array, channel_current_averaged,
             full_current_array, &full_position, &current_buffer_run,
             &remaining_buffer_iterations,
-            &before_trip_allowed);  // get average of 200 full speed current
+            &before_trip_allowed);  // get average of n_current_samples full speed current
                                     // measurements
 
         // store averaged currents
@@ -745,6 +850,8 @@ int main() {
                  full_current_array, &full_position, &current_buffer_run,
                  &slow_read, &before_trip_allowed, sm_array, trip_requirement);
         tud_task();  // tinyUSB formality
+
+        sleep_ms(10);
       }
 
       // ----- Collect single voltage measurements ----- //
