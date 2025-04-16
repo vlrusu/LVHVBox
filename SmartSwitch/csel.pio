@@ -1,16 +1,16 @@
-.program clock
+.program csel
 .side_set 1;
 .wrap_target
 
     initialize_read:
         set x, 17  side 0b1   ;
-        push noblock side 0b1  [1] ;
+        push noblock side 0b0  [1] ;
 
     
     bitloop:
         nop side 0b0;
-	nop side 0b1;	
-        in pins, 1  side 0b1  ;
+	nop side 0b0;	
+        in pins, 1  side 0b0  ;
         jmp x-- bitloop side 0b0   ;
     
     jmp initialize_read side 0b1;
@@ -21,18 +21,20 @@
 
 % c-sdk {
 
-void clock_program_init(PIO pio, uint sm, uint offset, uint pin_sck,  uint pin, float div) {
-    pio_sm_config c = clock_program_get_default_config(offset);
+void csel_program_init(PIO pio, uint sm, uint offset, uint pin_cs, uint pin, float div) {
+    pio_sm_config c = csel_program_get_default_config(offset);
 
     pio_gpio_init(pio, pin);
-    pio_gpio_init(pio, pin_sck);
+    pio_gpio_init(pio, pin_cs);	
+
+
+    sm_config_set_sideset_pins(&c, pin_cs);
 
     sm_config_set_in_pins(&c, pin);
 
-    sm_config_set_sideset_pins(&c, pin_sck);	
 
     pio_sm_set_consecutive_pindirs(pio, sm, pin, 1, false);
-    pio_sm_set_consecutive_pindirs(pio, sm, pin_sck, 1, true);    					
+    pio_sm_set_consecutive_pindirs(pio, sm, pin_cs, 1, true);    
 
     // Shifting to left matches the customary MSB-first ordering of SPI.
     sm_config_set_in_shift(
