@@ -28,8 +28,7 @@
 
 struct Pins {
   uint8_t crowbarPins[mChn];
-  uint8_t P1_0;
-  uint8_t P1_1;
+  uint8_t PedPin;
   uint8_t sclk_0;
   uint8_t sclk_1;
   uint8_t sclk_2;
@@ -83,7 +82,7 @@ int before_trip_allowed = 0;
 int trip_requirement[6] = {100, 100, 100, 100, 100, 100};
 int remaining_buffer_iterations = 4000;
 
-uint32_t full_current_array[6][full_current_history_length];
+uint32_t full_current_array[12][full_current_history_length];
 
 float ped_subtraction[6] = {0, 0, 0, 0, 0, 0};
 float ped_subtraction_stored[6] = {0, 0, 0, 0, 0, 0};
@@ -97,13 +96,10 @@ void port_init() {
     gpio_set_dir(all_pins.crowbarPins[i], GPIO_OUT);
   }
   // Pedestal/data line
-  gpio_init(all_pins.P1_0);
-  gpio_set_dir(all_pins.P1_0, GPIO_OUT);
+  gpio_init(all_pins.PedPin);
+  gpio_set_dir(all_pins.PedPin, GPIO_OUT);
 
-  gpio_init(all_pins.P1_1);
-  gpio_set_dir(all_pins.P1_1, GPIO_OUT);
 
-  gpio_init(all_pins.csPin_0);
 
 }
 
@@ -141,8 +137,7 @@ void variable_init() {
       all_pins.crowbarPins[i] = crowbarPins[i];
     }
 
-    all_pins.P1_0 = 21;  // Offset
-    all_pins.P1_1 = 20;
+    all_pins.PedPin = 20;  // Offset
     all_pins.sclk_0 = 5;      // SPI clock for PIO0
     all_pins.csPin_0 = 2;    // SPI Chip select for PIO0
     all_pins.idata0 = 9;       //I data 0
@@ -173,8 +168,7 @@ void variable_init() {
     }
 
 
-    all_pins.P1_0 = 21;  // Offset
-    all_pins.P1_1 = 20;
+    all_pins.PedPin = 21;  // Offset
     all_pins.sclk_0 = 5;      // SPI clock for PIO0
     all_pins.csPin_0 = 2;    // SPI Chip select for PIO0
     all_pins.idata0 = 9;       //I data 0
@@ -197,7 +191,7 @@ void variable_init() {
   }
 }
 
-void cdc_task(float channel_current_averaged[6], float channel_voltage[6],
+void cdc_task(float channel_current_averaged[12],
               uint sm[6], uint16_t* burst_position, float trip_currents[6],
               uint8_t* trip_mask, uint8_t* trip_status,
               float average_current_history[6][average_current_history_length],
@@ -296,13 +290,11 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6],
 	1000;  // 1000 is the max value, probably change later
 
     } else if (receive_chars[0] == 37) {  // ----- Put Pedestal High ----- //
-      gpio_put(all_pins.P1_0, 1);
-      gpio_put(all_pins.P1_1, 1);
+      gpio_put(all_pins.PedPin, 1);
       ped_on = 1;
 
     } else if (receive_chars[0] == 38) {  // ----- Put Pedestal Low ----- //
-      gpio_put(all_pins.P1_0, 0);
-      gpio_put(all_pins.P1_1, 0);
+      gpio_put(all_pins.PedPin, 0);
       ped_on = 0;
 
     } else if (receive_chars[0] == 86) {  // ----- Send Voltages ----- //
@@ -430,8 +422,7 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6],
 
     } else if (receive_chars[0] > 38 && receive_chars[0] < 45) {
       if (ped_on == 1) {
-        gpio_put(all_pins.P1_0, 0);  // put pedestal pin low
-        gpio_put(all_pins.P1_1, 0);  // put pedestal pin low
+        gpio_put(all_pins.PedPin, 0);  // put pedestal pin low
         sleep_ms(1400);
 
         // clear rx fifos
@@ -457,8 +448,7 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6],
           ped_subtraction[i] = (float)pre_ped_subtraction[i] / 200 * adc_to_uA;
         }
 
-        gpio_put(all_pins.P1_0, 1);  // put pedestal pin high
-        gpio_put(all_pins.P1_1, 1);  // put pedestal pin high
+        gpio_put(all_pins.PedPin, 1);  // put pedestal pin high
 
         // update ped_subtraction_stored
         if (*current_buffer_run == 1) {
@@ -676,7 +666,7 @@ int main() {
   variable_init();
   port_init();
 
-  float channel_current_averaged[6] = {0, 0, 0, 0, 0, 0};
+  float channel_current_averaged[12] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
   float channel_voltage[6] = {0, 0, 0, 0, 0, 0};
   uint16_t burst_position = 0;
 
@@ -805,8 +795,7 @@ int main() {
       gpio_put(all_pins.crowbarPins[i], 1);
     }
 
-  gpio_put(all_pins.P1_0, 1);  // put pedestal pin high
-  gpio_put(all_pins.P1_1, 1);  // put pedestal pin high
+  gpio_put(all_pins.PedPin, 1);  // put pedestal pin high
   sleep_ms(2000);
 
   tud_init(BOARD_TUD_RHPORT);  // tinyUSB formality
@@ -839,7 +828,7 @@ int main() {
 	  if (average_store_position <
 	      1999)  // check that current buffer size has not been exceeded
 	    {
-	      for (uint8_t i = 0; i < 6; i++) {
+	      for (uint8_t i = 0; i < 12; i++) {
 		average_current_history[i][average_store_position] =
 		  channel_current_averaged[i];
 	      }
@@ -848,14 +837,14 @@ int main() {
 	    } else {  // begin overwriting current data, starting
 	    average_store_position =
               0;  // set pointer to beginning of current storage buffer
-	    for (uint8_t i = 0; i < 6; i++) {
+	    for (uint8_t i = 0; i < 12; i++) {
 	      memset(average_current_history[i], 0,
 		     sizeof(average_current_history[i]));
 	    }
 	  }
 
 	  // cdc_task reads in commands from PI via usb and responds appropriately
-	  cdc_task(channel_current_averaged, channel_voltage, sm_array,
+	  cdc_task(channel_current_averaged, sm_array,
 		   &burst_position, trip_currents, &trip_mask, &trip_status,
 		   average_current_history, &average_store_position,
 		   full_current_array, &full_position, &current_buffer_run,
