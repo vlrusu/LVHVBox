@@ -192,11 +192,11 @@ void variable_init() {
 }
 
 void cdc_task(float channel_current_averaged[12],
-              uint sm[6], uint16_t* burst_position, float trip_currents[6],
+              uint sm[12], uint16_t* burst_position, float trip_currents[6],
               uint8_t* trip_mask, uint8_t* trip_status,
-              float average_current_history[6][average_current_history_length],
+              float average_current_history[12][average_current_history_length],
               uint16_t* average_store_position,
-              uint32_t full_current_history[6][full_current_history_length],
+              uint32_t full_current_history[12][full_current_history_length],
               uint16_t* full_position, uint8_t* current_buffer_run,
               uint8_t* slow_read, int* before_trip_allowed, uint sm_array[6],
               int trip_requirement[6]) {
@@ -650,8 +650,7 @@ int main() {
 
   stdio_init_all();
 
-  set_sys_clock_khz(
-		    280000, true);  // Overclocking is necessary to keep up with reading PIO
+  set_sys_clock_khz(280000, true);  // Overclocking is necessary to keep up with reading PIO
 
   board_init();  // tinyUSB formality
 
@@ -667,10 +666,9 @@ int main() {
   port_init();
 
   float channel_current_averaged[12] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-  float channel_voltage[6] = {0, 0, 0, 0, 0, 0};
   uint16_t burst_position = 0;
 
-  float average_current_history[6][average_current_history_length];
+  float average_current_history[12][average_current_history_length];
   uint16_t average_position = 0;
   uint16_t average_store_position = 0;
 
