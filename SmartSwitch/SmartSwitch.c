@@ -9,6 +9,7 @@
 #include "clock.pio.h"
 #include "hardware/adc.h"
 #include "hardware/clocks.h"
+#include "hardware/dma.h"
 #include "hardware/gpio.h"
 #include "hardware/pio.h"
 #include "hardware/sync.h"
@@ -73,6 +74,21 @@ uint32_t full_current_array[6][full_current_history_length];
 float ped_subtraction[6] = {0, 0, 0, 0, 0, 0};
 float ped_subtraction_stored[6] = {0, 0, 0, 0, 0, 0};
 int ped_on = 1;
+
+// DMA stuff
+int dma_channels[6];
+
+#define n_current_transfers 200
+
+static uint32_t
+    __attribute__((aligned(8))) dma_buffer_0[6][n_current_transfers];
+static uint32_t
+    __attribute__((aligned(8))) dma_buffer_1[6][n_current_transfers];
+
+volatile bool dma_complete[6] = {false};
+volatile bool using_buffer_a[6] = {true, true, true, true, true, true};
+
+uint sm_array[6];
 
 void port_init() {
   uint8_t port;
@@ -153,6 +169,100 @@ void variable_init() {
     all_pins.sclk_1 = 19;    // SPI clock
     all_pins.csPin_1 = 18;   // SPI Chip select for I
     all_pins.enablePin = 8;  // enable pin for MUX
+  }
+}
+
+// DMA interrupt handler
+void __isr dma_handler() {
+  for (int i = 0; i < 6; i++) {
+    if (!dma_channel_get_irq0_status(dma_channels[i])) {
+      continue;
+    }
+
+    dma_channel_acknowledge_irq0(dma_channels[i]);
+
+    PIO pio = (i < 3) ? pio0 : pio1;
+    uint sm = (i < 3) ? sm_array[i] : sm_array[i - 3];
+
+    // Check FIFO level before starting next transfer
+    if (pio_sm_is_rx_fifo_full(pio, sm) ||
+        pio_sm_get_rx_fifo_level(pio, sm) > 3) {
+      slow_read = 1;  // Set the slow read flag
+    }
+
+    // Set completion flag
+    dma_complete[i] = true;
+
+    // Set up next transfer (ping-pong buffer)
+    uint32_t* next_buffer =
+        using_buffer_a[i] ? dma_buffer_1[i] : dma_buffer_0[i];
+
+    uintptr_t fifo_addr = (i < 3) ? (uintptr_t)&pio0_hw->rxf[sm_array[i]]
+                                  : (uintptr_t)&pio1_hw->rxf[sm_array[i - 3]];
+
+    // Configure next transfer
+    dma_channel_set_write_addr(dma_channels[i], next_buffer, false);
+    dma_channel_set_trans_count(dma_channels[i], n_current_transfers,
+                                true);  // Start immediately
+
+    // Toggle buffer
+    using_buffer_a[i] = !using_buffer_a[i];
+  }
+}
+
+void setup_dma_channel(int sm_index, PIO pio, uint sm, uint32_t* buffer_a,
+                       uint32_t* buffer_b, int samples) {
+  // Get a free DMA channel
+  dma_channels[sm_index] = dma_claim_unused_channel(true);
+
+  // Configure the channel
+  dma_channel_config c = dma_channel_get_default_config(dma_channels[sm_index]);
+
+  // Reading from fixed address (PIO FIFO)
+  channel_config_set_read_increment(&c, false);
+
+  // Writing to incrementing addresses (buffer)
+  channel_config_set_write_increment(&c, true);
+
+  // Transfer 32 bits at a time
+  channel_config_set_transfer_data_size(&c, DMA_SIZE_32);
+
+  // Set the read address to the PIO FIFO address
+  uintptr_t fifo_addr = (pio == pio0) ? (uintptr_t)&pio0_hw->rxf[sm]
+                                      : (uintptr_t)&pio1_hw->rxf[sm];
+
+  // Pace transfers based on RX FIFO having data available
+  channel_config_set_dreq(&c, (pio == pio0) ? pio_get_dreq(pio0, sm, false)
+                                            : pio_get_dreq(pio1, sm, false));
+
+  // Set up the initial DMA transfer
+  dma_channel_configure(dma_channels[sm_index], &c,
+                        buffer_a,          // Write to first buffer
+                        (void*)fifo_addr,  // Read from PIO FIFO
+                        samples,           // Transfer count
+                        false              // Don't start yet
+  );
+
+  // Enable DMA channel complete interrupt
+  dma_channel_set_irq0_enabled(dma_channels[sm_index], true);
+}
+
+void init_dma_system() {
+  // Initialize DMA
+  for (int i = 0; i < 3; i++) {
+    setup_dma_channel(i, pio_0, sm_array[i], dma_buffer_0[i], dma_buffer_1[i],
+                      n_current_transfers);
+    setup_dma_channel(i + 3, pio_1, sm_array[i + 3], dma_buffer_0[i + 3],
+                      dma_buffer_1[i + 3], n_current_transfers);
+  }
+
+  // Set up DMA IRQ
+  irq_set_exclusive_handler(DMA_IRQ_0, dma_handler);
+  irq_set_enabled(DMA_IRQ_0, true);
+
+  // Start all DMA channels
+  for (int i = 0; i < 6; i++) {
+    dma_channel_start(dma_channels[i]);
   }
 }
 
@@ -389,7 +499,7 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6],
 
         int32_t pre_ped_subtraction[6] = {0, 0, 0, 0, 0, 0};
 
-        for (int ped_count = 0; ped_count < 200; ped_count++) {
+        for (int ped_count = 0; ped_count < n_current_transfers; ped_count++) {
           for (int i = 0; i < 3; i++) {
             pre_ped_subtraction[i] +=
                 (int16_t)pio_sm_get_blocking(pio_0, sm_array[i]);
@@ -399,7 +509,8 @@ void cdc_task(float channel_current_averaged[6], float channel_voltage[6],
         }
 
         for (int i = 0; i < 6; i++) {
-          ped_subtraction[i] = (float)pre_ped_subtraction[i] / 200 * adc_to_uA;
+          ped_subtraction[i] =
+              (float)pre_ped_subtraction[i] / n_current_transfers * adc_to_uA;
         }
 
         gpio_put(all_pins.P1_0, 1);  // put pedestal pin high
@@ -452,30 +563,36 @@ void get_all_averaged_currents(
     current_array[channel] = 0;
   }
 
-  float latest_current_0;
-  float latest_current_1;
-
-  for (uint32_t i = 0; i < 200;
-       i++)  // adds current measurements to current_array
-  {
-    for (uint32_t channel = 0; channel < 3; channel++) {
-      if (pio_sm_is_rx_fifo_full(pio_0, sm[channel]) ||
-          pio_sm_is_rx_fifo_full(pio_0, sm[channel + 3])) {
-        if (i > 10 && *before_trip_allowed == 0) {
-          slow_read = 1;
-        }
+  // Wait for all DMA transfers to complete
+  bool all_complete = false;
+  while (!all_complete) {
+    all_complete = true;
+    for (int i = 0; i < 6; i++) {
+      if (!dma_complete[i]) {
+        all_complete = false;
+        break;
       }
+    }
+    // Add a small timeout to prevent hanging
+    if (!all_complete) {
+      sleep_us(100);
+    }
+  }
 
-      // NOTE: with an average of 200, overflow does not occur
-      // However, if this average is increased later on, it may be necessary to
-      // divide earlier/increase to 32 bit integers
-      latest_current_0 = (int16_t)pio_sm_get_blocking(pio_0, sm[channel]);
-      latest_current_1 = (int16_t)pio_sm_get_blocking(pio_1, sm[channel + 3]);
+  // adds current measurements to current_array
+  for (uint32_t i = 0; i < n_current_transfers; i++) {
+    for (uint32_t channel = 0; channel < 3; channel++) {
+      uint32_t* buffer = using_buffer_a[channel] ? dma_buffer_1[channel]
+                                                 : dma_buffer_0[channel];
 
-      current_array[channel] += latest_current_0;
-      current_array[channel + 3] += latest_current_1;
+      // Reset completion flag
+      dma_complete[channel] = false;
 
-      if ((latest_current_0 * adc_to_uA >
+      float latest_current = (int16_t)buffer[i];
+
+      current_array[channel] += latest_current;
+
+      if ((latest_current * adc_to_uA >
            trip_currents[channel] - ped_subtraction[channel]) &&
           ((trip_mask & (1 << channel))) && ((~trip_status & (1 << channel))) &&
           *before_trip_allowed == 0) {
@@ -484,22 +601,10 @@ void get_all_averaged_currents(
         num_trigger[channel] -= 1;
       }
 
-      if ((latest_current_1 * adc_to_uA >
-           trip_currents[channel + 3] - ped_subtraction[channel]) &&
-          ((trip_mask & (1 << channel + 3))) &&
-          ((~trip_status & (1 << channel + 3))) && *before_trip_allowed == 0) {
-        num_trigger[channel + 3] += 1;
-      } else if (num_trigger[channel + 3] > 0) {
-        num_trigger[channel + 3] -= 1;
-      }
-
       if (*remaining_buffer_iterations > 0) {
         // update latest full current, along with its position in rotating
         // buffer
-        full_current_array[channel][*full_position] =
-            (uint32_t)latest_current_0;
-        full_current_array[channel + 3][*full_position] =
-            (uint32_t)latest_current_1;
+        full_current_array[channel][*full_position] = (uint32_t)latest_current;
       }
     }
 
@@ -571,9 +676,11 @@ void get_all_averaged_currents(
     // ped_on == 1
     if (ped_on == 1) {
       current_array[channel] =
-          current_array[channel] * adc_to_uA / 200 - ped_subtraction[channel];
+          current_array[channel] * adc_to_uA / n_current_transfers -
+          ped_subtraction[channel];
     } else {
-      current_array[channel] = current_array[channel] * adc_to_uA / 200;
+      current_array[channel] =
+          current_array[channel] * adc_to_uA / n_current_transfers;
     }
   }
 }
@@ -661,7 +768,7 @@ int main() {
   // create array of state machines
   // this is used to acquire data from DAQ state machines in other areas of this
   // code
-  uint sm_array[6];
+  // uint sm_array[6];
   sm_array[0] = sm_channel_0;
   sm_array[1] = sm_channel_1;
   sm_array[2] = sm_channel_2;
@@ -685,6 +792,8 @@ int main() {
 
   tud_init(BOARD_TUD_RHPORT);  // tinyUSB formality
 
+  init_dma_system();
+
   while (true)  // DAQ & USB communication Loop, runs forever
   {
     // ----- Collect averaged current measurements ----- //
@@ -706,8 +815,8 @@ int main() {
             pio_0, pio_1, sm_array, channel_current_averaged,
             full_current_array, &full_position, &current_buffer_run,
             &remaining_buffer_iterations,
-            &before_trip_allowed);  // get average of 200 full speed current
-                                    // measurements
+            &before_trip_allowed);  // get average of n_current_transfers full
+                                    // speed current measurements
 
         // store averaged currents
         if (average_store_position <
