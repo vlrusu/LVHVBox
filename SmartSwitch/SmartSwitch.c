@@ -18,6 +18,7 @@
 #include "pico/types.h"
 #include "string.h"
 #include "tusb.h"
+#include "pico/bootrom.h"
 
 
 // Channel count
@@ -131,7 +132,7 @@ void variable_init() {
 
   // pico1 pinout
   if (pico == 1) {
-    uint8_t crowbarPins[6] = {1, 4, 9, 18, 13, 10};
+    uint8_t crowbarPins[6] = {7, 0, 8, 15, 18};
 
     for (int i = 0; i < 6; i++) {
       all_pins.crowbarPins[i] = crowbarPins[i];
@@ -142,50 +143,50 @@ void variable_init() {
     all_pins.csPin_0 = 2;    // SPI Chip select for PIO0
     all_pins.idata0 = 9;       //I data 0
     all_pins.vdata0 = 10;       //V data 0
-    all_pins.idata1 = 1;       //I data 1
-    all_pins.vdata1 = 4;       //V data 1
+    all_pins.idata1 = 1;       //I data 2
+    all_pins.vdata1 = 4;       //V data 2
     all_pins.sclk_1 = 11;     // SPI clock
-    all_pins.csPin_1 = 13;     // SPI Chip select for I
-    all_pins.idata2 = 6;       //I data 0
-    all_pins.vdata2 = 3;       //V data 0
-    all_pins.idata3 = 14;       //I data 1
-    all_pins.vdata3 = 12;       //V data 1
+    all_pins.csPin_1 = 13;     // SPI Chip select for PIO1
+    all_pins.idata2 = 6;       //I data 3
+    all_pins.vdata2 = 3;       //V data 3
+    all_pins.idata3 = 14;       //I data 4
+    all_pins.vdata3 = 12;       //V data 4
     all_pins.sclk_2 = 19;     // SPI clock
-    all_pins.csPin_2 = 26;     // SPI Chip select for I
-    all_pins.idata4 = 17;       //I data 0
-    all_pins.vdata4 = 16;       //V data 0
-    all_pins.idata5 = 27;       //I data 1
-    all_pins.vdata5 = 21;       //V data 1
+    all_pins.csPin_2 = 26;     // SPI Chip select for PIO2
+    all_pins.idata4 = 17;       //I data 5
+    all_pins.vdata4 = 16;       //V data 5
+    all_pins.idata5 = 27;       //I data 6
+    all_pins.vdata5 = 21;       //V data 6
 
 
     
   } else {
     // pico2 pinout
-    int8_t crowbarPins[6] = {1, 5, 21, 14, 22, 15};
+    int8_t crowbarPins[6] = {7,2,9,16,22,17};
 
     for (int i = 0; i < 6; i++) {
       all_pins.crowbarPins[i] = crowbarPins[i];
     }
 
 
-    all_pins.PedPin = 21;  // Offset
-    all_pins.sclk_0 = 5;      // SPI clock for PIO0
-    all_pins.csPin_0 = 2;    // SPI Chip select for PIO0
-    all_pins.idata0 = 9;       //I data 0
+    all_pins.PedPin = 15;  // Offset
+    all_pins.sclk_0 = 4;      // SPI clock for PIO0
+    all_pins.csPin_0 = 0;    // SPI Chip select for PIO0
+    all_pins.idata0 = 8;       //I data 0
     all_pins.vdata0 = 10;       //V data 0
     all_pins.idata1 = 1;       //I data 1
-    all_pins.vdata1 = 4;       //V data 1
-    all_pins.sclk_1 = 11;     // SPI clock
+    all_pins.vdata1 = 3;       //V data 1
+    all_pins.sclk_1 = 20;     // SPI clock
     all_pins.csPin_1 = 13;     // SPI Chip select for I
     all_pins.idata2 = 6;       //I data 0
-    all_pins.vdata2 = 3;       //V data 0
+    all_pins.vdata2 = 5;       //V data 0
     all_pins.idata3 = 14;       //I data 1
     all_pins.vdata3 = 12;       //V data 1
-    all_pins.sclk_2 = 19;     // SPI clock
-    all_pins.csPin_2 = 26;     // SPI Chip select for I
-    all_pins.idata4 = 17;       //I data 0
-    all_pins.vdata4 = 16;       //V data 0
-    all_pins.idata5 = 27;       //I data 1
+    all_pins.sclk_2 = 11;     // SPI clock
+    all_pins.csPin_2 = 19;     // SPI Chip select for I
+    all_pins.idata4 = 26;       //I data 0
+    all_pins.vdata4 = 27;       //V data 0
+    all_pins.idata5 = 18;       //I data 1
     all_pins.vdata5 = 21;       //V data 1
 
   }
@@ -467,6 +468,12 @@ void cdc_task(float channel_current_averaged[12],
       int intval = (int)two;
 
       memcpy(&trip_requirement[receive_chars[0] - 45], &intval, 4);
+    
+
+
+     } else if (receive_chars[0] == 255) {
+      // force reboot into BOOTSEL mode
+      reset_usb_boot(0, 0);
     }
   }
 }
@@ -488,11 +495,9 @@ void get_all_averaged_currents(
     *before_trip_allowed -= 1;
   }
 
-  for (uint32_t channel = 0; channel < 12;
-       channel++)  // initializes each element of current array to zero
-    {
-      current_array[channel] = 0;
-    }
+
+  memset(current_array, 0, 12 * sizeof(float));
+  
 
   float latest_current_0;
   float latest_current_1;
@@ -501,7 +506,7 @@ void get_all_averaged_currents(
   for (uint32_t i = 0; i < 200;
        i++)  // adds current measurements to current_array
     {
-      for (uint32_t channel = 0; channel < 3; channel++) {
+      for (uint32_t channel = 0; channel < 4; channel++) {
 
 	if (pio_sm_is_rx_fifo_full(pio_0, sm[channel]) ||
 	    pio_sm_is_rx_fifo_full(pio_1, sm[channel + 4]) ||
@@ -562,8 +567,10 @@ void get_all_averaged_currents(
 	  // buffer
 	  full_current_array[channel][*full_position] =
             (uint32_t)latest_current_0;
-	  full_current_array[channel + 3][*full_position] =
+	  full_current_array[channel + 4][*full_position] =
             (uint32_t)latest_current_1;
+	  full_current_array[channel + 8][*full_position] =
+            (uint32_t)latest_current_2;
 	}
       }
 
@@ -807,7 +814,7 @@ int main() {
 	// current data will be polluted
 
 	// clear rx fifos
-	for (uint32_t i = 0; i < 3; i++) {
+	for (uint32_t i = 0; i < 4; i++) {
 	  pio_sm_clear_fifos(pio_0, sm_array[i]);
 	  pio_sm_clear_fifos(pio_1, sm_array[i + 4]);
 	  pio_sm_clear_fifos(pio_2, sm_array[i + 8]);
@@ -865,7 +872,7 @@ int main() {
 
 	// clear rx fifos, otherwise data can be polluted by previous current
 	// measurements
-	for (uint32_t i = 0; i < 3; i++) {
+	for (uint32_t i = 0; i < 4; i++) {
 	  pio_sm_clear_fifos(pio_0, sm_array[i]);
 	  pio_sm_clear_fifos(pio_1, sm_array[i + 4]);
 	  pio_sm_clear_fifos(pio_1, sm_array[i + 8]);
