@@ -166,12 +166,12 @@ class PowerSupplyServerConnection():
     def _set_wire_voltage(self, channel, value):
         tolerance = 5.0
         transition = 20.0
-        speed_early = 1.0
-        timestep_early = 1.0
-        speed_bulk = 100.0
+        speed_early = 10.0
+        timestep_early = 0.5
+        speed_bulk = 30.0
         timestep_bulk = 0.5
 
-        current = self.QueryWireVoltage()
+        current = self.QueryWireVoltage(channel)
         if current < value:
             rv = self._ramp_wire_voltage_bilinear(channel, value,
                                                   tolerance, transition,
@@ -185,11 +185,14 @@ class PowerSupplyServerConnection():
         return rv
 
     def SetWireVoltage(self, channel, value):
+        rv = self._set_wire_voltage(channel, value)
+        '''
         tolerance = 5.0
         speed = 10.0
         timestep = 1.0
         rv = self._transition_wire_voltage_linear(channel, value,
                                                   tolerance, speed, timestep)
+        '''
         return rv
 
     def QueryTripStatus(self, channel):
