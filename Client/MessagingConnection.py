@@ -33,6 +33,13 @@ class MessagingConnection:
             'I': 'i',
             'F': 'f',
         }
+        self.inverse_typecodes = {
+          'C': ctypes.c_char,
+          'I': ctypes.c_int,
+          'U': ctypes.c_uint,
+          'F': ctypes.c_float,
+          'D': ctypes.c_double,
+        }
 
     def reestablish(self):
         self.client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -106,24 +113,46 @@ class MessagingConnection:
         rv = None
         self.client.setblocking(False)
         while rv is None:
-            ready = select.select([self.client], [], [], 1)
+            ready = select.select([self.client], [], [], 10.0)
             if ready[0]:
                 rv = self.client.recv(chunk)
             else:
                 rv = b''
         return rv
 
-    # TODO disable timeout and calculate rolling size for exact read
-    def recv_message(self):
+    def recv_block(self):
+        pfx = b''
+        recv = self.safe_recv(1)
+        pfx += recv
+        typecode = recv
+        recv = self.safe_recv(ctypes.sizeof(ctypes.c_uint))
+        pfx += recv
+        count = recv
+        count = struct.unpack('I', count)[0]
+        _type = self.inverse_typecodes[typecode.decode()]
+        size = count * ctypes.sizeof(_type)
+
         chunk = 1024
+        remaining = size
         rv = b''
-        recv = self.safe_recv(chunk)
-        while 0 < len(recv):
+        tbr = min(chunk, remaining)
+        while 0 < tbr:
+            recv = self.safe_recv(tbr)
             rv += recv
-            try:
-                recv = self.safe_recv(chunk)
-            except:
-                recv = b''
+            remaining -= len(recv)
+            tbr = min(chunk, remaining)
+
+        assert(len(rv) == size)
+        rv = pfx + rv
+        return rv
+
+    def recv_message(self):
+        # recv number of blocks to read
+        rv = self.safe_recv(ctypes.sizeof(ctypes.c_uint))
+        nblocks = struct.unpack('I', rv)[0]
+
+        for i in range(nblocks):
+            rv += self.recv_block()
 
         rv = self.decode_message(rv)
         assert(rv[0] == self.check)
