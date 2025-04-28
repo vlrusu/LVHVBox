@@ -236,6 +236,7 @@ def current_burst(sock, keys):
 # parse user input and issue a command
 def process_command(line):
     keys = line.split(" ")  # command <channel> <input_value>
+    keys = [k for k in keys if 0 < len(k)]
 
     command = next((c for c in commands if c.name == keys[0]), None)
 
