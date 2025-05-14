@@ -21,10 +21,8 @@ pico_sdk_init()
 
 # Compilation and follow-on flash command
 function(compile_and_flash target pico USB_VID)
-
-
-add_executable(${target} SmartSwitch.c usb_descriptors.c msc_disk.c)
-message(STATUS "Adding PIO header for SmartSwitch")
+  add_executable(${target} SmartSwitch.c usb_descriptors.c msc_disk.c)
+  message(STATUS "Adding PIO header for SmartSwitch")
   
   target_compile_definitions(${target} PRIVATE pico=${pico})
   target_compile_definitions(${target} PRIVATE USB_VID=${USB_VID})

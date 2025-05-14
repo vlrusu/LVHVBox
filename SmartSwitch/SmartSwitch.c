@@ -5,6 +5,7 @@
 #include <stdlib.h>
 
 #include "bsp/board.h"
+#include <bsp/board_api.h>
 #include "channel.pio.h"
 #include "csel.pio.h"
 #include "clock.pio.h"
@@ -25,7 +26,7 @@
 #define nAdc 6  // Number of SmartSwitches
 #define mChn 6  // Number of channels for trip processing
 
-#define pico 1  // which pico (1 or 2)
+//#define pico 1  // which pico (1 or 2) --configured externally
 
 struct Pins {
   uint8_t crowbarPins[mChn];
@@ -657,10 +658,18 @@ int main() {
 
   stdio_init_all();
 
-  set_sys_clock_khz(280000, true);  // Overclocking is necessary to keep up with reading PIO
+  //  set_sys_clock_khz(280000, true);  // Overclocking is necessary to keep up with reading PIO
 
-  board_init();  // tinyUSB formality
+  //Initialize TinyUSB stack
+  board_init();
+  //  tusb_init();
 
+  // TinyUSB board init callback after init
+  if (board_init_after_tusb) {
+    board_init_after_tusb();
+  }
+
+  
   // float clkdiv = 34; // set clock divider for PIO
   float clkdiv = 45;  // results in 81.967 kHz
   uint32_t pio_start_mask = 0b1111;  // mask to select which state machines in each PIO block are started
@@ -805,6 +814,7 @@ int main() {
 
   tud_init(BOARD_TUD_RHPORT);  // tinyUSB formality
 
+
   while (true)  // DAQ & USB communication Loop, runs forever
     {
       // ----- Collect averaged current measurements ----- //
@@ -849,17 +859,18 @@ int main() {
 	  }
 
 	  // cdc_task reads in commands from PI via usb and responds appropriately
+	  tud_task();  // tinyUSB formality
 	  cdc_task(channel_current_averaged, sm_array,
 		   &burst_position, trip_currents, &trip_mask, &trip_status,
 		   average_current_history, &average_store_position,
 		   full_current_array, &full_position, &current_buffer_run,
 		   &slow_read, &before_trip_allowed, sm_array, trip_requirement);
-	  tud_task();  // tinyUSB formality
+
 	}
 
 	// ----- Collect single voltage measurements ----- //
 
-	/* gpio_put(all_pins.enablePin, 1);  // set mux to voltage */
+	/* gpio_puta(all_pins.enablePin, 1);  // set mux to voltage */
 	/* sleep_ms(1);  // delay is longer than ideal, but seems to be necessary, or */
 	/*               // voltage data will be polluted */
 
