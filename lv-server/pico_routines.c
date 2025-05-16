@@ -3,6 +3,7 @@
 // October 2024
 
 #include "pico_routines.h"
+#include <time.h>
 
 void pico_write_low(Pico_t* pico, char* src, size_t size){
   libusb_bulk_transfer(pico->handle, 0x02, src, size, 0, 0);
@@ -231,16 +232,36 @@ Message_t* pico_query_current_buffer(Pico_t* pico, uint8_t channel){
   writeable += channel - pico->channel_offset;
 
   const unsigned int count = 10;
-  float buffer[count];
-  pico_write_read_low_timeout(pico, &writeable, 1, 50,
-                                    (char*) buffer, sizeof(buffer), 500);
+  const unsigned int bigcount = 800;
 
   // package into structured message
-  MessageBlock_t* block = block_construct('F', count);
-  for (unsigned int i = 0 ; i < count ; i++){
-    block_insert(block, &buffer[i]);
+  MessageBlock_t* block = block_construct('F', count*bigcount);
+
+  
+  struct timespec start, end;
+  clock_gettime(CLOCK_MONOTONIC, &start);
+
+  for (int ic = 0; ic < bigcount; ic++){
+    float buffer[count];
+    pico_write_read_low_timeout(pico, &writeable, 1, 50,
+                                    (char*) buffer, sizeof(buffer), 500);
+
+    for (unsigned int i = 0 ; i < count ; i++){
+      block_insert(block, &buffer[i]);
+    }
+
+
+
+    
   }
-  Message_t* rv = message_initialize();
+
+  clock_gettime(CLOCK_MONOTONIC, &end);
+
+  double elapsed = (end.tv_sec - start.tv_sec) +
+    (end.tv_nsec - start.tv_nsec) / 1e9;
+  printf("Elapsed time: %.9f seconds\n", elapsed);
+
+  Message_t* rv = message_initialize();  
   message_append(rv, block);
 
   return rv;
