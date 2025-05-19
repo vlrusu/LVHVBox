@@ -24,6 +24,7 @@
 #define COMMAND_get_vhv 1089429348
 #define COMMAND_get_ihv 640411686
 #define COMMAND_ramp_hv 344631822
+#define COMMAND_set_hv_by_dac 344631823 // COMMAND_ramp_hv + 1
 #define COMMAND_down_hv 1236373670
 #define COMMAND_powerOn 1346615123
 #define COMMAND_powerOff 78047085

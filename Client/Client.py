@@ -7,6 +7,10 @@ import struct
 from collections import namedtuple
 import ctypes
 from MessagingConnection import MessagingConnection
+import matplotlib.pyplot as plt
+import sys
+
+
 
 HISTORY_REQUEST_MAX = 100
 current_buffer_len = 8000  # must be divisible by 10
@@ -14,6 +18,9 @@ full_current_chunk = 10
 COMMAND_BYTE_LENGTH = 13
 
 parser = argparse.ArgumentParser()
+
+
+
 
 
 Command = namedtuple(
@@ -39,6 +46,7 @@ commands = [
     Command("powerOff", "lv"),
     Command("powerOn", "lv"),
     Command("ramp_hv", "hv"),
+    Command("set_hv_by_dac", "hv"),
     Command("readMonI48", "lv", "{:.2f} A"),
     Command("readMonI6", "lv", "{:.2f} A"),
     Command("readMonV48", "lv", "{:.2f} V"),
@@ -214,23 +222,42 @@ def current_burst(sock, keys):
     num_cycles = int(current_buffer_len / full_current_chunk)
     full_currents = []
 
-    for cycle in range(num_cycles):
-        print("cycle: " + str(cycle))
-        # time.sleep(0.2) # put into config.txt later
-        # sock.send(bytes(command_string,"utf-8"))
+    sock.send_message(cmd, typ, channel, padding)
+    time.sleep(1)
+    full_currents = sock.recv_message()
+    # for cycle in range(num_cycles):
+    #     print("cycle: " + str(cycle))
+    #     # time.sleep(0.2) # put into config.txt later
+    #     # sock.send(bytes(command_string,"utf-8"))
 
-        sock.send_message(cmd, typ, channel, padding)
-        samples = sock.recv_message()
-        print(samples)
-        for sample in samples:
-            full_currents.append(sample)
+    #     sock.send_message(cmd, typ, channel, padding)
+    #     samples = sock.recv_message()
+    #     print(samples)
+    #     for sample in samples:
+    #         full_currents.append(sample)
 
     # write into new file
+
+    full_currents = list(full_currents[0])
     filename = "full_currents_" + str(int(time.time())) + ".txt"
     f = open(filename, "w")
     for i in full_currents:
         f.write(str(i) + "\n")
     f.close()
+
+    
+    time_step = 0.2  # change this if your interval is different
+    time_series = [i * time_step for i in range(len(full_currents))]
+    plt.figure(figsize=(10, 4))
+    print(full_currents)
+    plt.plot(time_series, full_currents,  marker='o', linestyle='-')
+    plt.title("Full Currents Time Series")
+    plt.xlabel("Sample Index")
+    plt.ylabel("Current (µA)")  # update unit accordingly
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
+
 
 
 # parse user input and issue a command
