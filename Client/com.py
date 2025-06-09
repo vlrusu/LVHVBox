@@ -123,10 +123,11 @@ if __name__ == "__main__":
             rule = rules[name]
             cmdid = rule["cmdid"]
             expression = rule["expression"]
+            format_spec = rule.get("format", "float")  # default to "float" if not present
 
             send_rs485_data(ser, address, cmdid)
             received_data = receive_rs485_data(ser)
-
+#            print(len(received_data))
             if not received_data or len(received_data) < 3:
                 print(f"{name}: No response or incomplete")
                 continue
@@ -136,7 +137,12 @@ if __name__ == "__main__":
                 msb = received_data[2]
                 combined_word = (msb << 8) | lsb
                 transformed = apply_transformation(combined_word, expression)
-                print(f"{name:<20} = {transformed:8.2f}")
+                if format_spec == "int":
+                    print(f"{name:<20} = {transformed:8d}")
+                elif format_spec == "hex":
+                    print(f"{name:<20} = {int(transformed):#010x}")
+                else:
+                    print(f"{name:<20} = {transformed:8.2f}")
             else:
                 print(f"{name}: Invalid start byte")
         
