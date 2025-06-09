@@ -34,6 +34,12 @@ void* client_handler(void* args){
     task.error = 0;
     pthread_cond_init(&(task.condition), NULL);
 
+    // bad message, just send back error
+    if (message->valid != 1){
+      task.rv = message_wrap_chars("ERROR");
+      break;
+    }
+
     // only accept LVHV+cmd+type+char+float
     if (message->count != 5){
       break;

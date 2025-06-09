@@ -88,6 +88,7 @@ MessageBlock_t* block_construct(char type, unsigned int count){
   rv->count = count;
   rv->used = 0;
   rv->bytes = (char*) malloc(rv->count * size);
+  rv->valid = 0;
   return rv;
 }
 
@@ -120,6 +121,7 @@ Message_t* message_construct(){
   rv->count = 0;
   rv->space = 2;
   rv->blocks = (MessageBlock_t**) malloc(2 * sizeof(MessageBlock_t*));
+  rv->valid = 0;
   return rv;
 }
 
@@ -168,6 +170,7 @@ Message_t* message_initialize(){
   Message_t* rv = message_construct();
   MessageBlock_t* header = header_initialize();
   message_append(rv, header);
+  rv->valid = 1;
   return rv;
 }
 
@@ -213,7 +216,14 @@ ssize_t block_recv(MessageBlock_t** dst, int fd){
     rest -= nread;
     tbr = MIN(rest, chunk);
   }
-  assert((unsigned int) (ptr - block->bytes) == size);
+
+  // sanity check
+  if ((unsigned int) (ptr - block->bytes) == size){
+    block->valid = 1;
+  }
+  else {
+    block->valid = 0;
+  }
 
   *dst = block;
   return rv;
@@ -221,6 +231,7 @@ ssize_t block_recv(MessageBlock_t** dst, int fd){
 
 ssize_t message_recv(Message_t** message, int fd){
   *message = message_construct();
+  (*message)->valid = 1;
 
   unsigned int rv;
   ssize_t nread;
@@ -229,6 +240,7 @@ ssize_t message_recv(Message_t** message, int fd){
   unsigned int count;
   if ((nread = read(fd, &count, sizeof(unsigned int))) < 1){
     // TODO error-out...
+    (*message)->valid = 0;
     rv = 0;
     return rv;
   }
@@ -238,11 +250,18 @@ ssize_t message_recv(Message_t** message, int fd){
     MessageBlock_t* block;
     rv += block_recv(&block, fd);
     message_append(*message, block);
+
+    // if block was read short, then short-circuit reading to terminate session
+    if (block->valid == 0){
+      (*message)->valid = 0;
+      break;
+    }
   }
 
   char* first = ((*message)->blocks[0])->bytes;
   //assert((int) strncmp(first, "LVHV", 4) == 0);
   if ((int) strncmp(first, "LVHV", 4) != 0){
+    (*message)->valid = 0;
     rv = 0;
   }
   return rv;

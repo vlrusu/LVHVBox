@@ -17,12 +17,14 @@ typedef struct {
   unsigned int count;
   unsigned int used;
   char* bytes;
+  int valid;
 } MessageBlock_t;
 
 typedef struct {
   unsigned int count;
   unsigned int space;
   MessageBlock_t** blocks;
+  int valid;
 } Message_t;
 
 unsigned int typed_sizeof(char);
