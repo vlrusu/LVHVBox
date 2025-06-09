@@ -58,6 +58,7 @@ commands = [
     Command("stop_usb", "pico"),
     Command("trip", "pico"),
     Command("trip_status", "pico", "Trip status {:d}"),
+    Command("trip_currents", "pico", "Trip currents {:.2f}uA"),
     Command("trip_enabled", "pico", "Trip enabled {:d}"),
     Command("update_ped", "pico"),
     Command("pcb_temp", "pico", "PCB Temperature, {:.2f} C", is_channel_cmd=False),

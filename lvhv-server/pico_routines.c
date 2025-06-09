@@ -142,6 +142,8 @@ Message_t* pico_query_trip_status_all(Pico_t* pico){
   return rv;
 }
 
+
+
 Message_t* pico_query_trip_status(Pico_t* pico, uint8_t channel){
   Message_t* message_mask = pico_query_trip_status_all(pico);
   int mask = message_unwrap_int(message_mask);
@@ -151,6 +153,22 @@ Message_t* pico_query_trip_status(Pico_t* pico, uint8_t channel){
   Message_t* rv = message_wrap_int(irv);
   return rv;
 }
+
+
+Message_t* pico_query_trip_currents(Pico_t* pico, uint8_t channel){
+  char reading = '#';
+  char* buffer = malloc(24);
+  pico_write_read_low(pico, &reading, 1, buffer, 24);
+
+  channel -= pico->channel_offset;
+  float frv = * (float*) &buffer[4 * channel];
+  Message_t* rv = message_wrap_float(frv);
+
+  free(buffer);
+  return rv;
+}
+
+
 
 // only for pico 0
 Message_t* pico_query_current(Pico_t* pico){
@@ -330,6 +348,10 @@ void* pico_loop(void* args){
     else if (task->command.name == COMMAND_query_trip_status){
       uint8_t channel = task->command.char_parameter;
       rv = pico_query_trip_status(pico, channel);
+    }
+    else if (task->command.name == COMMAND_query_trip_currents){
+      uint8_t channel = task->command.char_parameter;
+      rv = pico_query_trip_currents(pico, channel);
     }
     else if (task->command.name == COMMAND_query_current){
       rv = pico_query_current(pico);

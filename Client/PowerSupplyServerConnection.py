@@ -32,6 +32,7 @@ class PowerSupplyServerConnection():
                       'get_vhv': 'pico',
                       'get_ihv': 'pico',
                       'trip_status': 'pico',
+                      'trip_currents': 'pico',
                       'reset_trip': 'pico',
                       'set_trip': 'pico',
                      }
@@ -197,6 +198,10 @@ class PowerSupplyServerConnection():
 
     def QueryTripStatus(self, channel):
         rvs = self.WriteRead('trip_status', channel)
+        rv = rvs[0][0]
+        return rv
+    def QueryTripCurrents(self, channel):
+        rvs = self.WriteRead('trip_currents', channel)
         rv = rvs[0][0]
         return rv
 

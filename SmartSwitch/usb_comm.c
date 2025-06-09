@@ -200,6 +200,16 @@ void cdc_task(uint sm_array[]) {
         uint16_t val = (cmd[2] << 8) | cmd[1];
         trip_requirement[ch - 45] = (int)val;
     }
+
+          // ----- Send trip currents -----
+    else if (ch == 35) {
+        for (uint8_t i = 0; i < 6; i++) {
+	  float val = trip_currents[i];
+	  tud_cdc_write(&val, sizeof(float));
+        }
+        tud_cdc_write_flush();
+    }
+
     // ----- Reboot to BOOTSEL mode -----
     else if (ch == 255) {
         reset_usb_boot(0, 0);

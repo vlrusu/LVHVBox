@@ -17,6 +17,7 @@
 #define COMMAND_force_trip COMMAND_trip
 #define COMMAND_query_trip_enabled COMMAND_trip_enabled
 #define COMMAND_query_trip_status COMMAND_trip_status
+#define COMMAND_query_trip_currents COMMAND_trip_currents
 #define COMMAND_query_current COMMAND_pico_current
 #define COMMAND_query_pcb_temperature COMMAND_pcb_temp
 #define COMMAND_get_buffer_status COMMAND_current_buffer_run
@@ -53,7 +54,9 @@ Message_t* pico_program_trip_count(Pico_t*, uint8_t, float);
 Message_t* pico_query_trip_enabled_all(Pico_t*);
 Message_t* pico_query_trip_enabled(Pico_t*, uint8_t);
 Message_t* pico_query_trip_status_all(Pico_t*);
+Message_t* pico_query_trip_currents_all(Pico_t*);
 Message_t* pico_query_trip_status(Pico_t*, uint8_t);
+Message_t* pico_query_trip_currents(Pico_t*, uint8_t);
 Message_t* pico_query_current(Pico_t*);
 Message_t* pico_query_pcb_temperature(Pico_t*);
 Message_t* pico_get_slow_read(Pico_t*, uint8_t);
