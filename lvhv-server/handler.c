@@ -16,6 +16,7 @@ void* client_handler(void* args){
   PriorityQueue_t* pico_a_queue = casted->pico_a_queue;
   PriorityQueue_t* pico_b_queue = casted->pico_b_queue;
   Logger_t* logger = casted->logger;
+  free(casted);
 
   char msg[128];
   sprintf(msg, "new client session open at fd %d", addr);
