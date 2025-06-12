@@ -35,6 +35,11 @@ void* client_handler(void* args){
     task.error = 0;
     pthread_cond_init(&(task.condition), NULL);
 
+    // if connection closed unexpectedly, just abort
+    if (errno == EPIPE){
+      break;
+    }
+
     // bad message, just send back error
     if (message->valid != 1){
       task.rv = message_wrap_chars("ERROR");

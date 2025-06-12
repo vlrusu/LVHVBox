@@ -7,6 +7,7 @@
 #include <linux/spi/spidev.h>
 #include <netinet/in.h>
 #include <pthread.h>
+#include <signal.h>
 #include <stddef.h>
 #include <sys/ioctl.h>
 #include <sys/msg.h>
@@ -165,6 +166,11 @@ int main(int argc, char* argv[]){
     pthread_t pico_b_thread;
     pthread_create(&pico_b_thread, NULL, pico_loop, &pico_b_loop_args);
   }
+
+  // ignore SIGPIPE, allowing individual threads will terminate as necesary
+  struct sigaction action;
+  action.sa_handler = SIG_IGN;
+  sigaction(SIGPIPE, &action, NULL);
 
   // start server
   int sfd = open_server(port, backlog);
