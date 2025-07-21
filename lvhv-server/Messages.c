@@ -195,8 +195,8 @@ ssize_t message_send(Message_t* message, int fd){
 ssize_t block_recv(MessageBlock_t** dst, int fd){
   const size_t chunk = 256;
 
-  char type;
-  unsigned int count;
+  char type = 'C';
+  unsigned int count = 0;
 
   ssize_t rv = 0;
   rv += read(fd, &type, 1);
@@ -237,7 +237,7 @@ ssize_t message_recv(Message_t** message, int fd){
   ssize_t nread;
 
   // first byte is the block count
-  unsigned int count;
+  unsigned int count = 0;
   if ((nread = read(fd, &count, sizeof(unsigned int))) < 1){
     // TODO error-out...
     (*message)->valid = 0;
