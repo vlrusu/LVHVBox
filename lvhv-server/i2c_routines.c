@@ -166,7 +166,7 @@ float i2c_ltc2497(int address, int channelLTC) {
   set_slave_addr(lv_i2c, address, 1);
 
   // msleep(200);
-  msleep(1);
+  msleep(50);
 
   //----- WRITE BYTES -----
   block[0] = channelLTC;
