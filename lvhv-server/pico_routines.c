@@ -176,7 +176,7 @@ Message_t* pico_query_current(Pico_t* pico){
   float frv;
   pico_write_read_low(pico, &writeable, 1, (char*) &frv, sizeof(frv));
   frv *= 3.3 / 4096;
-  Message_t* rv = message_wrap_int(frv);
+  Message_t* rv = message_wrap_float(frv);
   return rv;
 }
 
@@ -188,7 +188,7 @@ Message_t* pico_query_pcb_temperature(Pico_t* pico){
   frv *= 3.3 / 4096;
   frv = 1.8455 - frv;
   frv /= 0.01123;
-  Message_t* rv = message_wrap_int(frv);
+  Message_t* rv = message_wrap_float(frv);
   return rv;
 }
 
