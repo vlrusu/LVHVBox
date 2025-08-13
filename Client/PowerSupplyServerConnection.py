@@ -164,20 +164,42 @@ class PowerSupplyServerConnection():
                                                   speed_hi, timestep_hi)
         return rv
 
+    def _ramp_wire_voltage_trilinear(self, channel, target, tolerance,
+                                     transition_md, transition_hi,
+                                     speed_lo, timestep_lo,
+                                     speed_md, timestep_md,
+                                     speed_hi, timestep_hi):
+        if target < transition_md:
+            rv = self._transition_wire_voltage_linear(channel, transition_md,
+                                                      tolerance,
+                                                      speed_lo, timestep_lo)
+        if target < transition_hi:
+            rv = self._transition_wire_voltage_linear(channel, transition_hi,
+                                                      tolerance,
+                                                      speed_md, timestep_md)
+        rv = self._transition_wire_voltage_linear(channel, target,
+                                                  tolerance,
+                                                  speed_hi, timestep_hi)
+        return rv
+
     def _set_wire_voltage(self, channel, value):
-        tolerance = 5.0
-        transition = 20.0
+        tolerance = 1.0
+        transition_bulk = 20.0
         speed_early = 10.0
         timestep_early = 0.5
         speed_bulk = 30.0
         timestep_bulk = 0.5
+        transition_fine = value - 3.0 * tolerance
+        speed_fine = 1.0
+        timestep_fine = 0.5
 
         current = self.QueryWireVoltage(channel)
         if current < value:
-            rv = self._ramp_wire_voltage_bilinear(channel, value,
-                                                  tolerance, transition,
+            rv = self._ramp_wire_voltage_trilinear(channel, value, tolerance,
+                                                  transition_bulk, transition_fine,
                                                   speed_early, timestep_early,
-                                                  speed_bulk, timestep_bulk)
+                                                  speed_bulk, timestep_bulk,
+                                                  speed_fine, timestep_fine)
         else:
             rv = self._transition_wire_voltage_linear(channel, value,
                                                       tolerance,
