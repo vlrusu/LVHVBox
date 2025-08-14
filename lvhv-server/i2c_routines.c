@@ -445,7 +445,7 @@ float i2c_ramp_hv_impl(int fd, uint8_t channel, float target, i2c_state_t* state
   return rv;
 }
 
-Message_t* i2c_hv_dac_cache(uint8_t channel, i2c_state_t* state){
+Message_t* i2c_query_hv_dac_cache(uint8_t channel, i2c_state_t* state){
   unsigned int irv = (unsigned int) state->hv_dac[channel];
   Message_t* rv = message_wrap_unsigned_int(irv);
   return rv;
@@ -519,6 +519,10 @@ void* i2c_loop(void* args){
       uint32_t dac = (uint32_t) (task->command.float_parameter);
       i2c_dac_write(channel, dac, &state);
       rv = message_wrap_int(0);
+    }
+    else if (task->command.name == COMMAND_query_hv_dac_cache){
+      uint8_t channel = task->command.char_parameter;
+      rv = i2c_query_hv_dac_cache(channel, &state);
     }
     // otherwise, have encountered an unexpected command
     else{

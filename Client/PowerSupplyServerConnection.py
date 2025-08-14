@@ -35,6 +35,7 @@ class PowerSupplyServerConnection():
                       'trip_currents': 'pico',
                       'reset_trip': 'pico',
                       'set_trip': 'pico',
+                      'query_hv_dac_cache': 'hv',
                      }
 
         self.specials['COMMAND_set_hv_by_dac'] = 344631823
@@ -234,10 +235,31 @@ class PowerSupplyServerConnection():
             rv = self._set_wire_voltage(channel, value)
         return rv
 
+    def _step_hv_dac(self, channel, target, step, interval):
+        target = int(target)
+        current = self.QueryLastHVSetting(channel)
+        if current < target:
+            sign = +1
+        elif target < current:
+            sign = -1
+        else:
+            return current
+
+        remaining = target - current
+        while 0 < sign*remaining:
+            dac = current + sign*step
+            self._set_hv_by_dac(channel, dac)
+            time.sleep(interval)
+            current = self.QueryLastHVSetting(channel)
+            remaining = target - current
+
+        return current
+
     def QueryTripStatus(self, channel):
         rvs = self.WriteRead('trip_status', channel)
         rv = rvs[0][0]
         return rv
+
     def QueryTripCurrents(self, channel):
         rvs = self.WriteRead('trip_currents', channel)
         rv = rvs[0][0]
@@ -250,5 +272,10 @@ class PowerSupplyServerConnection():
 
     def SetTripThreshold(self, channel, value):
         rvs = self.WriteRead('set_trip', channel, value)
+        rv = rvs[0][0]
+        return rv
+
+    def QueryLastHVSetting(self, channel):
+        rvs = self.WriteRead('query_hv_dac_cache', channel)
         rv = rvs[0][0]
         return rv

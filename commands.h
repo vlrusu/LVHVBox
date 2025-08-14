@@ -33,3 +33,4 @@
 #define COMMAND_readMonI48 776173886
 #define COMMAND_readMonV6 1214810782
 #define COMMAND_readMonI6 428164529
+#define COMMAND_query_hv_dac_cache 344631824 // COMMAND_set_hv_by_dac + 1

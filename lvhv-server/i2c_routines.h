@@ -62,7 +62,7 @@ void i2c_set_hv(uint8_t, float, i2c_state_t*);
 float i2c_ramp_hv_fixed_rate(int, uint8_t, float, float, float, long, i2c_state_t*, Logger_t*);
 float i2c_ramp_hv_impl(int, uint8_t, float, i2c_state_t*, Logger_t*);
 Message_t* i2c_ramp_hv(int, uint8_t, float, i2c_state_t*, Logger_t*);
-Message_t* i2c_hv_dac_cache(uint8_t, i2c_state_t*);
+Message_t* i2c_query_hv_dac_cache(uint8_t, i2c_state_t*);
 
 typedef struct {
   PriorityQueue_t* queue;
