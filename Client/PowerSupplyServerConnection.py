@@ -47,6 +47,7 @@ class PowerSupplyServerConnection():
         self.wire_analog_digital_conversions = {
             i: WireAnalogDigitalConversion(path, key) for i in range(12)
         }
+        self.minimum_hv_step = 0.05
 
     def reestablish(self):
         self.connection = MessagingConnection(self.host, self.port)
@@ -142,7 +143,7 @@ class PowerSupplyServerConnection():
             tried += 1
             if sign*change < 0 and tolerance < abs(change):
                 stop = True
-            elif 9 < tried:
+            elif 9 < tried and abs(change) < self.minimum_hv_step:
                 stop = True
             else:
                 remaining = target - current
@@ -155,7 +156,7 @@ class PowerSupplyServerConnection():
                                     tolerance, transition,
                                     speed_lo, timestep_lo,
                                     speed_hi, timestep_hi):
-        if target < transition:
+        if transition < target:
             rv = self._transition_wire_voltage_linear(channel, transition,
                                                       tolerance,
                                                       speed_lo, timestep_lo)
@@ -169,14 +170,23 @@ class PowerSupplyServerConnection():
                                      speed_lo, timestep_lo,
                                      speed_md, timestep_md,
                                      speed_hi, timestep_hi):
-        if target < transition_md:
+        rv = self.QueryWireVoltage(channel)
+        if rv < transition_md and transition_md < target:
             rv = self._transition_wire_voltage_linear(channel, transition_md,
                                                       tolerance,
                                                       speed_lo, timestep_lo)
-        if target < transition_hi:
+            '''
+            if tolerance < abs(rv - transition_md):
+                return rv
+            '''
+        if rv < transition_hi and transition_hi < target:
             rv = self._transition_wire_voltage_linear(channel, transition_hi,
                                                       tolerance,
                                                       speed_md, timestep_md)
+            '''
+            if tolerance < abs(rv - transition_hi):
+                return rv
+            '''
         rv = self._transition_wire_voltage_linear(channel, target,
                                                   tolerance,
                                                   speed_hi, timestep_hi)
@@ -184,38 +194,42 @@ class PowerSupplyServerConnection():
 
     def _set_wire_voltage(self, channel, value):
         tolerance = 1.0
-        transition_bulk = 20.0
+        transition_onset = 20.0
+        transition_bulk = 40.0
         speed_early = 10.0
         timestep_early = 0.5
         speed_bulk = 30.0
         timestep_bulk = 0.5
-        transition_fine = value - 3.0 * tolerance
+        transition_fine = value - 1.0*speed_bulk*timestep_bulk
         speed_fine = 1.0
         timestep_fine = 0.5
 
         current = self.QueryWireVoltage(channel)
-        if current < value:
-            rv = self._ramp_wire_voltage_trilinear(channel, value, tolerance,
-                                                  transition_bulk, transition_fine,
-                                                  speed_early, timestep_early,
-                                                  speed_bulk, timestep_bulk,
-                                                  speed_fine, timestep_fine)
+        # if ramping up, first get out of baseline-region
+        if current < value and current < transition_onset:
+                rv = self._timed_hv_set(channel, transition_onset,
+                                        timestep_early)
+        # if ramping down, first drop to below the setpoint
         else:
             rv = self._transition_wire_voltage_linear(channel, value,
                                                       tolerance,
                                                       speed_bulk, timestep_bulk)
+        # ramp up to setpoint
+        rv = self._ramp_wire_voltage_trilinear(channel, value, tolerance,
+                                              transition_bulk, transition_fine,
+                                              speed_early, timestep_early,
+                                              speed_bulk, timestep_bulk,
+                                              speed_fine, timestep_fine)
 
         return rv
 
     def SetWireVoltage(self, channel, value):
+        tolerance = 1.0
+        start = self.QueryWireVoltage(channel)
         rv = self._set_wire_voltage(channel, value)
-        '''
-        tolerance = 5.0
-        speed = 10.0
-        timestep = 1.0
-        rv = self._transition_wire_voltage_linear(channel, value,
-                                                  tolerance, speed, timestep)
-        '''
+        # if the transition overshot the target, then retune
+        if tolerance < abs(rv - value):
+            rv = self._set_wire_voltage(channel, value)
         return rv
 
     def QueryTripStatus(self, channel):
