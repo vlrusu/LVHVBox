@@ -57,6 +57,7 @@ ssize_t block_recv(MessageBlock_t**, int);
 ssize_t message_recv(Message_t**, int);
 
 Message_t* message_wrap_int(int);
+Message_t* message_wrap_unsigned_int(unsigned int);
 Message_t* message_wrap_float(float);
 Message_t* message_wrap_chars(char*);
 

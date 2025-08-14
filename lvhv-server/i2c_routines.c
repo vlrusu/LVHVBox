@@ -355,10 +355,11 @@ float i2c_deferred_hv_query(int fd, uint8_t channel){
   return queried;
 }
 
-void i2c_dac_write(uint8_t channel, uint32_t value){
+void i2c_dac_write(uint8_t channel, uint32_t value, i2c_state_t* state){
   unsigned int idx = (unsigned int) (channel / 4);
   DAC8164 dac = hv_dacs[idx];
   DAC8164_writeChannel(&dac, channel, value);
+  state->hv_dac[channel] = value;
 }
 
 // FIXME this conversion is bogus and biased high
@@ -371,14 +372,14 @@ uint32_t i2c_dac_cast(float value){
   return rv;
 }
 
-void i2c_set_hv(uint8_t channel, float value){
+void i2c_set_hv(uint8_t channel, float value, i2c_state_t* state){
   uint32_t dvalue = i2c_dac_cast(value);
-  i2c_dac_write(channel, dvalue);
+  i2c_dac_write(channel, dvalue, state);
 }
 
 float i2c_ramp_hv_fixed_rate(int fd, uint8_t channel, float target,
                              float tolerance, float speed, long timestep,
-                             Logger_t* logger){
+                             i2c_state_t* state, Logger_t* logger){
   char pfx[64];
   sprintf(pfx, "%s", "i2c_ramp_hv_fixed_rate");
   char msg[128];
@@ -392,7 +393,7 @@ float i2c_ramp_hv_fixed_rate(int fd, uint8_t channel, float target,
   // ramp down at full speed and return
   if (target < current) {
     uint32_t dvalue = i2c_dac_cast(target);
-    i2c_dac_write(channel, dvalue);
+    i2c_dac_write(channel, dvalue, state);
     return i2c_deferred_hv_query(fd, channel);
   }
 
@@ -400,7 +401,7 @@ float i2c_ramp_hv_fixed_rate(int fd, uint8_t channel, float target,
     float next = current + analog_step;
     sprintf(msg, "%s: ramping %f -> %f", pfx, current, next);
     log_write(logger, msg, LOG_VERBOSE);
-    i2c_set_hv(channel, next);
+    i2c_set_hv(channel, next, state);
     msleep(timestep);
     float updated = i2c_deferred_hv_query(fd, channel);
     sprintf(msg, "%s: updated readback of %f", pfx, updated);
@@ -431,7 +432,7 @@ float i2c_ramp_hv_fixed_rate(int fd, uint8_t channel, float target,
   return rv;
 }
 
-float i2c_ramp_hv_impl(int fd, uint8_t channel, float target, Logger_t* logger){
+float i2c_ramp_hv_impl(int fd, uint8_t channel, float target, i2c_state_t* state, Logger_t* logger){
   // TODO:
   // - two-stage ramping, slow at ``beginning,'' and faster in bulk
   // - ramping rates should be configurable via external reference
@@ -440,12 +441,18 @@ float i2c_ramp_hv_impl(int fd, uint8_t channel, float target, Logger_t* logger){
   long timestep = 2000; // ms
   float rv = i2c_ramp_hv_fixed_rate(fd, channel, target,
                                     tolerance, speed, timestep,
-                                    logger);
+                                    state, logger);
   return rv;
 }
 
-Message_t* i2c_ramp_hv(int fd, uint8_t channel, float target, Logger_t* logger){
-  float frv = i2c_ramp_hv_impl(fd, channel, target, logger);
+Message_t* i2c_hv_dac_cache(uint8_t channel, i2c_state_t* state){
+  unsigned int irv = (unsigned int) state->hv_dac[channel];
+  Message_t* rv = message_wrap_unsigned_int(irv);
+  return rv;
+}
+
+Message_t* i2c_ramp_hv(int fd, uint8_t channel, float target, i2c_state_t* state, Logger_t* logger){
+  float frv = i2c_ramp_hv_impl(fd, channel, target, state, logger);
   Message_t* rv = message_wrap_float(frv);
   return rv;
 }
@@ -457,6 +464,10 @@ void* i2c_loop(void* args){
   uint8_t channel_map[6];
   memcpy(channel_map, casted->channel_map, sizeof(channel_map));
   char msg[128];
+
+  // initialize state cache
+  i2c_state_t state;
+  memset(&state.hv_dac, 0, sizeof(state.hv_dac));
 
   // establish connection back through foyer to allow coupling to hv readings
   int fd = loopback_connect(casted->port);
@@ -498,15 +509,15 @@ void* i2c_loop(void* args){
     // hv commands these require pico-based hv polling
     // to protect against biasing the hv too quickly
     else if (task->command.name == COMMAND_ramp_hv){
-      rv = i2c_ramp_hv(fd, task->command.char_parameter, task->command.float_parameter, logger);
+      rv = i2c_ramp_hv(fd, task->command.char_parameter, task->command.float_parameter, &state, logger);
     }
     else if (task->command.name == COMMAND_down_hv){
-      rv = i2c_ramp_hv(fd, task->command.char_parameter, 0.0, logger);
+      rv = i2c_ramp_hv(fd, task->command.char_parameter, 0.0, &state, logger);
     }
     else if (task->command.name == COMMAND_set_hv_by_dac){
       uint8_t channel = task->command.char_parameter;
       uint32_t dac = (uint32_t) (task->command.float_parameter);
-      i2c_dac_write(channel, dac);
+      i2c_dac_write(channel, dac, &state);
       rv = message_wrap_int(0);
     }
     // otherwise, have encountered an unexpected command

@@ -38,6 +38,10 @@ typedef struct {
 } i2c_config_t;
 */
 
+typedef struct {
+  uint32_t hv_dac[12];
+} i2c_state_t;
+
 int initialize_i2c_lv(uint8_t channel_map[6]);
 int initialize_i2c_hv();
 int initialize_i2c(uint8_t lv_channel_map[6]);
@@ -52,12 +56,13 @@ int i2c_lv_power_control(uint8_t channel, uint8_t pin_map[6], int value);
 Message_t* i2c_lv_power_on(uint8_t, uint8_t[6]);
 Message_t* i2c_lv_power_off(uint8_t, uint8_t[6]);
 float i2c_deferred_hv_query(int, uint8_t);
-void i2c_dac_write(uint8_t, uint32_t);
+void i2c_dac_write(uint8_t, uint32_t, i2c_state_t*);
 uint32_t i2c_dac_cast(float);
-void i2c_set_hv(uint8_t, float);
-float i2c_ramp_hv_fixed_rate(int, uint8_t, float, float, float, long, Logger_t*);
-float i2c_ramp_hv_impl(int, uint8_t, float, Logger_t*);
-Message_t* i2c_ramp_hv(int, uint8_t, float, Logger_t*);
+void i2c_set_hv(uint8_t, float, i2c_state_t*);
+float i2c_ramp_hv_fixed_rate(int, uint8_t, float, float, float, long, i2c_state_t*, Logger_t*);
+float i2c_ramp_hv_impl(int, uint8_t, float, i2c_state_t*, Logger_t*);
+Message_t* i2c_ramp_hv(int, uint8_t, float, i2c_state_t*, Logger_t*);
+Message_t* i2c_hv_dac_cache(uint8_t, i2c_state_t*);
 
 typedef struct {
   PriorityQueue_t* queue;

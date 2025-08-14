@@ -275,6 +275,14 @@ Message_t* message_wrap_int(int x){
   return rv;
 }
 
+Message_t* message_wrap_unsigned_int(unsigned int x){
+  Message_t* rv = message_initialize();
+  MessageBlock_t* block = block_construct('I', 1);
+  block_insert(block, &x);
+  message_append(rv, block);
+  return rv;
+}
+
 Message_t* message_wrap_float(float x){
   Message_t* rv = message_initialize();
   MessageBlock_t* block = block_construct('F', 1);

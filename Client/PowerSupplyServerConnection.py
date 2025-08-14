@@ -43,11 +43,13 @@ class PowerSupplyServerConnection():
 
         cdir = os.path.join(os.path.dirname(cpath), 'Client')
         path = os.path.join(cdir, 'nominal-hv-dac-calibration.json')
+        #path = os.path.join(cdir, 'most-test-calibration.json')
         key = 'nominal'
         self.wire_analog_digital_conversions = {
             i: WireAnalogDigitalConversion(path, key) for i in range(12)
+            #i: WireAnalogDigitalConversion(path, str(i)) for i in [1, 2, 3, 5, 7, 8, 9, 10, 11]
         }
-        self.minimum_hv_step = 0.05
+        self.minimum_hv_step = 0.01
 
     def reestablish(self):
         self.connection = MessagingConnection(self.host, self.port)
@@ -201,7 +203,7 @@ class PowerSupplyServerConnection():
         speed_bulk = 30.0
         timestep_bulk = 0.5
         transition_fine = value - 1.0*speed_bulk*timestep_bulk
-        speed_fine = 1.0
+        speed_fine = 5.0
         timestep_fine = 0.5
 
         current = self.QueryWireVoltage(channel)
