@@ -32,6 +32,8 @@ class MessagingConnection:
             'C': 'c',
             'I': 'i',
             'F': 'f',
+            'U': 'I',
+            'D': 'd',
         }
         self.inverse_typecodes = {
           'C': ctypes.c_char,

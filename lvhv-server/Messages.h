@@ -27,6 +27,10 @@ typedef struct {
   int valid;
 } Message_t;
 
+#ifdef __cplusplus
+extern "C"{
+#endif
+
 unsigned int typed_sizeof(char);
 unsigned int typed_printf(char, char*);
 
@@ -59,11 +63,17 @@ ssize_t message_recv(Message_t**, int);
 Message_t* message_wrap_int(int);
 Message_t* message_wrap_unsigned_int(unsigned int);
 Message_t* message_wrap_float(float);
+Message_t* message_wrap_double(double);
 Message_t* message_wrap_chars(char*);
 
 int block_as_int(MessageBlock_t*);
+unsigned int block_as_uint(MessageBlock_t*);
 float block_as_float(MessageBlock_t*);
 int message_unwrap_int(Message_t*);
 float message_unwrap_float(Message_t*);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

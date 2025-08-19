@@ -291,6 +291,15 @@ Message_t* message_wrap_float(float x){
   return rv;
 }
 
+Message_t* message_wrap_double(double x){
+  Message_t* rv = message_initialize();
+  MessageBlock_t* block = block_construct('D', 1);
+  block_insert(block, &x);
+  message_append(rv, block);
+  return rv;
+}
+
+
 Message_t* message_wrap_chars(char* x){
   Message_t* rv = message_initialize();
   MessageBlock_t* block = block_construct('C', strlen(x));
@@ -312,6 +321,13 @@ float block_as_float(MessageBlock_t* block){
   float* ptr;
   as_floats(block, &ptr);
   float rv = *ptr;
+  return rv;
+}
+
+unsigned int block_as_uint(MessageBlock_t* block){
+  unsigned int* ptr;
+  as_uints(block, &ptr);
+  int rv = *ptr;
   return rv;
 }
 

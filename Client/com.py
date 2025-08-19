@@ -15,6 +15,7 @@ RS485_DIR_PIN = 24  # GPIO24 for DE/RE control
 chip = gpiod.Chip('gpiochip4')
 
 rs485_en_line = chip.get_line(RS485_DIR_PIN)
+#rs485_en_line.request(consumer="MYDEVICE",type=gpiod.LINE_REQ_DIR_OUT)
 rs485_en_line.request(consumer="MYDEVICE",type=gpiod.LINE_REQ_DIR_OUT)
 
 
@@ -111,7 +112,7 @@ if __name__ == "__main__":
 
     
     try:
-        ser= initialize()
+
 
         targets = [args.name] if args.name else list(rules.keys())
 
@@ -120,11 +121,14 @@ if __name__ == "__main__":
                 print(f"{name}: not found in JSON")
                 continue
 
+            time.sleep(0.5)
             rule = rules[name]
             cmdid = rule["cmdid"]
             expression = rule["expression"]
             format_spec = rule.get("format", "float")  # default to "float" if not present
 
+            ser= initialize()            
+            
             send_rs485_data(ser, address, cmdid)
             received_data = receive_rs485_data(ser)
 #            print(len(received_data))
@@ -145,10 +149,11 @@ if __name__ == "__main__":
                     print(f"{name:<20} = {transformed:8.2f}")
             else:
                 print(f"{name}: Invalid start byte")
-        
+
+            ser.close()
+                
 
     except KeyboardInterrupt:
         print("Exiting Program")
-    finally:
-        ser.close()
+
 
