@@ -198,10 +198,16 @@ ssize_t block_recv(MessageBlock_t** dst, int fd){
   char type = 'C';
   unsigned int count = 0;
 
+  int valid = 1;
   ssize_t rv = 0;
   rv += read(fd, &type, 1);
   rv += read(fd, &count, sizeof(unsigned int));
+  if (1024 < count){
+    count = 1024;
+    valid = 0;
+  }
   MessageBlock_t* block = block_construct(type, count);
+  block->valid = valid;
 
   unsigned int size = count * typed_sizeof(type);
   char* ptr = block->bytes;
@@ -258,10 +264,15 @@ ssize_t message_recv(Message_t** message, int fd){
     }
   }
 
-  char* first = ((*message)->blocks[0])->bytes;
-  //assert((int) strncmp(first, "LVHV", 4) == 0);
-  if ((int) strncmp(first, "LVHV", 4) != 0){
-    (*message)->valid = 0;
+  if (((*message)->valid == 1) && (0 < (*message)->count)){
+    char* first = ((*message)->blocks[0])->bytes;
+    //assert((int) strncmp(first, "LVHV", 4) == 0);
+    if ((int) strncmp(first, "LVHV", 4) != 0){
+      (*message)->valid = 0;
+      rv = 0;
+    }
+  }
+  else{
     rv = 0;
   }
   return rv;
