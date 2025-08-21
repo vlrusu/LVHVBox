@@ -84,17 +84,21 @@ void as_doubles(MessageBlock_t* block, double** out){
 MessageBlock_t* block_construct(char type, unsigned int count){
   unsigned int size = typed_sizeof(type);
   MessageBlock_t* rv = (MessageBlock_t*) malloc(sizeof(MessageBlock_t));
-  rv->type = type;
-  rv->count = count;
-  rv->used = 0;
-  rv->bytes = (char*) malloc(rv->count * size);
+  if (0 < size){
+    rv->type = type;
+    rv->count = count;
+    rv->used = 0;
+    rv->bytes = (char*) malloc(rv->count * size);
+  }
   rv->valid = 0;
   return rv;
 }
 
 void block_destroy(MessageBlock_t* block){
-  free(block->bytes);
-  free(block);
+  if (block->valid == 1){
+    free(block->bytes);
+    free(block);
+  }
 }
 
 void block_insert(MessageBlock_t* block, void* buf){
@@ -198,16 +202,13 @@ ssize_t block_recv(MessageBlock_t** dst, int fd){
   char type = 'C';
   unsigned int count = 0;
 
-  int valid = 1;
   ssize_t rv = 0;
   rv += read(fd, &type, 1);
   rv += read(fd, &count, sizeof(unsigned int));
   if (1024 < count){
     count = 1024;
-    valid = 0;
   }
   MessageBlock_t* block = block_construct(type, count);
-  block->valid = valid;
 
   unsigned int size = count * typed_sizeof(type);
   char* ptr = block->bytes;
@@ -216,15 +217,20 @@ ssize_t block_recv(MessageBlock_t** dst, int fd){
   unsigned int rest = size;
   unsigned int tbr = MIN(rest, chunk);
   while ((nread = read(fd, ptr, tbr)) != 0){
-    ptr += nread;
-    rv += nread;
-    block->used += (nread / typed_sizeof(type));
-    rest -= nread;
-    tbr = MIN(rest, chunk);
+    if (nread < 0){
+      break;
+    }
+    else{
+      ptr += nread;
+      rv += nread;
+      block->used += (nread / typed_sizeof(type));
+      rest -= nread;
+      tbr = MIN(rest, chunk);
+    }
   }
 
   // sanity check
-  if ((unsigned int) (ptr - block->bytes) == size){
+  if ((0 < size) && ((unsigned int) (ptr - block->bytes) == size)){
     block->valid = 1;
   }
   else {
@@ -239,7 +245,7 @@ ssize_t message_recv(Message_t** message, int fd){
   *message = message_construct();
   (*message)->valid = 1;
 
-  unsigned int rv;
+  unsigned int rv = 0;
   ssize_t nread;
 
   // first byte is the block count
