@@ -331,6 +331,7 @@ int block_as_int(MessageBlock_t* block){
   int* ptr;
   as_ints(block, &ptr);
   int rv = *ptr;
+  free(ptr);
   return rv;
 }
 
@@ -338,6 +339,7 @@ float block_as_float(MessageBlock_t* block){
   float* ptr;
   as_floats(block, &ptr);
   float rv = *ptr;
+  free(ptr);
   return rv;
 }
 
@@ -345,6 +347,7 @@ unsigned int block_as_uint(MessageBlock_t* block){
   unsigned int* ptr;
   as_uints(block, &ptr);
   int rv = *ptr;
+  free(ptr);
   return rv;
 }
 
