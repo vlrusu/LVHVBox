@@ -48,7 +48,7 @@ commands = [
     Command("powerOn", "lv"),
     Command("ramp_hv", "hv"),
     Command("set_hv_by_dac", "hv"),
-    Command("query_hv_dac_cache", "hv"),    
+    Command("query_hv_dac_cache", "hv", "{:d} dac"),
     Command("readMonI48", "lv", "{:.2f} A"),
     Command("readMonI6", "lv", "{:.2f} A"),
     Command("readMonV48", "lv", "{:.2f} V"),
