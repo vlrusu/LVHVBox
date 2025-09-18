@@ -327,6 +327,13 @@ Message_t* message_wrap_chars(char* x){
   return rv;
 }
 
+
+Message_t* message_wrap_error(int code) {
+    if (code == 0) code = -1;
+    if (code > 0)  code = -code;
+    return message_wrap_int(code);
+}
+
 int block_as_int(MessageBlock_t* block){
   int* ptr;
   as_ints(block, &ptr);

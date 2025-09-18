@@ -9,6 +9,7 @@ import ctypes
 from MessagingConnection import MessagingConnection
 import matplotlib.pyplot as plt
 import sys
+import os
 
 
 
@@ -47,6 +48,7 @@ commands = [
     Command("powerOn", "lv"),
     Command("ramp_hv", "hv"),
     Command("set_hv_by_dac", "hv"),
+    Command("query_hv_dac_cache", "hv"),    
     Command("readMonI48", "lv", "{:.2f} A"),
     Command("readMonI6", "lv", "{:.2f} A"),
     Command("readMonV48", "lv", "{:.2f} V"),
@@ -140,11 +142,18 @@ def completer(text, state):
         return None
 
 
+HISTORY_FILENAME = 'lvhvclient.hist'
+if os.path.exists(HISTORY_FILENAME):
+    readline.read_history_file(HISTORY_FILENAME)
+
+    
 readline.set_completer(completer)
 readline.parse_and_bind("tab: complete")
 
 parser = argparse.ArgumentParser()
 args = parser.parse_args()
+
+
 
 
 def create_command_string_default():
@@ -308,15 +317,21 @@ if __name__ == "__main__":
     port = 12000
     connection = MessagingConnection(host, port)
 
-    while True:
-        try:
+
+    try:
+        while True:
             line = input("Input Command: ")
             if line:
                 process_command(line)
-        except AssertionError:
-            print("Ensure that all arguments are valid")
-        # ejc: no cleanup == bad
-        except EOFError:
-            exit(0)
-        except Exception as e:
-            print((type(e), e))
+    except KeyboardInterrupt:
+        exit(0)
+    except AssertionError:
+        print("Ensure that all arguments are valid")
+    # ejc: no cleanup == bad
+    except EOFError:
+        exit(0)
+    except Exception as e:
+        print((type(e), e))
+    finally:
+        print('Ending...')
+        readline.write_history_file(HISTORY_FILENAME)    
