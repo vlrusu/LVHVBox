@@ -23,18 +23,20 @@ class PowerSupplyServerConnection():
                 value = int(tokens[2])
                 self.specials[key] = value
         self.types = {
-                      'powerOn': 'lv',
-                      'powerOff': 'lv',
-                      'readMonV48': 'lv',
-                      'readMonI48': 'lv',
-                      'readMonV6': 'lv',
-                      'readMonI6': 'lv',
-                      'get_vhv': 'pico',
-                      'get_ihv': 'pico',
-                      'trip_status': 'pico',
+                      'powerOn'      : 'lv',
+                      'powerOff'     : 'lv',
+                      'readMonV48'   : 'lv',
+                      'readMonI48'   : 'lv',
+                      'readMonV6'    : 'lv',
+                      'readMonI6'    : 'lv',
+                      'get_vhv'      : 'pico',
+                      'get_ihv'      : 'pico',
+                      'trip_status'  : 'pico',
                       'trip_currents': 'pico',
-                      'reset_trip': 'pico',
-                      'set_trip': 'pico',
+                      'reset_trip'   : 'pico',
+                      'set_trip'     : 'pico',
+                      'pcb_temp'     : 'pico',
+                      'pico_current' : 'pico',
                       'query_hv_dac_cache': 'hv',
                      }
 
@@ -66,6 +68,7 @@ class PowerSupplyServerConnection():
 
         cmd = ctypes.c_uint(self.specials[ckey])
         typ = ctypes.c_uint(self.specials[tkey])
+
         chn = ctypes.c_char(channel)
         num = ctypes.c_float(numeric)
         self.connection.send_message(cmd, typ, chn, num)
@@ -111,6 +114,16 @@ class PowerSupplyServerConnection():
         rv = rvs[0][0]
         return rv
 
+    def QueryPcbTemp(self):
+        rvs = self.WriteRead('pcb_temp',0) # no channels here
+        rv = rvs[0][0]
+        return rv
+
+    def QueryPicoCurrent(self):
+        rvs = self.WriteRead('pico_current',0)
+        rv = rvs[0][0]
+        return rv
+
     def _set_hv_by_dac(self, channel, dac):
         rvs = self.WriteRead('set_hv_by_dac', channel, dac)
         return rvs
@@ -123,6 +136,7 @@ class PowerSupplyServerConnection():
     def _timed_hv_set(self, channel, value, pause):
         dac = self._voltage_to_dac(channel, value)
         self._set_hv_by_dac(channel, dac)
+
         time.sleep(pause)
         rv = self.QueryWireVoltage(channel)
         return rv
@@ -135,16 +149,27 @@ class PowerSupplyServerConnection():
         step = speed * sign * timestep
         remaining = target - current
 
+        finetunethreshold = 50
+        finetunespeed = 2
+
         tried = 0
         stop = False
         while tolerance < abs(remaining) and 0 < sign*remaining and not stop:
+
+            if (abs(remaining) < finetunethreshold):
+                # as I decrease the speed, the HV values are closer and closer, settling time can influence the reading. So I need to increase the timestep
+                timestep = 3
+                step = finetunespeed * sign * timestep
+
             stage = current + step
             updated = self._timed_hv_set(channel, stage, timestep)
+            print(current,updated, timestep, step,timestep)
             change = updated - current
             current = updated
 
             tried += 1
             if sign*change < 0 and tolerance < abs(change):
+                print("Stopped on tolerance or overshoot",sign*change,change, tolerance, channel)
                 stop = True
             elif 9 < tried and abs(change) < self.minimum_hv_step:
                 stop = True
@@ -201,7 +226,7 @@ class PowerSupplyServerConnection():
         transition_bulk = 40.0
         speed_early = 10.0
         timestep_early = 0.5
-        speed_bulk = 30.0
+        speed_bulk = 50.0
         timestep_bulk = 0.5
         transition_fine = value - 1.0*speed_bulk*timestep_bulk
         speed_fine = 5.0
