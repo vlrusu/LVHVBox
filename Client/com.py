@@ -74,7 +74,7 @@ def compose_cmd(address,cmd):
 def send_rs485_data(ser,address,cmd):
     data = compose_cmd(address,cmd)
     set_rs485_transmit()  # Set to transmit mode
-    time.sleep(0.02)  # Small delay for DE stabilization
+    time.sleep(0.1)  # Small delay for DE stabilization
     ser.write(data)  # Send data
     ser.flush()  # Wait for data to be sent
 
@@ -113,7 +113,6 @@ if __name__ == "__main__":
     
     try:
 
-
         targets = [args.name] if args.name else list(rules.keys())
 
         for name in targets:
@@ -127,11 +126,15 @@ if __name__ == "__main__":
             expression = rule["expression"]
             format_spec = rule.get("format", "float")  # default to "float" if not present
 
-            ser= initialize()            
-            
+            time.sleep(0.2)
+
+            ser= initialize()
+
             send_rs485_data(ser, address, cmdid)
+
             received_data = receive_rs485_data(ser)
-#            print(len(received_data))
+            print(len(received_data))
+            print(received_data)
             if not received_data or len(received_data) < 3:
                 print(f"{name}: No response or incomplete")
                 continue
@@ -146,14 +149,11 @@ if __name__ == "__main__":
                 elif format_spec == "hex":
                     print(f"{name:<20} = {int(transformed):#010x}")
                 else:
-                    print(f"{name:<20} = {transformed:8.2f}")
+                    print(f"{name:<20} = {transformed:8.4f}")
             else:
                 print(f"{name}: Invalid start byte")
 
             ser.close()
-                
 
     except KeyboardInterrupt:
         print("Exiting Program")
-
-
