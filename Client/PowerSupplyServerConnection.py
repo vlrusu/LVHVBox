@@ -36,6 +36,8 @@ class PowerSupplyServerConnection():
                       'reset_trip': 'pico',
                       'set_trip': 'pico',
                       'query_hv_dac_cache': 'hv',
+                      "pcb_temp" : 'pico',
+                      "pico_current" : 'pico',
                      }
 
         self.specials['COMMAND_set_hv_by_dac'] = 344631823

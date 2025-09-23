@@ -104,9 +104,12 @@ int main(int argc, char* argv[]){
   log_write(&logger, "initializing MCP pins for i2c interface", LOG_DETAIL);
   lv_mcp_reset = 3;
   lv_global_enable = 18;
-  lvpgoodMCP = (MCP*) malloc(sizeof(struct MCP*));
+  //  lvpgoodMCP = (MCP*) malloc(sizeof(struct MCP*));
+  lvpgoodMCP = malloc(sizeof *lvpgoodMCP);
+
   uint8_t channel_map [6] = {4, 3, 2, 7, 6, 5};
-  hvMCP = (MCP*) malloc(sizeof(struct MCP*));
+  //  hvMCP = (MCP*) malloc(sizeof(struct MCP*));
+  hvMCP = malloc(sizeof *hvMCP);
   rv = initialize_i2c(channel_map);
   if (rv != 0){
     log_write(&logger, "failed to initialize i2c interface", LOG_INFO);
