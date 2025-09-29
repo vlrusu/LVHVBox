@@ -124,6 +124,38 @@ void pico_write_read_low_timeout(Pico_t* pico,
 
 // ---- High-level helpers (updated to new protocol) ----
 
+Message_t* pico_get_vhvs(Pico_t* pico){
+  // Voltages array: CMD_GET_VOLTAGES -> 6 floats
+  float arr[6];
+  int rc = pico_query_frame(pico, CMD_GET_VOLTAGES, NULL, 0, arr, sizeof(arr), 500, 1000);
+  if (rc) return message_wrap_error(rc);
+
+  Message_t* rv = message_initialize();
+  MessageBlock_t* block = block_construct('F', 6);
+  for (size_t i = 0 ; i < 6 ; i++){
+    void* ptr = (void*) (arr + i);
+    block_insert(block, ptr);
+  }
+  message_append(rv, block);
+  return rv;
+}
+
+Message_t* pico_get_ihvs(Pico_t* pico){
+  // Currents array: CMD_GET_CURRENTS -> 6 floats
+  float arr[6];
+  int rc = pico_query_frame(pico, CMD_GET_CURRENTS, NULL, 0, arr, sizeof(arr), 500, 1000);
+  if (rc) return message_wrap_error(rc);
+
+  Message_t* rv = message_initialize();
+  MessageBlock_t* block = block_construct('F', 6);
+  for (size_t i = 0 ; i < 6 ; i++){
+    void* ptr = (void*) (arr + i);
+    block_insert(block, ptr);
+  }
+  message_append(rv, block);
+  return rv;
+}
+
 Message_t* pico_get_vhv(Pico_t* pico, uint8_t channel){
   // Voltages array: CMD_GET_VOLTAGES -> 6 floats
   float arr[6];
@@ -360,7 +392,11 @@ void* pico_loop(void* args){
     Message_t* rv = NULL;
 
     // (dispatch table unchanged; all callees updated)
-    if (task->command.name == COMMAND_get_vhv){
+    if (task->command.name == COMMAND_get_vhvs){
+      rv = pico_get_vhvs(pico);
+    } else if (task->command.name == COMMAND_get_ihvs){
+      rv = pico_get_ihvs(pico);
+    } else if (task->command.name == COMMAND_get_vhv){
       rv = pico_get_vhv(pico, task->command.char_parameter);
     } else if (task->command.name == COMMAND_get_ihv){
       rv = pico_get_ihv(pico, task->command.char_parameter);

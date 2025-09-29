@@ -31,6 +31,8 @@ class PowerSupplyServerConnection():
                       'readMonI6'    : 'lv',
                       'get_vhv'      : 'pico',
                       'get_ihv'      : 'pico',
+                      'get_vhvs'     : 'pico',
+                      'get_ihvs'     : 'pico',
                       'trip_status'  : 'pico',
                       'trip_currents': 'pico',
                       'reset_trip'   : 'pico',
@@ -38,8 +40,6 @@ class PowerSupplyServerConnection():
                       'pcb_temp'     : 'pico',
                       'pico_current' : 'pico',
                       'query_hv_dac_cache': 'hv',
-                      "pcb_temp" : 'pico',
-                      "pico_current" : 'pico',
                      }
 
         self.specials['COMMAND_set_hv_by_dac'] = 344631823
@@ -62,9 +62,11 @@ class PowerSupplyServerConnection():
     def close(self):
         self.connection.close()
 
-    def WriteRead(self, command, channel, numeric=None):
+    def WriteRead(self, command, channel=None, numeric=None):
         ckey = 'COMMAND_%s' % command
         tkey = 'TYPE_%s' % self.types[command]
+        if channel is None:
+            channel = 0
         if numeric is None:
             numeric = 0.0
 
@@ -116,13 +118,23 @@ class PowerSupplyServerConnection():
         rv = rvs[0][0]
         return rv
 
+    def QueryWireVoltages(self):
+        rvs = self.WriteRead('get_vhvs')
+        rv = rvs[0]
+        return rv
+
+    def QueryWireCurrents(self):
+        rvs = self.WriteRead('get_ihvs')
+        rv = rvs[0]
+        return rv
+
     def QueryPcbTemp(self):
-        rvs = self.WriteRead('pcb_temp',0) # no channels here
+        rvs = self.WriteRead('pcb_temp')
         rv = rvs[0][0]
         return rv
 
     def QueryPicoCurrent(self):
-        rvs = self.WriteRead('pico_current',0)
+        rvs = self.WriteRead('pico_current')
         rv = rvs[0][0]
         return rv
 
