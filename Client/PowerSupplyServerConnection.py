@@ -118,14 +118,26 @@ class PowerSupplyServerConnection():
         rv = rvs[0][0]
         return rv
 
-    def QueryWireVoltages(self):
-        rvs = self.WriteRead('get_vhvs')
+    def BlockQueryWireVoltages(self, channel):
+        rvs = self.WriteRead('get_vhvs', channel)
         rv = rvs[0]
         return rv
 
-    def QueryWireCurrents(self):
-        rvs = self.WriteRead('get_ihvs')
+    def BlockQueryWireCurrents(self, channel):
+        rvs = self.WriteRead('get_ihvs', channel)
         rv = rvs[0]
+        return rv
+
+    def QueryWireVoltages(self):
+        rv = []
+        rv += self.BlockQueryWireVoltages(0)
+        rv += self.BlockQueryWireVoltages(6)
+        return rv
+
+    def QueryWireCurrents(self):
+        rv = []
+        rv += self.BlockQueryWireCurrents(0)
+        rv += self.BlockQueryWireCurrents(6)
         return rv
 
     def QueryPcbTemp(self):
