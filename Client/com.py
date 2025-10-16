@@ -12,7 +12,7 @@ RS485_DIR_PIN = 24  # GPIO24 for DE/RE control
 
 #DRAC reset pin is 25
 
-chip = gpiod.Chip('gpiochip4')
+chip = gpiod.Chip('gpiochip0')
 
 rs485_en_line = chip.get_line(RS485_DIR_PIN)
 #rs485_en_line.request(consumer="MYDEVICE",type=gpiod.LINE_REQ_DIR_OUT)
@@ -130,6 +130,8 @@ if __name__ == "__main__":
 
             ser= initialize()
 
+            time.sleep(0.2)
+            
             send_rs485_data(ser, address, cmdid)
 
             received_data = receive_rs485_data(ser)
