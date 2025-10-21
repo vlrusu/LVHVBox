@@ -22,12 +22,15 @@ if ! test ${#} -eq 3; then
   print_usage
 fi
 
+source /etc/os-release
+codename="${VERSION_CODENAME}"
+
 major="${1}"
 minor="${2}"
 patch="${3}"
 version="${major}.${minor}.${patch}"
 vstring="v${major}_${minor}_${patch}"
-label="${project}_${vstring}"
+label="${project}_${codename}_${vstring}"
 
 pd="${PWD}"
 tld="${PWD}/deb"
