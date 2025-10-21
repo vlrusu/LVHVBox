@@ -62,7 +62,7 @@ pushd ${tmp} || exit_on_error "failed to cd to ${tmp}"
 cmake ${pd}  || exit_on_error "cmake failed"
 make         || exit_on_error "compilation failed"
 popd
-rsync ${binary} ${bin}          || exit_on_error "failed to copy shared library"
+rsync ${binary} ${bin}          || exit_on_error "failed to copy binary"
 rsync ${header} ${etc}          || exit_on_error "failed to copy command header"
 rsync ${psmodule} ${python}     || exit_on_error "failed to copy python module"
 rsync ${hvmodule} ${python}     || exit_on_error "failed to copy python module"

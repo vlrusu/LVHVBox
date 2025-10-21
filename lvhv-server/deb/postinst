@@ -1,5 +1,5 @@
 #!/bin/bash
-lib="${wd}/usr/lib"
+lib="/usr/lib"
 python="${lib}/python3/dist-packages/PowerSupplyServerConnection"
 psmodule="${python}/PowerSupplyServerConnection.py"
 sed -i "s,from WireAnalogDigitalConversion,from PowerSupplyServerConnection.WireAnalogDigitalConversion," "${psmodule}"
