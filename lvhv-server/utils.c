@@ -145,7 +145,7 @@ int write_fixed_location(const char *filename, long position, int value) {
 
 int error_log(const char *data) {
 
-  char *error_log = "../../Logs/error_log.log";
+  char *error_log = "/var/log/lvhv/errors.log";
 
   FILE *fp = fopen(error_log, "a");
   if (fp == NULL) {
