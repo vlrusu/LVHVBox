@@ -1,6 +1,7 @@
 Package: mu2e-tracker-lvhv-tools
 Version: %%VERSION%%
 Architecture: arm64
+Section: mu2e
 Essential: no
 Priority: optional
 Depends: libmu2e-tracker-messaging,libi2c-dev,libusb-1.0-0-dev,python3-scipy
