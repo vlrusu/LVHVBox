@@ -442,7 +442,7 @@ def parse_args():
     )
     p.add_argument("--host", default="localhost")
     p.add_argument("--port", type=int, default=12000)
-    p.add_argument("--cmd-header", default="/home/pi/LVHVBox/commands.h")
+    p.add_argument("--cmd-header", default="/etc/mu2e-tracker-lvhv-tools/commands.h")
     p.add_argument("--interval", type=float, default=3, help="Polling interval seconds")
     p.add_argument("--windowed", action="store_true", help="Run in a window instead of fullscreen")
     p.add_argument("--font-size", type=int, default=None, help="Override base font size (default 16)")

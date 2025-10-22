@@ -91,12 +91,13 @@ def bstring_to_chars(string):
     return ret_val
 
 
-def read_commands():
-    file = open("../commands.h", "r")
+command_dict = {}
+def read_commands(path):
+    file = open(path, "r")
     pre_command_list = file.readlines()
     pre_command_list = [i.split() for i in pre_command_list]
 
-    command_dict = {}
+    global command_dict
     for i in pre_command_list:
         # command_dict[i[1]] = format(int(i[2]), '032b')
         # command_dict[i[1]] = struct.pack('<I', int(i[2])).decode('utf-8')
@@ -109,6 +110,11 @@ def read_commands():
     # print(str(command_dict))
     return command_dict
 
+def command_map():
+    global command_dict
+    if command_dict is None:
+        raise Exception('uninitialized command map')
+    return command_dict
 
 def process_float(input):
     v = (
@@ -168,7 +174,7 @@ def process_response(blocks, format_str):
 
 # ship it. socket.send(command_string)
 def send_command(connection, command, channel=None, val=0.0):
-    command_dict = read_commands()
+    command_dict = command_map()
     cmd = ctypes.c_uint(command_dict["COMMAND_" + command.name])
     typ = ctypes.c_uint(command_dict["TYPE_" + command.type_key])
     channel = channel if channel else 0
@@ -219,7 +225,7 @@ def execute_command(sock, command, channel, val):
 def current_burst(sock, keys):
     channel = int(keys[1])
 
-    command_dict = read_commands()
+    command_dict = command_map()
 
     assert 0 <= channel <= 11
 
@@ -316,6 +322,9 @@ if __name__ == "__main__":
     host = '127.0.0.1'
     port = 12000
     connection = MessagingConnection(host, port)
+
+    path = '/etc/mu2e-tracker-lvhv-tools/commands.h'
+    read_commands(path)
 
 
     try:

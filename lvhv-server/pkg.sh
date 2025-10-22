@@ -58,6 +58,11 @@ binary="${tmp}/lvhv-server"
 header="../commands.h"
 psmodule='../Client/PowerSupplyServerConnection.py'
 hvmodule='../Client/WireAnalogDigitalConversion.py'
+hvdac='../Client/nominal-hv-dac-calibration.json'
+client='../Client/Client.py'
+gui='../Client/gui.py'
+ctarget="${bin}/lvhv-client"
+gtarget="${bin}/lvhv-gui"
 pushd ${tmp} || exit_on_error "failed to cd to ${tmp}"
 cmake ${pd}  || exit_on_error "cmake failed"
 make         || exit_on_error "compilation failed"
@@ -66,6 +71,9 @@ rsync ${binary} ${bin}          || exit_on_error "failed to copy binary"
 rsync ${header} ${etc}          || exit_on_error "failed to copy command header"
 rsync ${psmodule} ${python}     || exit_on_error "failed to copy python module"
 rsync ${hvmodule} ${python}     || exit_on_error "failed to copy python module"
+rsync ${hvdac} ${etc}           || exit_on_error "failed to copy hv dac calibration"
+rsync ${client} ${ctarget}      || exit_on_error "failed to copy python client"
+rsync ${gui} ${gtarget}         || exit_on_error "failed to copy gui monitor"
 rsync ${postinst} ${control}    || exit_on_error "failed to copy postinstall script"
 rm -rf ${tmp}
 echo ${commit} >"${etc}/commit" || exit_on_error "failed to cache commit hash"

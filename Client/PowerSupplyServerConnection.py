@@ -9,7 +9,7 @@ from MessagingConnection import MessagingConnection
 from WireAnalogDigitalConversion import WireAnalogDigitalConversion
 
 class PowerSupplyServerConnection():
-    def __init__(self, host, port, cpath='/home/mu2e/LVHVBox/commands.h'):
+    def __init__(self, host, port, cpath='/etc/mu2e-tracker-lvhv-tools/commands.h'):
         self.host = host
         self.port = port
         self.reestablish()
@@ -46,9 +46,7 @@ class PowerSupplyServerConnection():
         self.types['set_hv_by_dac'] = 'hv'
         self.MS_PER_NS = 1e-6
 
-        cdir = os.path.join(os.path.dirname(cpath), 'Client')
-        path = os.path.join(cdir, 'nominal-hv-dac-calibration.json')
-        #path = os.path.join(cdir, 'most-test-calibration.json')
+        path = os.path.join(cpath, 'nominal-hv-dac-calibration.json')
         key = 'nominal'
         self.wire_analog_digital_conversions = {
             i: WireAnalogDigitalConversion(path, key) for i in range(12)
