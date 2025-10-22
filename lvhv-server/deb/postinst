@@ -1,7 +1,14 @@
 #!/bin/bash
 lib="/usr/lib"
+bin="${wd}/usr/bin"
 python="${lib}/python3/dist-packages/PowerSupplyServerConnection"
 psmodule="${python}/PowerSupplyServerConnection.py"
+# post-process module imports to allow direct class imports
 sed -i "s,from WireAnalogDigitalConversion,from PowerSupplyServerConnection.WireAnalogDigitalConversion," "${psmodule}"
 sed -i "s,/home/mu2e/LVHVBox/commands.h,/etc/mu2e-tracker-lvhv-tools/commands.h," "${psmodule}"
 echo 'from PowerSupplyServerConnection.PowerSupplyServerConnection import PowerSupplyServerConnection' >"${python}/__init__.py"
+# make client and gui scripts executable
+ctarget="${bin}/lvhv-client"
+gtarget="${bin}/lvhv-gui"
+chmod 755 ${ctarget}
+chmod 755 ${gtarget}

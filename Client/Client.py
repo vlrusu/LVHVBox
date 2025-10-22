@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import argparse
 import rlcompleter
 import readline
@@ -7,7 +8,6 @@ import struct
 from collections import namedtuple
 import ctypes
 from MessagingConnection import MessagingConnection
-import matplotlib.pyplot as plt
 import sys
 import os
 
@@ -260,19 +260,6 @@ def current_burst(sock, keys):
     for i in full_currents:
         f.write(str(i) + "\n")
     f.close()
-
-    
-    time_step = 0.2  # change this if your interval is different
-    time_series = [i * time_step for i in range(len(full_currents))]
-    plt.figure(figsize=(10, 4))
-    print(full_currents)
-    plt.plot(time_series, full_currents,  marker='o', linestyle='-')
-    plt.title("Full Currents Time Series")
-    plt.xlabel("Sample Index")
-    plt.ylabel("Current (µA)")  # update unit accordingly
-    plt.grid(True)
-    plt.tight_layout()
-    plt.show()
 
 
 
