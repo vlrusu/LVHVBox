@@ -102,7 +102,7 @@ int main(int argc, char* argv[]){
   // initialize gpio pins and adcs
   // TODO read from config (including globals initialized in i2c_routines)
   log_write(&logger, "initializing MCP pins for i2c interface", LOG_DETAIL);
-  lv_mcp_reset = 3;
+  lv_mcp_reset = 27;
   lv_global_enable = 18;
   //  lvpgoodMCP = (MCP*) malloc(sizeof(struct MCP*));
   lvpgoodMCP = malloc(sizeof *lvpgoodMCP);
