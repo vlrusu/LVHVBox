@@ -46,7 +46,8 @@ class PowerSupplyServerConnection():
         self.types['set_hv_by_dac'] = 'hv'
         self.MS_PER_NS = 1e-6
 
-        path = os.path.join(cpath, 'nominal-hv-dac-calibration.json')
+        cdir = os.path.dirname(cpath)
+        path = os.path.join(cdir, 'nominal-hv-dac-calibration.json')
         key = 'nominal'
         self.wire_analog_digital_conversions = {
             i: WireAnalogDigitalConversion(path, key) for i in range(12)
