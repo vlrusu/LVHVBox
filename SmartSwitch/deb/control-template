@@ -1,0 +1,9 @@
+Package: mu2e-tracker-pico-smartswitch-applications
+Version: %%VERSION%%
+Architecture: arm64
+Section: mu2e
+Essential: no
+Priority: optional
+Depends: mu2e-tracker-picotool
+Maintainer: ejc3@lbl.gov
+Description: Standard RP2350 application for SmartSwitch control.
