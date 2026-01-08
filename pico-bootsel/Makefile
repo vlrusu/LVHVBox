@@ -9,10 +9,10 @@ CFLAGS		:= $(CFLAGS)  -I$(PICO_SDK_PATH)/src/common/pico_usb_reset_interface_hea
 CFLAGS		:= $(CFLAGS)  $(shell pkg-config libusb-1.0 --cflags)
 LDFLAGS		:= $(LDFLAGS) $(shell pkg-config libusb-1.0 --libs)
 
-reboot: reboot.c
+reboot-pico-bootsel: reboot.c
 	$(CC) -o $@ $(CFLAGS) $< $(LDFLAGS)
 
 clean:
-	-rm -f reboot
+	-rm -f reboot-pico-bootsel
 
 .PHONY: clean
