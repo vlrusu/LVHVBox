@@ -4,6 +4,6 @@ Architecture: arm64
 Section: mu2e
 Essential: no
 Priority: optional
-Depends: 
+Depends:
 Maintainer: ejc3@lbl.gov
 Description: Utility to remotely reboot RP2350 into BOOTSEL mode.
