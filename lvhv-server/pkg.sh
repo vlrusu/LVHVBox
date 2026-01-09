@@ -40,6 +40,7 @@ control="${wd}/DEBIAN"
 lib="${wd}/usr/lib"
 bin="${wd}/usr/bin"
 etc="${wd}/etc/${project}"
+syd="${wd}/etc/systemd/system"
 deb="${wd}/deb"
 python="${lib}/python3/dist-packages/PowerSupplyServerConnection"
 postinst="${tld}/postinst"
@@ -51,6 +52,7 @@ mkdir -p "${wd}"        || exit_on_error "failed to make target directory"
 mkdir -p "${control}"   || exit_on_error "failed to make control subdirectory"
 mkdir -p "${bin}"       || exit_on_error "failed to make bin subdirectory"
 mkdir -p "${etc}"       || exit_on_error "failed to make etc subdirectory"
+mkdir -p "${syd}"       || exit_on_error "failed to make systemd subdirectory"
 mkdir -p "${python}"    || exit_on_error "failed to make python subdirectory"
 
 tmp="$(mktemp --directory)"
@@ -61,8 +63,12 @@ hvmodule='../Client/WireAnalogDigitalConversion.py'
 hvdac='../Client/nominal-hv-dac-calibration.json'
 client='../Client/Client.py'
 gui='../Client/gui.py'
+service='../systemd/lvhv-server.service'
+desktop='../systemd/lvhv-gui.desktop'
 ctarget="${bin}/lvhv-client"
 gtarget="${bin}/lvhv-gui"
+starget="${syd}/lvhv-server.service"
+dtarget="${etc}/lvhv-gui.desktop"
 pushd ${tmp} || exit_on_error "failed to cd to ${tmp}"
 cmake ${pd}  || exit_on_error "cmake failed"
 make         || exit_on_error "compilation failed"
@@ -74,6 +80,8 @@ rsync ${hvmodule} ${python}     || exit_on_error "failed to copy python module"
 rsync ${hvdac} ${etc}           || exit_on_error "failed to copy hv dac calibration"
 rsync ${client} ${ctarget}      || exit_on_error "failed to copy python client"
 rsync ${gui} ${gtarget}         || exit_on_error "failed to copy gui monitor"
+rsync ${service} ${starget}     || exit_on_error "failed to copy systemd service"
+rsync ${desktop} ${dtarget}     || exit_on_error "failed to copy gui desktop entry"
 rsync ${postinst} ${control}    || exit_on_error "failed to copy postinstall script"
 rm -rf ${tmp}
 echo ${commit} >"${etc}/commit" || exit_on_error "failed to cache commit hash"

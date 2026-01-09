@@ -1,6 +1,7 @@
 #!/bin/bash
 lib="/usr/lib"
 bin="${wd}/usr/bin"
+etc="${wd}/etc/mu2e-tracker-lvhv-tools"
 python="${lib}/python3/dist-packages/PowerSupplyServerConnection"
 psmodule="${python}/PowerSupplyServerConnection.py"
 # post-process module imports to allow direct class imports
@@ -12,3 +13,10 @@ ctarget="${bin}/lvhv-client"
 gtarget="${bin}/lvhv-gui"
 chmod 755 ${ctarget}
 chmod 755 ${gtarget}
+# install desktop entry into home directory
+dtarget='/home/mu2e/.config/autostart'
+mkdir -p ${dtarget}
+mv "${etc}/lvhv-gui.desktop" "${dtarget}"
+# auto-activate service
+systemd enable lvhv-server.service
+systemd start lvhv-server.service

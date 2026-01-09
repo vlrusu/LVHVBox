@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=LVHV Monitor GUI
+Comment=Auto-start monitoring GUI after desktop loads
+Exec=lvhv-gui --host localhost --port 12000 --interval 2 --windowed
+Terminal=false
+X-GNOME-Autostart-enabled=true
