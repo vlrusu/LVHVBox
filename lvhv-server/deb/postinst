@@ -18,5 +18,5 @@ dtarget='/home/mu2e/.config/autostart'
 mkdir -p ${dtarget}
 mv "${etc}/lvhv-gui.desktop" "${dtarget}"
 # auto-activate service
-systemd enable lvhv-server.service
-systemd start lvhv-server.service
+systemctl enable lvhv-server.service
+systemctl start lvhv-server.service
