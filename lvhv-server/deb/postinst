@@ -19,4 +19,4 @@ mkdir -p ${dtarget}
 mv "${etc}/lvhv-gui.desktop" "${dtarget}"
 # auto-activate service
 systemctl enable lvhv-server.service
-systemctl start lvhv-server.service
+systemctl restart lvhv-server.service
