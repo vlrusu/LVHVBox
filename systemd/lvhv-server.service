@@ -3,7 +3,7 @@ Description=Mu2e Tracker LV/HV control and monitoring server
 #After=network.target
 
 [Service]
-type=exec
+Type=exec
 ExecStart=/usr/bin/lvhv-server
 #WorkingDirectory=/usr/bin
 User=root
@@ -12,5 +12,5 @@ RestartSec=5
 StandardOutput=journal
 StandardError=journal
 
-#[Install]
-#WantedBy=multi-user.target
+[Install]
+WantedBy=multi-user.target
