@@ -11,8 +11,10 @@ echo 'from PowerSupplyServerConnection.PowerSupplyServerConnection import PowerS
 # make client and gui scripts executable
 ctarget="${bin}/lvhv-client"
 gtarget="${bin}/lvhv-gui"
+rtarget="${bin}/ramp-hv"
 chmod 755 ${ctarget}
 chmod 755 ${gtarget}
+chmod 755 ${rtarget}
 # install desktop entry into home directory
 dtarget='/home/mu2e/.config/autostart'
 mkdir -p ${dtarget}

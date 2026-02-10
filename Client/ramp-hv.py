@@ -16,8 +16,7 @@ def main(args):
 
     threads = []
     for channel in args.channels:
-        supply = PowerSupplyServerConnection('localhost', 12000,
-                                             '/home/mu2e/LVHVBox/commands.h')
+        supply = PowerSupplyServerConnection(args.host, args.port, args.header)
         thread = threading.Thread(name='Channel %d' % channel,
                                   daemon=True,
                                   target=set_voltage,
@@ -42,6 +41,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', type=int, dest='channels', nargs='+', default=[])
     parser.add_argument('-v', type=float, dest='voltage', default=0.0)
+    parser.add_argument('--host', type=str, dest='host', default='localhost')
+    parser.add_argument('--port', type=int, dest='port', default=12000)
+    parser.add_argument('--header', type=str, dest='header', default='/etc/mu2e-tracker-lvhv-tools/commands.h')
 
     args = parser.parse_args()
     main(args)
