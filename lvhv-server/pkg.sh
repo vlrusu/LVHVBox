@@ -65,6 +65,7 @@ client='../Client/Client.py'
 gui='../Client/gui.py'
 service='../systemd/lvhv-server.service'
 desktop='../systemd/lvhv-gui.desktop'
+ramp='../Client/ramp-hv.py'
 ctarget="${bin}/lvhv-client"
 gtarget="${bin}/lvhv-gui"
 starget="${syd}/lvhv-server.service"
