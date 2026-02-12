@@ -47,11 +47,14 @@ class PowerSupplyServerConnection():
         self.MS_PER_NS = 1e-6
 
         cdir = os.path.dirname(cpath)
-        path = os.path.join(cdir, 'nominal-hv-dac-calibration.json')
-        key = 'nominal'
+        path = os.path.join(cdir, 'measured-hv-dac-calibrtion.json')
+        keys = [str(i) for i in range(12)]
+        if not os.path.exists(path):
+            print('warning: cannot find dedicated dac calibration. using a nominal calibration. monitor HV transitions, and be careful.')
+            path = os.path.join(cdir, 'nominal-hv-dac-calibration.json')
+            keys = ['nominal' for i in range(12)]
         self.wire_analog_digital_conversions = {
-            i: WireAnalogDigitalConversion(path, key) for i in range(12)
-            #i: WireAnalogDigitalConversion(path, str(i)) for i in [1, 2, 3, 5, 7, 8, 9, 10, 11]
+            i: WireAnalogDigitalConversion(path, key) for key in keys
         }
         self.minimum_hv_step = 0.01
 
