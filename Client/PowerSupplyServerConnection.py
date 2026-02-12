@@ -54,7 +54,8 @@ class PowerSupplyServerConnection():
             path = os.path.join(cdir, 'nominal-hv-dac-calibration.json')
             keys = ['nominal' for i in range(12)]
         self.wire_analog_digital_conversions = {
-            i: WireAnalogDigitalConversion(path, key) for key in keys
+            i: WireAnalogDigitalConversion(path, key) \
+                    for i,key in enumerate(keys)
         }
         self.minimum_hv_step = 0.01
 
