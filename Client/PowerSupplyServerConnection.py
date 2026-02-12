@@ -47,7 +47,7 @@ class PowerSupplyServerConnection():
         self.MS_PER_NS = 1e-6
 
         cdir = os.path.dirname(cpath)
-        path = os.path.join(cdir, 'measured-hv-dac-calibrtion.json')
+        path = os.path.join(cdir, 'measured-hv-dac-calibration.json')
         keys = [str(i) for i in range(12)]
         if not os.path.exists(path):
             print('warning: cannot find dedicated dac calibration. using a nominal calibration. monitor HV transitions, and be careful.')
