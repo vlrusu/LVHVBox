@@ -1,3 +1,6 @@
+
+
+
 import serial
 import gpiod  # Replacement for RPi.GPIO
 import time
@@ -7,16 +10,29 @@ import json
 import argparse
 
 
-# RS-485 Driver Direction Control
-RS485_DIR_PIN = 24  # GPIO24 for DE/RE control
+import gpiod
+from gpiod.line import Direction, Value
 
-#DRAC reset pin is 25
+GPIOCHIP = "/dev/gpiochip0"   # might be /dev/gpiochip4 on Pi 5; see note below
+RS485_DIR_PIN = 24            # this must be the LINE OFFSET on that chip
 
-chip = gpiod.Chip('gpiochip0')
+rs485_req = gpiod.request_lines(
+    GPIOCHIP,
+    consumer="LVHVBox-rs485-dir",
+    config={
+        RS485_DIR_PIN: gpiod.LineSettings(
+            direction=Direction.OUTPUT,
+            output_value=Value.INACTIVE,  # start low
+        )
+    },
+)
 
-rs485_en_line = chip.get_line(RS485_DIR_PIN)
-#rs485_en_line.request(consumer="MYDEVICE",type=gpiod.LINE_REQ_DIR_OUT)
-rs485_en_line.request(consumer="MYDEVICE",type=gpiod.LINE_REQ_DIR_OUT)
+def set_rs485_transmit():
+    rs485_req.set_value(RS485_DIR_PIN, Value.ACTIVE)    # high
+
+def set_rs485_receive():
+    rs485_req.set_value(RS485_DIR_PIN, Value.INACTIVE)  # low
+
 
 
 # UART Configuration
@@ -33,12 +49,6 @@ def parse_args():
 
 
 
-# RS-485 Direction Control
-def set_rs485_transmit():
-    rs485_en_line.set_value(1)
-
-def set_rs485_receive():
-    rs485_en_line.set_value(0)
 
 # Initialize GPIO and UART
 def initialize():
@@ -135,8 +145,8 @@ if __name__ == "__main__":
             send_rs485_data(ser, address, cmdid)
 
             received_data = receive_rs485_data(ser)
-            print(len(received_data))
-            print(received_data)
+#            print(len(received_data))
+#            print(received_data)
             if not received_data or len(received_data) < 3:
                 print(f"{name}: No response or incomplete")
                 continue
