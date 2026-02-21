@@ -71,17 +71,22 @@ def timeseries(supplies, channels, cmd, label, xlim, ylim, yscale, logger):
         label = 'Channel %d' % channel
         lines[channel], *rest = ax.plot([], [], '-', label=label)
 
+    legend = None
+
     def init():
+        nonlocal legend
         ax.set_xlim(*xlim)
         ax.set_ylim(*ylim)
         ax.set_yscale(yscale)
-        ax.legend(ncols=3)
+        legend = ax.legend(ncols=3)
         ax.invert_xaxis()
-        return lines.values()
+        return list(lines.values())
 
     def update(frame, lines, buff):
+        nonlocal legend
         buff.Consume(frame)
         rn = now()
+        latest_values = {}
         for k in lines.keys():
             # TODO this loop structure assumes the timeseries are aligned
             # which is not guaranteed
@@ -89,6 +94,18 @@ def timeseries(supplies, channels, cmd, label, xlim, ylim, yscale, logger):
                 xx = [(rn - pair[1]).total_seconds() for pair in buff]
                 yy = [pair[0][k] for pair in buff]
                 lines[k].set_data(xx, yy)
+                if 0 < len(yy):
+                    latest_values[k] = yy[-1]
+
+        for k in channels:
+            if k in latest_values:
+                lines[k].set_label(f'{latest_values[k]:.3f}\nChannel {k}')
+            else:
+                lines[k].set_label(f'Channel {k}')
+
+        if legend is not None:
+            legend.remove()
+        legend = ax.legend(ncols=3)
         return lines.values()
 
     def queries(cmd):
@@ -105,7 +122,7 @@ def timeseries(supplies, channels, cmd, label, xlim, ylim, yscale, logger):
                               init_func=init,
                               repeat=False,
                               interval=0,
-                              blit=True)
+                              blit=False)
     return animation
 
 
@@ -181,7 +198,7 @@ def main(args):
                              )
         currents = timeseries(mksupplies(channels), channels,
                               'get_ihv', 'Current [uA]',
-                              (0.0, 300.0), (1.0, 300.0),
+                              (0.0, 300.0), (1.0, 30.0),
                               'linear',
                               lambda *args: None,
                              )
