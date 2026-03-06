@@ -5,13 +5,13 @@ import readline
 import socket
 import time
 import struct
+import subprocess
 from collections import namedtuple
 import ctypes
 from MessagingConnection import MessagingConnection
 import sys
 import os
-
-
+import matplotlib.pyplot as plt
 
 HISTORY_REQUEST_MAX = 100
 current_buffer_len = 8000  # must be divisible by 10
@@ -19,9 +19,6 @@ full_current_chunk = 10
 COMMAND_BYTE_LENGTH = 13
 
 parser = argparse.ArgumentParser()
-
-
-
 
 
 Command = namedtuple(
@@ -99,21 +96,15 @@ def read_commands(path):
 
     global command_dict
     for i in pre_command_list:
-        # command_dict[i[1]] = format(int(i[2]), '032b')
-        # command_dict[i[1]] = struct.pack('<I', int(i[2])).decode('utf-8')
         string = format(int(i[2]), "032b")
-        # print(string)
-
-        # command_dict[i[1]] = bstring_to_chars(string)
         command_dict[i[1]] = int(i[2])
 
-    # print(str(command_dict))
     return command_dict
 
 def command_map():
     global command_dict
     if command_dict is None:
-        raise Exception('uninitialized command map')
+        raise Exception("uninitialized command map")
     return command_dict
 
 def process_float(input):
@@ -148,18 +139,43 @@ def completer(text, state):
         return None
 
 
-HISTORY_FILENAME = 'lvhvclient.hist'
+HISTORY_FILENAME = "lvhvclient.remote.hist"
 if os.path.exists(HISTORY_FILENAME):
     readline.read_history_file(HISTORY_FILENAME)
 
-    
 readline.set_completer(completer)
 readline.parse_and_bind("tab: complete")
 
 parser = argparse.ArgumentParser()
+parser.add_argument(
+    "host",
+    nargs="?",
+    default="localhost",
+    help="Hostname like psu15 or fully-qualified mu2e-trk-psu15.fnal.gov. Use localhost/127.0.0.1 to skip SSH tunnel.",
+)
+parser.add_argument(
+    "--user",
+    default="mu2e",
+    help="SSH username for the remote host",
+)
+parser.add_argument(
+    "--gateway",
+    default="mu2egateway01.fnal.gov",
+    help="SSH jump host",
+)
+parser.add_argument(
+    "--local-port",
+    type=int,
+    default=12000,
+    help="Local port to forward to the remote server",
+)
+parser.add_argument(
+    "--remote-port",
+    type=int,
+    default=12000,
+    help="Remote server port to forward",
+)
 args = parser.parse_args()
-
-
 
 
 def create_command_string_default():
@@ -211,7 +227,7 @@ def execute_command(sock, command, channel, val):
         if command.type_key != "lv":
             assert -1 <= channel < n_channels[command.type_key]
         else:
-            assert -1 <= channel < n_channels[command.type_key]+1
+            assert -1 <= channel < n_channels[command.type_key] + 1
     send_command(sock, command, channel, val)
     cmd_output = sock.recv_message()
     if command.cmd_output_str_format:
@@ -233,7 +249,6 @@ def current_burst(sock, keys):
     typ = ctypes.c_uint(command_dict["TYPE_pico"])
     channel = ctypes.c_char(channel)
     padding = ctypes.c_float(0.0)
-    #command_string = command_current_burst + type_pico + bits_channel + padding
 
     num_cycles = int(current_buffer_len / full_current_chunk)
     full_currents = []
@@ -241,18 +256,6 @@ def current_burst(sock, keys):
     sock.send_message(cmd, typ, channel, padding)
     time.sleep(1)
     full_currents = sock.recv_message()
-    # for cycle in range(num_cycles):
-    #     print("cycle: " + str(cycle))
-    #     # time.sleep(0.2) # put into config.txt later
-    #     # sock.send(bytes(command_string,"utf-8"))
-
-    #     sock.send_message(cmd, typ, channel, padding)
-    #     samples = sock.recv_message()
-    #     print(samples)
-    #     for sample in samples:
-    #         full_currents.append(sample)
-
-    # write into new file
 
     full_currents = list(full_currents[0])
     filename = "full_currents_" + str(int(time.time())) + ".txt"
@@ -261,6 +264,67 @@ def current_burst(sock, keys):
         f.write(str(i) + "\n")
     f.close()
 
+    time_step = 0.2  # change this if your interval is different
+    time_series = [i * time_step for i in range(len(full_currents))]
+    plt.figure(figsize=(10, 4))
+    print(full_currents)
+    plt.plot(time_series, full_currents,  marker='o', linestyle='-')
+    plt.title("Full Currents Time Series")
+    plt.xlabel("Sample Index")
+    plt.ylabel("Current (µA)")  # update unit accordingly
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
+
+    
+
+def normalize_host(hostname):
+    if hostname in ("localhost", "127.0.0.1"):
+        return hostname
+    if "." in hostname:
+        return hostname
+    return f"mu2e-trk-{hostname}.fnal.gov"
+
+
+def local_port_open(port):
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=0.5):
+            return True
+    except OSError:
+        return False
+
+
+def find_free_port():
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.bind(("127.0.0.1", 0))
+    port = sock.getsockname()[1]
+    sock.close()
+    return port
+
+
+def ensure_tunnel(host, user, gateway, local_port, remote_port):
+    if local_port_open(local_port):
+        local_port = find_free_port()
+        print(f"Local port in use, using {local_port} instead")
+    ssh_cmd = [
+        "ssh",
+        "-f",
+        "-KX",
+        "-N",
+        "-L",
+        f"{local_port}:localhost:{remote_port}",
+        f"{user}@{host}",
+        "-J",
+        gateway,
+    ]
+    result = subprocess.run(ssh_cmd)
+    if result.returncode != 0:
+        raise RuntimeError("Failed to establish SSH tunnel")
+    for _ in range(10):
+        if local_port_open(local_port):
+            return local_port
+        time.sleep(0.2)
+    raise RuntimeError("SSH tunnel did not become ready")
 
 
 # parse user input and issue a command
@@ -280,19 +344,36 @@ def process_command(line):
     if command.is_channel_cmd:
         channel = None
         in_val = 0.0
-        try:
-            channel = int(keys[1])
-        except IndexError:
+        if len(keys) < 2:
             channel = -1
-        try:
-            in_val = keys[2]
-        except IndexError:
-            in_val = 0.0
-        # channel = -1 if len(keys) != 2 else int(keys[1])
-        # in_val = None if len(keys) != 3 else keys[2]
+        elif command.name in ("set_trip", "set_hv_by_dac"):
+            if keys[1] == "all":
+                channel = -1
+                try:
+                    in_val = keys[2]
+                except IndexError:
+                    in_val = 0.0
+            else:
+                try:
+                    channel = int(keys[1])
+                except (IndexError, ValueError):
+                    channel = -1
+                try:
+                    in_val = keys[2]
+                except IndexError:
+                    in_val = 0.0
+        else:
+            try:
+                channel = int(keys[1])
+            except IndexError:
+                channel = -1
+            except ValueError:
+                channel = -1
+            try:
+                in_val = keys[2]
+            except IndexError:
+                in_val = 0.0
         if channel == -1:  # Handle all channels
-            # Server expects special channel arg for powering off all channels.
-            # This works, or we could change how the server works.
             if command.name == "powerOff":
                 execute_command(connection, command, 6, in_val)
                 return
@@ -306,13 +387,17 @@ def process_command(line):
 
 
 if __name__ == "__main__":
-    host = '127.0.0.1'
-    port = 12000
-    connection = MessagingConnection(host, port)
+    host = normalize_host(args.host)
+    if host in ("localhost", "127.0.0.1"):
+        connection = MessagingConnection(host, args.remote_port)
+    else:
+        port = ensure_tunnel(
+            host, args.user, args.gateway, args.local_port, args.remote_port
+        )
+        connection = MessagingConnection("127.0.0.1", port)
 
-    path = '/etc/mu2e-tracker-lvhv-tools/commands.h'
+    path = "../commands.h"
     read_commands(path)
-
 
     try:
         while True:
@@ -323,11 +408,10 @@ if __name__ == "__main__":
         exit(0)
     except AssertionError:
         print("Ensure that all arguments are valid")
-    # ejc: no cleanup == bad
     except EOFError:
         exit(0)
     except Exception as e:
         print((type(e), e))
     finally:
-        print('Ending...')
-        readline.write_history_file(HISTORY_FILENAME)    
+        print("Ending...")
+        readline.write_history_file(HISTORY_FILENAME)
