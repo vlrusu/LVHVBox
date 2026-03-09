@@ -175,6 +175,12 @@ parser.add_argument(
     default=12000,
     help="Remote server port to forward",
 )
+parser.add_arguemnt(
+    "--header",
+    type=str,
+    default="/etc/mu2e-tracker-lvhv-tools/commands.h",
+    help="Path to opcode macro header"
+)
 args = parser.parse_args()
 
 
@@ -396,7 +402,7 @@ if __name__ == "__main__":
         )
         connection = MessagingConnection("127.0.0.1", port)
 
-    path = "../commands.h"
+    path = args.header
     read_commands(path)
 
     try:
