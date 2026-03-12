@@ -175,7 +175,7 @@ parser.add_argument(
     default=12000,
     help="Remote server port to forward",
 )
-parser.add_arguemnt(
+parser.add_argument(
     "--header",
     type=str,
     default="/etc/mu2e-tracker-lvhv-tools/commands.h",

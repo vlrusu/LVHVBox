@@ -11,6 +11,8 @@ from matplotlib import pyplot as plt
 from matplotlib.animation import FuncAnimation
 import numpy as np
 import os.path
+import socket
+import subprocess
 import threading
 from time import sleep
 
@@ -20,6 +22,55 @@ from ThreadSafeDict import ThreadSafeDict
 def now():
     rv = datetime.datetime.now()
     return rv
+
+
+def normalize_host(hostname):
+    if hostname in ("localhost", "127.0.0.1"):
+        return hostname
+    if "." in hostname:
+        return hostname
+    return f"mu2e-trk-{hostname}.fnal.gov"
+
+
+def local_port_open(port):
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=0.5):
+            return True
+    except OSError:
+        return False
+
+
+def find_free_port():
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.bind(("127.0.0.1", 0))
+    port = sock.getsockname()[1]
+    sock.close()
+    return port
+
+
+def ensure_tunnel(host, user, gateway, local_port, remote_port):
+    if local_port_open(local_port):
+        local_port = find_free_port()
+        print(f"Local port in use, using {local_port} instead")
+    ssh_cmd = [
+        "ssh",
+        "-f",
+        "-KX",
+        "-N",
+        "-L",
+        f"{local_port}:localhost:{remote_port}",
+        f"{user}@{host}",
+        "-J",
+        gateway,
+    ]
+    result = subprocess.run(ssh_cmd)
+    if result.returncode != 0:
+        raise RuntimeError("Failed to establish SSH tunnel")
+    for _ in range(10):
+        if local_port_open(local_port):
+            return local_port
+        sleep(0.2)
+    raise RuntimeError("SSH tunnel did not become ready")
 
 class ClockedBuffer(deque):
     def __init__(self, expiration):
@@ -58,11 +109,14 @@ def threaded_queries(supplies, cmd, channels, out):
             if not thread.is_alive():
                 threads.remove(thread)
 
-def timeseries(supplies, channels, cmd, label, xlim, ylim, yscale, logger):
+def timeseries(supplies, channels, cmd, label, xlim, ylim, yscale, logger, machine_name):
     expire = xlim[1]
     buff = ClockedBuffer(expiration=datetime.timedelta(seconds=expire))
 
     fig = plt.figure()
+    fig.suptitle(f'{label} - {machine_name}')
+    if fig.canvas.manager is not None:
+        fig.canvas.manager.set_window_title(f'hv-monitor - {machine_name}')
     plt.xlabel('Time ago [s]')
     plt.ylabel(label)
     ax = plt.gca()
@@ -150,7 +204,17 @@ def main(args):
         this = os.path.dirname(this)
         header = os.path.join(this, 'commands.h')
 
-    mksupply = lambda: PowerSupplyServerConnection('localhost', 12000, header)
+    host = normalize_host(args.host)
+    machine_name = args.host
+    if host in ("localhost", "127.0.0.1"):
+        connection_host = host
+        connection_port = args.remote_port
+    else:
+        connection_host = "127.0.0.1"
+        connection_port = ensure_tunnel(
+            host, args.user, args.gateway, args.local_port, args.remote_port
+        )
+    mksupply = lambda: PowerSupplyServerConnection(connection_host, connection_port, header)
     mksupplies = lambda chs: [mksupply() for ch in chs]
     channels = args.channels
 
@@ -194,13 +258,15 @@ def main(args):
                               'get_vhv', 'Voltage [V]',
                               (0.0, 300.0), (1.0, 3e3),
                               'linear',
-                              lambda *args: None,
+                              volt_logger,
+                              machine_name,
                              )
         currents = timeseries(mksupplies(channels), channels,
                               'get_ihv', 'Current [uA]',
                               (0.0, 300.0), (1.0, 30.0),
                               'linear',
-                              lambda *args: None,
+                              curr_logger,
+                              machine_name,
                              )
         #pcbtemp = timeseries(mksupplies(channels), channels,
         #                      'pcb_temp', 'PCB Temperature [degC]',
@@ -216,6 +282,16 @@ def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', type=int, dest='channels', nargs='+', default=[])
+    parser.add_argument(
+        'host',
+        nargs='?',
+        default='localhost',
+        help='Hostname like psu13 or fully-qualified mu2e-trk-psu13.fnal.gov',
+    )
+    parser.add_argument('--user', default='mu2e', help='SSH username for the remote host')
+    parser.add_argument('--gateway', default='mu2egateway01.fnal.gov', help='SSH jump host')
+    parser.add_argument('--local-port', type=int, default=12000, help='Local port to forward to the remote server')
+    parser.add_argument('--remote-port', type=int, default=12000, help='Remote server port to forward')
     parser.add_argument('--header', type=str, dest='header', default=None)
     parser.add_argument('--no-plots', action='store_true', help='Disable real-time plotting')
     parser.add_argument('--logfile', nargs='?', const='', default=None)
