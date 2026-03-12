@@ -4,6 +4,7 @@
 
 import ctypes
 import os.path
+import threading
 import time
 from MessagingConnection import MessagingConnection
 from WireAnalogDigitalConversion import WireAnalogDigitalConversion
@@ -170,6 +171,27 @@ class PowerSupplyServerConnection():
         rv = self.QueryWireVoltage(channel)
         return rv
 
+    def _timed_dac_set(self, channel, dac, pause):
+        print(pause)
+        timer = threading.Timer(pause, lambda: None)
+        timer.start()
+        self._set_hv_by_dac(channel, dac)
+        timer.join()
+
+    def _timed_hv_walk(self, channel, start, stop, steps, interval):
+        lo = int(self._voltage_to_dac(channel, start))
+        hi = int(self._voltage_to_dac(channel, stop))
+        change = int(hi) - int(lo)
+        if change < steps:
+            steps = change
+        step = int(change / steps)
+        dacs = [dac for dac in range(lo, hi, step)] + [hi]
+        subinterval = interval / len(dacs)
+        for dac in dacs:
+            self._timed_dac_set(channel, dac, subinterval)
+        rv = self.QueryWireVoltage(channel)
+        return rv
+
     def _transition_wire_voltage_linear(self, channel, target,
                                         tolerance, speed, timestep):
         # speed in V / ms, step size, timestep in ms
@@ -191,8 +213,8 @@ class PowerSupplyServerConnection():
                 step = finetunespeed * sign * timestep
 
             stage = current + step
-            updated = self._timed_hv_set(channel, stage, timestep)
-            print(current,updated, timestep, step,timestep)
+            updated = self._timed_hv_walk(channel, current, stage, 10, timestep)
+            print(current, updated, timestep, step, timestep)
             change = updated - current
             current = updated
 
@@ -254,9 +276,9 @@ class PowerSupplyServerConnection():
         transition_onset = 20.0
         transition_bulk = 40.0
         speed_early = 10.0
-        timestep_early = 0.5
+        timestep_early = 1.0
         speed_bulk = 50.0
-        timestep_bulk = 0.5
+        timestep_bulk = 2.0
         transition_fine = value - 1.0*speed_bulk*timestep_bulk
         speed_fine = 5.0
         timestep_fine = 0.5
