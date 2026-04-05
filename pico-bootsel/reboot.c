@@ -107,7 +107,10 @@ void attempt_to_reboot(libusb_device *device){
   }
 
   printf("initiating reboot...\n");
-  char writeable = 255;
-  libusb_bulk_transfer(handle, 0x02, &writeable, 1, 0, 0);
+  char writeable[3];
+  writeable[0]= 255;
+  writeable[1]= 0;
+  writeable[2]= 0;
+  libusb_bulk_transfer(handle, 0x02, writeable, 3, 0, 0);
 
 }
