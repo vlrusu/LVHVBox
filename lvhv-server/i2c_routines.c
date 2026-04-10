@@ -157,42 +157,57 @@ int initialize_i2c(uint8_t lv_channel_map[6]){
   return rv;
 }
 
+static int ltc2497_write_channel(uint8_t channelLTC) {
+  unsigned char block[1] = {channelLTC};
+
+  for (int attempt = 0; attempt < 15; attempt++) {
+    if (write(lv_i2c, block, 1) == 1) {
+      return 0;
+    }
+
+    msleep(20);
+  }
+
+  error_log("Failed to write LTC2497 channel to the i2c bus");
+  printf("Failed to write LTC2497 channel to the i2c bus");
+
+  return -1;
+}
+
+static int ltc2497_read_result(unsigned char block[3]) {
+  for (int attempt = 0; attempt < 10; attempt++) {
+    if (read(lv_i2c, block, 3) == 3) {
+      return 0;
+    }
+
+    msleep(20);
+  }
+
+  error_log("Failed to read LTC2497 result from the i2c bus");
+  printf("Failed to read LTC2497 result from the i2c bus");
+
+  return -1;
+}
+
 float i2c_ltc2497(int address, int channelLTC) {
   float max_reading = 8388608.0;
   float vref = 1.24;
 
-  unsigned char block[I2C_SMBUS_BLOCK_MAX];
+  unsigned char block[3];
 
-  set_slave_addr(lv_i2c, address, 1);
-
-  // msleep(200);
-  msleep(50);
-
-  //----- WRITE BYTES -----
-  block[0] = channelLTC;
-  int length = 1;                             //<<< Number of bytes to write
-  if (write(lv_i2c, block, length) != length) // write() returns the number of bytes actually written, if it doesn't match then an error occurred (e.g. no response from the device)
-  {
-    /* ERROR HANDLING: i2c transaction failed */
-
-    error_log("Failed to write to the i2c bus");
-    printf("Failed to write to the i2c bus");
+  if (set_slave_addr(lv_i2c, address, 1) < 0) {
+    error_log("Failed to set LTC2497 i2c address");
+    printf("Failed to set LTC2497 i2c address");
 
     return -1;
   }
 
-  // msleep(200);
-  msleep(150);
+  if (ltc2497_write_channel((uint8_t) channelLTC) < 0) {
+    return -1;
+  }
 
-  //----- READ BYTES -----
-  length = 3;                                //<<< Number of bytes to read
-  if (read(lv_i2c, block, length) != length) // read() returns the number of bytes actually read, if it doesn't match then an error occurred (e.g. no response from the device)
-  {
-    // ERROR HANDLING: i2c transaction failed
-
-    error_log("Failed to read from the i2c bus");
-    printf("Failed to read from the i2c bus");
-
+  msleep(170);
+  if (ltc2497_read_result(block) < 0) {
     return -1;
   }
 
@@ -211,6 +226,9 @@ float i2c_ltc2497(int address, int channelLTC) {
 float i2c_read_low(uint8_t address, uint8_t channel, float scale){
   float acplscale = 8.2;
   float rv = i2c_ltc2497(address, channel);
+  if (rv < 0) {
+    return rv;
+  }
   rv /= scale * acplscale;
   return rv;
 }
