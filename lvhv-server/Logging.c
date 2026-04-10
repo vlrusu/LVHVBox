@@ -8,7 +8,7 @@ void log_init(Logger_t* logger, char* path,
               unsigned int print_limit, int print){
   logger->path = NULL;
   if (path != NULL){
-    logger->path = malloc(strlen(path));
+    logger->path = malloc(strlen(path) + 1);
     sprintf(logger->path, "%s", path);
     logger->fd = open(logger->path,
                       O_WRONLY | O_CREAT | O_APPEND,

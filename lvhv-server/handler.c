@@ -33,7 +33,6 @@ void* client_handler(void* args){
     task.addr = addr;
     task.complete = 0;
     task.error = 0;
-    pthread_cond_init(&(task.condition), NULL);
 
     // if connection closed unexpectedly, just abort
     if (errno == EPIPE){
@@ -154,14 +153,12 @@ void* client_handler(void* args){
 
     // wait until task is complete
     if (queued){
-      pthread_mutex_t local_mutex;
-      pthread_mutex_init(&local_mutex, NULL);
-      pthread_mutex_lock(&local_mutex);
-      while (!complete(&task)){
+      pthread_mutex_lock(&(task.mutex));
+      while (!task.complete){
         // TODO catch errors here
-        pthread_cond_wait(&(task.condition), &local_mutex);
+        pthread_cond_wait(&(task.condition), &(task.mutex));
       }
-      pthread_mutex_unlock(&local_mutex);
+      pthread_mutex_unlock(&(task.mutex));
     }
 
     // send response back to client

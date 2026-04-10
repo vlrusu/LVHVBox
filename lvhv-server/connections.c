@@ -53,7 +53,12 @@ int loopback_connect(unsigned int port){
   struct sockaddr_in address;
   address.sin_family = AF_INET;
   struct hostent* entry = gethostbyname("localhost");
-  memcpy(entry->h_addr, &(address.sin_addr), entry->h_length);
+  if (entry == NULL){
+    char msg[128];
+    sprintf(msg, "failed to resolve localhost");
+    exit_on_error(msg);
+  }
+  memcpy(&(address.sin_addr), entry->h_addr, entry->h_length);
   address.sin_port = htons(port);
 
   if (connect(rv, (struct sockaddr*) &address, sizeof(address)) < 0){

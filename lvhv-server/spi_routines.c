@@ -20,7 +20,7 @@ int initialize_spi(){
     error_log(error_msg);
     printf(error_msg);
 
-    return 0;
+    return -1;
   }
 
   if (ioctl (spiFds, SPI_IOC_WR_MODE, &spi_mode) < 0){
@@ -28,7 +28,7 @@ int initialize_spi(){
     error_log(error_msg);
     printf(error_msg);
 
-    return 0;
+    return -1;
   }
 
   if (ioctl (spiFds, SPI_IOC_WR_BITS_PER_WORD, &spi_bpw) < 0){
@@ -36,7 +36,7 @@ int initialize_spi(){
     error_log(error_msg);
     printf(error_msg);
 
-    return 0;
+    return -1;
   }
 
   if (ioctl (spiFds, SPI_IOC_WR_MAX_SPEED_HZ, &spi_speed) < 0){
@@ -44,6 +44,8 @@ int initialize_spi(){
     error_log(error_msg);
     printf(error_msg);
 
-    return 0;
+    return -1;
   }
+
+  return 0;
 }

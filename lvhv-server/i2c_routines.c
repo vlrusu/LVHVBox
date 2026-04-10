@@ -634,6 +634,7 @@ void* i2c_loop(void* args){
     else{
       sprintf(msg, "i2c encountered command of unknown label %u. skipping this command.", task->command.name);
       log_write(logger, msg, LOG_INFO);
+      rv = message_wrap_chars("ERROR");
     }
 
     // mark task as complete
