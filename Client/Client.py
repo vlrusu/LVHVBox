@@ -190,8 +190,13 @@ def create_command_string_default():
 
 # interpret number from format_string provided and print it
 def process_response(blocks, format_str):
-    number = blocks[0][0]
-    print(format_str.format(number))
+    values = blocks[0]
+    if len(values) > 1:
+        for channel, number in enumerate(values):
+            print(f"Channel {channel} " + format_str.format(number))
+    else:
+        number = values[0]
+        print(format_str.format(number))
 
 
 # ship it. socket.send(command_string)
@@ -237,7 +242,7 @@ def execute_command(sock, command, channel, val):
     send_command(sock, command, channel, val)
     cmd_output = sock.recv_message()
     if command.cmd_output_str_format:
-        if channel is not None:
+        if channel is not None and len(cmd_output[0]) == 1:
             fmt = f"Channel {channel} " + command.cmd_output_str_format
             process_response(cmd_output, fmt)
         else:
@@ -381,6 +386,9 @@ def process_command(line):
                 in_val = 0.0
         if channel == -1:  # Handle all channels
             if command.name == "powerOff":
+                execute_command(connection, command, 6, in_val)
+                return
+            if command.name in ("readMonV48", "readMonI48", "readMonV6", "readMonI6"):
                 execute_command(connection, command, 6, in_val)
                 return
             for channel in range(n_channels[command.type_key]):

@@ -96,9 +96,19 @@ class PowerSupplyServerConnection():
         rv = rvs[0][0]
         return rv
 
+    def QueryPowerVoltages(self):
+        rvs = self.WriteRead('readMonV48', 6)
+        rv = rvs[0]
+        return rv
+
     def QueryPowerCurrent(self, channel):
         rvs = self.WriteRead('readMonI48', channel)
         rv = rvs[0][0]
+        return rv
+
+    def QueryPowerCurrents(self):
+        rvs = self.WriteRead('readMonI48', 6)
+        rv = rvs[0]
         return rv
 
     def QuerySwitchingVoltage(self, channel):
@@ -106,9 +116,19 @@ class PowerSupplyServerConnection():
         rv = rvs[0][0]
         return rv
 
+    def QuerySwitchingVoltages(self):
+        rvs = self.WriteRead('readMonV6', 6)
+        rv = rvs[0]
+        return rv
+
     def QuerySwitchingCurrent(self, channel):
         rvs = self.WriteRead('readMonI6', channel)
         rv = rvs[0][0]
+        return rv
+
+    def QuerySwitchingCurrents(self):
+        rvs = self.WriteRead('readMonI6', 6)
+        rv = rvs[0]
         return rv
 
     def QueryWireVoltage(self, channel):

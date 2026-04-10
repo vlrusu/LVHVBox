@@ -7,7 +7,7 @@
 #
 # Tabs (by default):
 #   - HV (12 ch): get_vhv(ch), get_ihv(ch), trip_status(ch)
-#   - 48V (6 ch): readMonV48(), readMonI48()   (bulk no-arg first, then per-channel fallback)
+#   - 48V (6 ch): readMonV48(6), readMonI48(6)   (bulk first, then per-channel fallback)
 #   - Power:     6x (On N / Off N) + All On / All Off (each uses its own MessagingConnection)
 #   - Board:     pcb_temp(0), pico_current(0)
 #
@@ -101,7 +101,7 @@ def send_msg_and_recv_vector6(conn: MessagingConnection, cmd_name: str, type_key
     cmap = command_map()
     c_cmd = ctypes.c_uint(cmap["COMMAND_" + cmd_name])
     c_typ = ctypes.c_uint(cmap["TYPE_" + type_key])
-    c_chn = ctypes.c_char(0)
+    c_chn = ctypes.c_char(6)
     c_val = ctypes.c_float(0.0)
     conn.send_message(c_cmd, c_typ, c_chn, c_val)
     blocks = conn.recv_message()

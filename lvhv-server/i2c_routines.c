@@ -189,10 +189,21 @@ static int ltc2497_read_result(unsigned char block[3]) {
   return -1;
 }
 
-float i2c_ltc2497(int address, int channelLTC) {
+static float ltc2497_block_to_voltage(unsigned char block[3]) {
   float max_reading = 8388608.0;
   float vref = 1.24;
 
+  int val;
+  if ((block[0] & 0x80)) {
+    val = (int) (((block[0] & 0x3f) << 16) + (block[1] << 8) + (block[2] & 0xE0));
+  } else {
+    val = (int) (((~block[0] & 0x3f) << 16) + (~block[1] << 8) + (~block[2] & 0xE0));
+  }
+
+  return val * vref / max_reading;
+}
+
+float i2c_ltc2497(int address, int channelLTC) {
   unsigned char block[3];
 
   if (set_slave_addr(lv_i2c, address, 1) < 0) {
@@ -211,16 +222,7 @@ float i2c_ltc2497(int address, int channelLTC) {
     return -1;
   }
 
-  int val;
-  if ((block[0] & 0x80)) {
-    val = (int) (((block[0] & 0x3f) << 16) + (block[1] << 8) + (block[2] & 0xE0));
-  } else {
-    val = (int) (((~block[0] & 0x3f) << 16) + (~block[1] << 8) + (~block[2] & 0xE0));
-  }
-
-  
-
-  return val * vref / max_reading;
+  return ltc2497_block_to_voltage(block);
 }
 
 float i2c_read_low(uint8_t address, uint8_t channel, float scale){
@@ -233,53 +235,139 @@ float i2c_read_low(uint8_t address, uint8_t channel, float scale){
   return rv;
 }
 
+static Message_t* i2c_read_low_all(uint8_t map[6], uint8_t LTCaddress[6], float scale){
+  float acplscale = 8.2;
+  float values[6];
+
+  for (int base_channel = 0; base_channel < 2; base_channel++){
+    for (int pair = 0; pair < 3; pair++){
+      unsigned int channel_number = base_channel + (pair * 2);
+      unsigned int mapped_channel = 5 - channel_number;
+      uint8_t address = LTCaddress[mapped_channel];
+      uint8_t channel = (5 << 5) + map[mapped_channel];
+
+      if (set_slave_addr(lv_i2c, address, 1) < 0) {
+        error_log("Failed to set LTC2497 i2c address");
+        printf("Failed to set LTC2497 i2c address");
+        return message_wrap_error(-1);
+      }
+
+      if (ltc2497_write_channel(channel) < 0) {
+        return message_wrap_error(-1);
+      }
+    }
+
+    msleep(170);
+
+    for (int pair = 0; pair < 3; pair++){
+      unsigned char block[3];
+      unsigned int channel_number = base_channel + (pair * 2);
+      unsigned int mapped_channel = 5 - channel_number;
+      uint8_t address = LTCaddress[mapped_channel];
+
+      if (set_slave_addr(lv_i2c, address, 1) < 0) {
+        error_log("Failed to set LTC2497 i2c address");
+        printf("Failed to set LTC2497 i2c address");
+        return message_wrap_error(-1);
+      }
+
+      if (ltc2497_read_result(block) < 0) {
+        return message_wrap_error(-1);
+      }
+
+      values[channel_number] = ltc2497_block_to_voltage(block) / (scale * acplscale);
+    }
+  }
+
+  Message_t* rv = message_initialize();
+  MessageBlock_t* block = block_construct('F', 6);
+  for (size_t i = 0; i < 6; i++){
+    void* ptr = (void*) (values + i);
+    block_insert(block, ptr);
+  }
+  message_append(rv, block);
+  return rv;
+}
+
 Message_t* i2c_read_6V_voltage(unsigned int channel_number){
-  // reverse polarity of channeling
-  channel_number = 5 - channel_number;
   uint8_t map[6] = {4, 3, 4, 3, 4, 3};
   uint8_t LTCaddress[6] = {0x26, 0x26, 0x16, 0x16, 0x14, 0x14};
+  float scale = 0.00857905;
+
+  if (channel_number == 6) {
+    return i2c_read_low_all(map, LTCaddress, scale);
+  }
+  if (channel_number > 6) {
+    return message_wrap_error(-3);
+  }
+
+  // reverse polarity of channeling
+  channel_number = 5 - channel_number;
   uint8_t address = LTCaddress[channel_number];
   uint8_t channel = (5 << 5) + map[channel_number];
-  float scale = 0.00857905;
   float frv = i2c_read_low(address, channel, scale);
   Message_t* rv = message_wrap_float(frv);
   return rv;
 }
 
 Message_t* i2c_read_6V_current(unsigned int channel_number){
-  // reverse polarity of channeling
-  channel_number = 5 - channel_number;
   uint8_t map[6] = {5, 2, 5, 2, 5, 2};
   uint8_t LTCaddress[6] = {0x26, 0x26, 0x16, 0x16, 0x14, 0x14};
+  float scale = 0.010;
+
+  if (channel_number == 6) {
+    return i2c_read_low_all(map, LTCaddress, scale);
+  }
+  if (channel_number > 6) {
+    return message_wrap_error(-3);
+  }
+
+  // reverse polarity of channeling
+  channel_number = 5 - channel_number;
   uint8_t address = LTCaddress[channel_number];
   uint8_t channel = (5 << 5) + map[channel_number];
-  float scale = 0.010;
   float frv = i2c_read_low(address, channel, scale);
   Message_t* rv = message_wrap_float(frv);
   return rv;
 }
 
 Message_t* i2c_read_48V_voltage(unsigned int channel_number){
-  // reverse polarity of channeling
-  channel_number = 5 - channel_number;
   uint8_t map[6] = {6, 0, 6, 0, 6, 0};
   uint8_t LTCaddress[6] = {0x26, 0x26, 0x16, 0x16, 0x14, 0x14};
+  float scale = 0.0012089;
+
+  if (channel_number == 6) {
+    return i2c_read_low_all(map, LTCaddress, scale);
+  }
+  if (channel_number > 6) {
+    return message_wrap_error(-3);
+  }
+
+  // reverse polarity of channeling
+  channel_number = 5 - channel_number;
   uint8_t address = LTCaddress[channel_number];
   uint8_t channel = (5 << 5) + map[channel_number];
-  float scale = 0.0012089;
   float frv = i2c_read_low(address, channel, scale);
   Message_t* rv = message_wrap_float(frv);
   return rv;
 }
 
 Message_t* i2c_read_48V_current(unsigned int channel_number){
-  // reverse polarity of channeling
-  channel_number = 5 - channel_number;
   uint8_t map[6] = {7, 1, 7, 1, 7, 1};
   uint8_t LTCaddress[6] = {0x26, 0x26, 0x16, 0x16, 0x14, 0x14};
+  float scale = 0.010;
+
+  if (channel_number == 6) {
+    return i2c_read_low_all(map, LTCaddress, scale);
+  }
+  if (channel_number > 6) {
+    return message_wrap_error(-3);
+  }
+
+  // reverse polarity of channeling
+  channel_number = 5 - channel_number;
   uint8_t address = LTCaddress[channel_number];
   uint8_t channel = (5 << 5) + map[channel_number];
-  float scale = 0.010;
   float frv = i2c_read_low(address, channel, scale);
   Message_t* rv = message_wrap_float(frv);
   return rv;
