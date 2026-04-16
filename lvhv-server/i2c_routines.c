@@ -15,6 +15,32 @@ MCP* lvpgoodMCP;
 MCP* hvMCP;
 DAC8164 hv_dacs[3];
 
+#define STATION_RESET_PIN 25
+
+static int lv_all_power_on_reset(){
+  if (setup_gpio(STATION_RESET_PIN) == -1) {
+    error_log("lv all power on reset failed configuring station reset pin");
+    return -1;
+  }
+
+  if (write_gpio_value(STATION_RESET_PIN, LOW) == -1) {
+    error_log("lv all power on reset failed driving station reset pin low");
+    return -1;
+  }
+
+  if (msleep(500) != 0) {
+    error_log("lv all power on reset failed waiting 500 ms");
+    return -1;
+  }
+
+  if (write_gpio_value(STATION_RESET_PIN, HIGH) == -1) {
+    error_log("lv all power on reset failed driving station reset pin high");
+    return -1;
+  }
+
+  return 0;
+}
+
 int initialize_i2c_lv(uint8_t channel_map[6]){
   char error_msg[100];
 
@@ -376,6 +402,12 @@ Message_t* i2c_read_48V_current(unsigned int channel_number){
 int i2c_lv_power_control(uint8_t channel, uint8_t pin_map[6], int value){
   if ((channel < 0 ) || (6 < channel)){
     return 0;
+  }
+
+  if ((channel == 6) && (value == HIGH)) {
+    if (lv_all_power_on_reset() != 0) {
+      return -1;
+    }
   }
 
   if ((value == HIGH) || (channel == 6)){

@@ -359,8 +359,7 @@ class App(tk.Tk):
                 if method_name == "powerOff":
                     send_one(6, 0.0)  # special "all off"
                 else:
-                    for ch in range(MON48_CHANNELS):
-                        send_one(ch, 0.0); time.sleep(0.05)
+                    send_one(6, 0.0)  # special "all on"
             else:
                 send_one(int(idx), 0.0)
 
