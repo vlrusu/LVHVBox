@@ -110,7 +110,14 @@ def request_line(chip_path: str, line_offset: int):
 
 
 def read_line_value(request, line_offset: int) -> int:
-    return int(request.get_value(line_offset))
+    value = request.get_value(line_offset)
+    if value is gpiod.line.Value.ACTIVE:
+        return 1
+    if value is gpiod.line.Value.INACTIVE:
+        return 0
+    if hasattr(value, "value"):
+        return int(value.value)
+    return int(value)
 
 
 def main() -> int:
