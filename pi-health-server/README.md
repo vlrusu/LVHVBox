@@ -2,7 +2,12 @@
 
 This service is separate from the main LV/HV server and is intended to monitor Raspberry Pi health-related signals.
 
-The first monitor implemented here watches `GPIO6` for AC power status changes from the Geekworm X728 and logs:
+The current monitors watch:
+
+- `GPIO6` for AC power status changes
+- `GPIO21` for AC fail changes
+
+and log:
 
 - AC power loss
 - AC power restore
@@ -14,12 +19,16 @@ The first monitor implemented here watches `GPIO6` for AC power status changes f
 
 ## Assumptions
 
-The service defaults to treating `GPIO6 = HIGH` as "AC power lost" and `GPIO6 = LOW` as "AC power present".
+The service defaults to treating both inputs as:
+
+- `HIGH` = AC power lost
+- `LOW` = AC power present
 
 If your X728 wiring or firmware behaves with the opposite polarity, set:
 
 ```ini
-Environment=PI_HEALTH_GPIO_ACTIVE_LOW=1
+Environment=PI_HEALTH_GPIO6_ACTIVE_LOW=1
+Environment=PI_HEALTH_GPIO21_ACTIVE_LOW=1
 ```
 
 in the systemd unit.
@@ -35,6 +44,7 @@ The service also exposes a small read-only HTTP API on port `12002` by default.
 
 - `GET /health`: current AC power state and the last event
 - `GET /health`: also includes `battery_voltage_v` and `battery_capacity_pct`
+- `GET /health`: also includes per-input states under `ac_inputs`
 - `GET /events?limit=20`: recent AC power events
 
 Example:

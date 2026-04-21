@@ -31,8 +31,14 @@ except ImportError:  # pragma: no cover - import failure is runtime-specific
 
 
 DEFAULT_GPIO_CHIP = os.getenv("PI_HEALTH_GPIO_CHIP", "/dev/gpiochip0")
-DEFAULT_GPIO_LINE = int(os.getenv("PI_HEALTH_AC_GPIO_LINE", "6"))
-DEFAULT_ACTIVE_LOW = os.getenv("PI_HEALTH_GPIO_ACTIVE_LOW", "0").lower() not in {
+DEFAULT_GPIO6_LINE = int(os.getenv("PI_HEALTH_AC_GPIO6_LINE", "6"))
+DEFAULT_GPIO6_ACTIVE_LOW = os.getenv("PI_HEALTH_GPIO6_ACTIVE_LOW", "0").lower() not in {
+    "0",
+    "false",
+    "no",
+}
+DEFAULT_GPIO21_LINE = int(os.getenv("PI_HEALTH_ACFAIL_GPIO21_LINE", "21"))
+DEFAULT_GPIO21_ACTIVE_LOW = os.getenv("PI_HEALTH_GPIO21_ACTIVE_LOW", "0").lower() not in {
     "0",
     "false",
     "no",
@@ -55,6 +61,7 @@ running = True
 state_lock = threading.Lock()
 event_history = deque(maxlen=DEFAULT_EVENT_BUFFER_SIZE)
 current_state = None
+input_states = {}
 started_at_utc = None
 http_server = None
 
@@ -67,6 +74,8 @@ def handle_signal(signum: int, _frame) -> None:
 
 @dataclass(frozen=True)
 class AcPowerState:
+    signal_name: str
+    line_offset: int
     present: bool
     raw_value: int
     source: str
@@ -112,9 +121,17 @@ def local_now_text() -> str:
     return datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
 
 
-def decode_state(raw_value: int, active_low: bool, source: str) -> AcPowerState:
+def decode_state(
+    signal_name: str,
+    line_offset: int,
+    raw_value: int,
+    active_low: bool,
+    source: str,
+) -> AcPowerState:
     power_present = raw_value == 1 if active_low else raw_value == 0
     return AcPowerState(
+        signal_name=signal_name,
+        line_offset=line_offset,
         present=power_present,
         raw_value=raw_value,
         source=source,
@@ -126,8 +143,10 @@ def decode_state(raw_value: int, active_low: bool, source: str) -> AcPowerState:
 
 def log_event(state: AcPowerState) -> None:
     logging.info(
-        "%s raw_gpio=%s local_time=\"%s\" utc_time=\"%s\" source=%s",
+        "%s signal=%s gpio_line=%s raw_gpio=%s local_time=\"%s\" utc_time=\"%s\" source=%s",
         state.event_name,
+        state.signal_name,
+        state.line_offset,
         state.raw_value,
         state.local_time,
         state.utc_time,
@@ -143,6 +162,8 @@ def state_to_dict(state: AcPowerState) -> dict:
         "last_event_local": state.local_time,
         "last_event_utc": state.utc_time,
         "source": state.source,
+        "signal_name": state.signal_name,
+        "gpio_line": state.line_offset,
     }
 
 
@@ -150,9 +171,12 @@ def update_state(state: AcPowerState) -> None:
     global current_state
     with state_lock:
         current_state = state
+        input_states[state.signal_name] = state
         event_history.append(
             {
                 "event": state.event_name,
+                "signal_name": state.signal_name,
+                "gpio_line": state.line_offset,
                 "ac_power_present": state.present,
                 "raw_gpio": state.raw_value,
                 "local_time": state.local_time,
@@ -208,6 +232,7 @@ def build_health_payload() -> dict:
     with state_lock:
         state = current_state
         history_size = len(event_history)
+        states = dict(input_states)
     battery = read_battery_status()
     payload = {
         "service": "pi-health-server",
@@ -217,6 +242,18 @@ def build_health_payload() -> dict:
         "battery_capacity_pct": battery.capacity_pct,
         "battery_source": battery.source,
         "battery_error": battery.error,
+        "ac_inputs": {
+            name: {
+                "gpio_line": signal_state.line_offset,
+                "ac_power_present": signal_state.present,
+                "raw_gpio": signal_state.raw_value,
+                "last_event": signal_state.event_name,
+                "last_event_local": signal_state.local_time,
+                "last_event_utc": signal_state.utc_time,
+                "source": signal_state.source,
+            }
+            for name, signal_state in states.items()
+        },
     }
     if state is None:
         payload.update(
@@ -277,6 +314,10 @@ class PiHealthHandler(BaseHTTPRequestHandler):
 
 
 def request_line(chip_path: str, line_offset: int):
+    return request_lines(chip_path, [line_offset])
+
+
+def request_lines(chip_path: str, line_offsets):
     chip = gpiod.Chip(chip_path)
     line_settings = gpiod.LineSettings(
         direction=Direction.INPUT,
@@ -285,7 +326,7 @@ def request_line(chip_path: str, line_offset: int):
     )
     request = chip.request_lines(
         consumer=DEFAULT_CONSUMER,
-        config={line_offset: line_settings},
+        config={line_offset: line_settings for line_offset in line_offsets},
     )
     return chip, request
 
@@ -328,33 +369,67 @@ def main() -> int:
     signal.signal(signal.SIGTERM, handle_signal)
 
     logging.info(
-        "starting GPIO monitor chip=%s line=%s active_low=%s log_path=%s",
+        "starting GPIO monitor chip=%s gpio6_line=%s gpio6_active_low=%s gpio21_line=%s gpio21_active_low=%s log_path=%s",
         DEFAULT_GPIO_CHIP,
-        DEFAULT_GPIO_LINE,
-        DEFAULT_ACTIVE_LOW,
+        DEFAULT_GPIO6_LINE,
+        DEFAULT_GPIO6_ACTIVE_LOW,
+        DEFAULT_GPIO21_LINE,
+        DEFAULT_GPIO21_ACTIVE_LOW,
         DEFAULT_LOG_PATH,
     )
 
     http_server = start_http_server()
-    chip, request = request_line(DEFAULT_GPIO_CHIP, DEFAULT_GPIO_LINE)
+    signal_configs = {
+        "gpio6_ac_status": {
+            "line_offset": DEFAULT_GPIO6_LINE,
+            "active_low": DEFAULT_GPIO6_ACTIVE_LOW,
+        },
+        "gpio21_ac_fail": {
+            "line_offset": DEFAULT_GPIO21_LINE,
+            "active_low": DEFAULT_GPIO21_ACTIVE_LOW,
+        },
+    }
+    chip, request = request_lines(
+        DEFAULT_GPIO_CHIP,
+        [config["line_offset"] for config in signal_configs.values()],
+    )
     try:
-        initial_value = read_line_value(request, DEFAULT_GPIO_LINE)
-        initial_state = decode_state(initial_value, DEFAULT_ACTIVE_LOW, "startup")
-        update_state(initial_state)
-        log_event(initial_state)
+        for signal_name, config in signal_configs.items():
+            initial_value = read_line_value(request, config["line_offset"])
+            initial_state = decode_state(
+                signal_name,
+                config["line_offset"],
+                initial_value,
+                config["active_low"],
+                "startup",
+            )
+            update_state(initial_state)
+            log_event(initial_state)
 
         while running:
             if not request.wait_edge_events(timeout=1.0):
                 continue
 
             for event in request.read_edge_events():
-                value = read_line_value(request, DEFAULT_GPIO_LINE)
+                line_offset = event.line_offset
+                value = read_line_value(request, line_offset)
+                signal_name = next(
+                    name
+                    for name, config in signal_configs.items()
+                    if config["line_offset"] == line_offset
+                )
                 source = (
                     "edge_rising"
                     if event.event_type is gpiod.EdgeEvent.Type.RISING_EDGE
                     else "edge_falling"
                 )
-                state = decode_state(value, DEFAULT_ACTIVE_LOW, source)
+                state = decode_state(
+                    signal_name,
+                    line_offset,
+                    value,
+                    signal_configs[signal_name]["active_low"],
+                    source,
+                )
                 update_state(state)
                 log_event(state)
     finally:

@@ -384,12 +384,22 @@ def print_ac_status():
         print(f"Health query failed: {exc}")
         return
 
+    ac_inputs = payload.get("ac_inputs", {})
+    gpio6 = ac_inputs.get("gpio6_ac_status", {})
+    gpio21 = ac_inputs.get("gpio21_ac_fail", {})
+
     print("AC power present:", payload.get("ac_power_present"))
     print("Raw GPIO:", payload.get("raw_gpio"))
     print("Last event:", payload.get("last_event"))
     print("Last event local:", payload.get("last_event_local"))
     print("Last event utc:", payload.get("last_event_utc"))
     print("Source:", payload.get("source"))
+    print("GPIO6 AC status present:", gpio6.get("ac_power_present"))
+    print("GPIO6 raw:", gpio6.get("raw_gpio"))
+    print("GPIO6 last event:", gpio6.get("last_event"))
+    print("GPIO21 AC fail present:", gpio21.get("ac_power_present"))
+    print("GPIO21 raw:", gpio21.get("raw_gpio"))
+    print("GPIO21 last event:", gpio21.get("last_event"))
     print("Service started:", payload.get("started_at_utc"))
 
 
@@ -420,7 +430,8 @@ def print_ac_events(limit):
 
     for event in events:
         print(
-            f"{event.get('utc_time')} {event.get('event')} "
+            f"{event.get('utc_time')} {event.get('signal_name')} "
+            f"gpio={event.get('gpio_line')} {event.get('event')} "
             f"raw_gpio={event.get('raw_gpio')} source={event.get('source')}"
         )
 
