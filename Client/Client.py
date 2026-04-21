@@ -9,6 +9,7 @@ import subprocess
 from collections import namedtuple
 import ctypes
 from MessagingConnection import MessagingConnection
+from PiHealthConnection import PiHealthConnection
 import sys
 import os
 import matplotlib.pyplot as plt
@@ -63,6 +64,7 @@ commands = [
     Command("pcb_temp", "pico", "PCB Temperature, {:.2f} C", is_channel_cmd=False),
     Command("pico_current", "pico", "Pico Current, {:.2f} A", is_channel_cmd=False),
 ]
+special_commands = ["ac_status", "ac_events", "battery_status"]
 
 
 # there are 12 (0-11) hv and 6 (0-5) lv channels.  issuing a command with idx
@@ -133,6 +135,7 @@ def bitstring_to_bytes(s):
 
 def completer(text, state):
     options = [x.name for x in commands if x.name.startswith(text)]
+    options += [x for x in special_commands if x.startswith(text)]
     try:
         return options[state]
     except IndexError:
@@ -174,6 +177,18 @@ parser.add_argument(
     type=int,
     default=12000,
     help="Remote server port to forward",
+)
+parser.add_argument(
+    "--health-local-port",
+    type=int,
+    default=12002,
+    help="Local port to forward to the remote Pi health HTTP server",
+)
+parser.add_argument(
+    "--health-remote-port",
+    type=int,
+    default=12002,
+    help="Remote Pi health HTTP server port to forward",
 )
 parser.add_argument(
     "--header",
@@ -338,10 +353,96 @@ def ensure_tunnel(host, user, gateway, local_port, remote_port):
     raise RuntimeError("SSH tunnel did not become ready")
 
 
+health_connection = None
+
+
+def get_health_connection():
+    global health_connection
+    if health_connection is not None:
+        return health_connection
+
+    host = normalize_host(args.host)
+    if host in ("localhost", "127.0.0.1"):
+        health_connection = PiHealthConnection(host, args.health_remote_port)
+        return health_connection
+
+    port = ensure_tunnel(
+        host,
+        args.user,
+        args.gateway,
+        args.health_local_port,
+        args.health_remote_port,
+    )
+    health_connection = PiHealthConnection("127.0.0.1", port)
+    return health_connection
+
+
+def print_ac_status():
+    try:
+        payload = get_health_connection().get_health()
+    except RuntimeError as exc:
+        print(f"Health query failed: {exc}")
+        return
+
+    print("AC power present:", payload.get("ac_power_present"))
+    print("Raw GPIO:", payload.get("raw_gpio"))
+    print("Last event:", payload.get("last_event"))
+    print("Last event local:", payload.get("last_event_local"))
+    print("Last event utc:", payload.get("last_event_utc"))
+    print("Source:", payload.get("source"))
+    print("Service started:", payload.get("started_at_utc"))
+
+
+def print_battery_status():
+    try:
+        payload = get_health_connection().get_health()
+    except RuntimeError as exc:
+        print(f"Health query failed: {exc}")
+        return
+
+    print("Battery voltage [V]:", payload.get("battery_voltage_v"))
+    print("Battery capacity [%]:", payload.get("battery_capacity_pct"))
+    print("Battery error:", payload.get("battery_error"))
+    print("Battery source:", payload.get("battery_source"))
+
+
+def print_ac_events(limit):
+    try:
+        payload = get_health_connection().get_events(limit)
+    except RuntimeError as exc:
+        print(f"Health query failed: {exc}")
+        return
+
+    events = payload.get("events", [])
+    if not events:
+        print("No AC power events recorded")
+        return
+
+    for event in events:
+        print(
+            f"{event.get('utc_time')} {event.get('event')} "
+            f"raw_gpio={event.get('raw_gpio')} source={event.get('source')}"
+        )
+
+
 # parse user input and issue a command
 def process_command(line):
     keys = line.split(" ")  # command <channel> <input_value>
     keys = [k for k in keys if 0 < len(k)]
+
+    if keys[0] == "ac_status":
+        print_ac_status()
+        return
+    if keys[0] == "battery_status":
+        print_battery_status()
+        return
+    if keys[0] == "ac_events":
+        try:
+            limit = int(keys[1]) if 1 < len(keys) else 20
+        except ValueError:
+            limit = 20
+        print_ac_events(limit)
+        return
 
     command = next((c for c in commands if c.name == keys[0]), None)
 
