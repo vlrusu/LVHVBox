@@ -1,0 +1,19 @@
+[Unit]
+Description=Raspberry Pi health monitor service
+After=local-fs.target
+
+[Service]
+Type=exec
+ExecStart=/usr/local/bin/pi-health-server
+User=root
+Restart=always
+RestartSec=2
+Environment=PI_HEALTH_GPIO_CHIP=/dev/gpiochip0
+Environment=PI_HEALTH_AC_GPIO_LINE=6
+Environment=PI_HEALTH_GPIO_ACTIVE_LOW=0
+Environment=PI_HEALTH_LOG_PATH=/var/log/pi-health/ac-power-events.log
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
