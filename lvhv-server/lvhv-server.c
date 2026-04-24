@@ -51,10 +51,10 @@ int main(int argc, char* argv[]){
     char msg[256];
     switch(c){
       case 'p':
-        sscanf(optarg, "%h", port);
+        sscanf(optarg, "%u", &port);
         break;
       case 'b':
-        sscanf(optarg, "%h", backlog);
+        sscanf(optarg, "%d", &backlog);
         break;
       case '?':
         sprintf(msg, "unsupported command-line option (-%c)", c);
@@ -153,20 +153,20 @@ int main(int argc, char* argv[]){
   pthread_t i2c_thread;
 
   // start pico loops
+  pico_loop_args_t pico_a_loop_args;
+  pthread_t pico_a_thread;
   if (pico_a.handle != NULL){
-    pico_loop_args_t pico_a_loop_args;
     pico_a_loop_args.pico = &pico_a;
     pico_a_loop_args.queue = &pico_a_queue;
     pico_a_loop_args.logger = &logger;
-    pthread_t pico_a_thread;
     pthread_create(&pico_a_thread, NULL, pico_loop, &pico_a_loop_args);
   }
+  pico_loop_args_t pico_b_loop_args;
+  pthread_t pico_b_thread;
   if (pico_b.handle != NULL){
-    pico_loop_args_t pico_b_loop_args;
     pico_b_loop_args.pico = &pico_b;
     pico_b_loop_args.queue = &pico_b_queue;
     pico_b_loop_args.logger = &logger;
-    pthread_t pico_b_thread;
     pthread_create(&pico_b_thread, NULL, pico_loop, &pico_b_loop_args);
   }
 

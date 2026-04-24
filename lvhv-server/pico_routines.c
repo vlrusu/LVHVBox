@@ -441,6 +441,7 @@ void* pico_loop(void* args){
     } else {
       sprintf(msg, "pico %d encountered command of unknown label %u. skipping.", pico->id, task->command.name);
       log_write(logger, msg, LOG_INFO);
+      rv = message_wrap_chars("ERROR");
     }
 
     pthread_mutex_lock(&(task->mutex));

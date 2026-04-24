@@ -6,9 +6,11 @@
 
 void task_init(task_t* task){
   pthread_mutex_init(&(task->mutex), NULL);
+  pthread_cond_init(&(task->condition), NULL);
 }
 
 void task_destroy(task_t* task){
+  pthread_cond_destroy(&(task->condition));
   pthread_mutex_destroy(&(task->mutex));
 }
 
