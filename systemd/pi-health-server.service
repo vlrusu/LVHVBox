@@ -16,6 +16,7 @@ Environment=PI_HEALTH_GPIO21_ACTIVE_LOW=0
 Environment=PI_HEALTH_LOG_PATH=/var/log/pi-health/ac-power-events.log
 Environment=PI_HEALTH_HTTP_HOST=0.0.0.0
 Environment=PI_HEALTH_HTTP_PORT=12002
+Environment=PI_HEALTH_ACTION_CONFIG_PATH=/etc/pi-health-actions.ini
 StandardOutput=journal
 StandardError=journal
 

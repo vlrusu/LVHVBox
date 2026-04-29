@@ -3,12 +3,17 @@
 
 from __future__ import annotations
 
+import configparser
+import ctypes
 import json
 import logging
 import os
 import signal
+import socket
+import struct
 import sys
 import threading
+import time
 from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -55,6 +60,14 @@ DEFAULT_BATTERY_I2C_ADDRESS = int(
     os.getenv("PI_HEALTH_BATTERY_I2C_ADDRESS", "0x36"),
     0,
 )
+DEFAULT_ACTION_CONFIG_PATH = Path(
+    os.getenv("PI_HEALTH_ACTION_CONFIG_PATH", "/etc/pi-health-actions.ini")
+)
+DEFAULT_LVHV_HOST = "127.0.0.1"
+DEFAULT_LVHV_PORT = 12000
+DEFAULT_LVHV_COMMANDS_PATH = Path("/etc/mu2e-tracker-lvhv-tools/commands.h")
+DEFAULT_LVHV_POWEROFF_CHANNEL = 6
+DEFAULT_GPIO21_REPEAT_WINDOW_SECONDS = 10.0
 
 
 running = True
@@ -64,6 +77,17 @@ current_state = None
 input_states = {}
 started_at_utc = None
 http_server = None
+power_action_lock = threading.Lock()
+gpio21_last_loss_monotonic = None
+
+
+@dataclass(frozen=True)
+class PowerActionConfig:
+    gpio21_repeat_window_seconds: float
+    lvhv_host: str
+    lvhv_port: int
+    lvhv_commands_path: Path
+    lvhv_poweroff_channel: int
 
 
 def handle_signal(signum: int, _frame) -> None:
@@ -90,6 +114,95 @@ class BatteryStatus:
     capacity_pct: float | None
     source: str
     error: str | None = None
+
+
+class LvhvPowerOffClient:
+    def __init__(self, config: PowerActionConfig):
+        self.config = config
+        self._command_codes = self._read_command_codes(config.lvhv_commands_path)
+
+    def _read_command_codes(self, commands_path: Path) -> dict[str, int]:
+        command_codes = {}
+        with commands_path.open("r", encoding="utf-8") as handle:
+            for raw_line in handle:
+                line = raw_line.split("//", 1)[0].strip()
+                if not line:
+                    continue
+                tokens = line.split()
+                if len(tokens) >= 3 and tokens[0] == "#define":
+                    command_codes[tokens[1]] = int(tokens[2], 0)
+        required = ("COMMAND_powerOff", "TYPE_lv")
+        missing = [key for key in required if key not in command_codes]
+        if missing:
+            joined = ", ".join(missing)
+            raise RuntimeError(f"missing required command codes in {commands_path}: {joined}")
+        return command_codes
+
+    def _encode_block(self, typecode: str, payload: bytes, count: int) -> bytes:
+        return struct.pack("=cI", typecode.encode("ascii"), count) + payload
+
+    def _encode_message(self) -> bytes:
+        channel = self.config.lvhv_poweroff_channel
+        blocks = [
+            self._encode_block("C", b"LVHV", 4),
+            self._encode_block(
+                "U",
+                struct.pack("I", self._command_codes["COMMAND_powerOff"]),
+                1,
+            ),
+            self._encode_block(
+                "U",
+                struct.pack("I", self._command_codes["TYPE_lv"]),
+                1,
+            ),
+            self._encode_block("C", bytes((channel,)), 1),
+            self._encode_block("F", struct.pack("f", 0.0), 1),
+        ]
+        return struct.pack("I", len(blocks)) + b"".join(blocks)
+
+    def _recv_exact(self, connection: socket.socket, size: int) -> bytes:
+        chunks = []
+        remaining = size
+        while remaining > 0:
+            chunk = connection.recv(remaining)
+            if not chunk:
+                raise RuntimeError("lvhv-server closed the connection before replying")
+            chunks.append(chunk)
+            remaining -= len(chunk)
+        return b"".join(chunks)
+
+    def _read_reply(self, connection: socket.socket) -> None:
+        block_count = struct.unpack("I", self._recv_exact(connection, 4))[0]
+        for _ in range(block_count):
+            typecode = self._recv_exact(connection, 1).decode("ascii")
+            count = struct.unpack("I", self._recv_exact(connection, 4))[0]
+            payload_size = count * struct.calcsize(
+                {
+                    "C": "c",
+                    "I": "i",
+                    "U": "I",
+                    "F": "f",
+                    "D": "d",
+                }[typecode]
+            )
+            self._recv_exact(connection, payload_size)
+
+    def power_off(self, reason: str) -> None:
+        message = self._encode_message()
+        with socket.create_connection(
+            (self.config.lvhv_host, self.config.lvhv_port),
+            timeout=5.0,
+        ) as connection:
+            connection.settimeout(5.0)
+            connection.sendall(message)
+            self._read_reply(connection)
+        logging.warning(
+            "issued powerOff to lvhv-server host=%s port=%s channel=%s reason=%s",
+            self.config.lvhv_host,
+            self.config.lvhv_port,
+            self.config.lvhv_poweroff_channel,
+            reason,
+        )
 
 
 def configure_logging(log_path: Path) -> None:
@@ -119,6 +232,41 @@ def utc_now_text() -> str:
 
 def local_now_text() -> str:
     return datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
+
+
+def load_action_config(config_path: Path) -> PowerActionConfig:
+    parser = configparser.ConfigParser()
+    if config_path.exists():
+        parser.read(config_path, encoding="utf-8")
+    section = parser["power_actions"] if parser.has_section("power_actions") else {}
+
+    def get_string(option: str, default: str) -> str:
+        value = os.getenv(f"PI_HEALTH_{option.upper()}")
+        if value is not None:
+            return value
+        return str(section.get(option, default))
+
+    def get_int(option: str, default: int) -> int:
+        return int(get_string(option, str(default)))
+
+    def get_float(option: str, default: float) -> float:
+        return float(get_string(option, str(default)))
+
+    return PowerActionConfig(
+        gpio21_repeat_window_seconds=get_float(
+            "gpio21_repeat_window_seconds",
+            DEFAULT_GPIO21_REPEAT_WINDOW_SECONDS,
+        ),
+        lvhv_host=get_string("lvhv_host", DEFAULT_LVHV_HOST),
+        lvhv_port=get_int("lvhv_port", DEFAULT_LVHV_PORT),
+        lvhv_commands_path=Path(
+            get_string("lvhv_commands_path", str(DEFAULT_LVHV_COMMANDS_PATH))
+        ),
+        lvhv_poweroff_channel=get_int(
+            "lvhv_poweroff_channel",
+            DEFAULT_LVHV_POWEROFF_CHANNEL,
+        ),
+    )
 
 
 def decode_state(
@@ -358,24 +506,76 @@ def start_http_server() -> ThreadingHTTPServer:
     return server
 
 
+def maybe_trigger_poweroff(state: AcPowerState, power_client: LvhvPowerOffClient) -> None:
+    global gpio21_last_loss_monotonic
+
+    if state.source == "startup" or state.present:
+        return
+
+    if state.signal_name == "gpio6_ac_status":
+        try:
+            power_client.power_off("gpio6 power lost")
+        except OSError as exc:
+            logging.exception("failed to issue gpio6-triggered powerOff: %s", exc)
+        except RuntimeError as exc:
+            logging.exception("failed to issue gpio6-triggered powerOff: %s", exc)
+        return
+
+    if state.signal_name != "gpio21_ac_fail":
+        return
+
+    window = power_client.config.gpio21_repeat_window_seconds
+    now = time.monotonic()
+    reason = None
+    with power_action_lock:
+        if (
+            gpio21_last_loss_monotonic is not None
+            and (now - gpio21_last_loss_monotonic) <= window
+        ):
+            gpio21_last_loss_monotonic = None
+            reason = f"gpio21 repeated power loss within {window:.3f}s"
+        else:
+            gpio21_last_loss_monotonic = now
+            logging.warning(
+                "gpio21 power loss detected; waiting %.3fs for a repeated loss before powerOff",
+                window,
+            )
+
+    if reason is None:
+        return
+
+    try:
+        power_client.power_off(reason)
+    except OSError as exc:
+        logging.exception("failed to issue gpio21-triggered powerOff: %s", exc)
+    except RuntimeError as exc:
+        logging.exception("failed to issue gpio21-triggered powerOff: %s", exc)
+
+
 def main() -> int:
     global started_at_utc
     global http_server
 
     configure_logging(DEFAULT_LOG_PATH)
     started_at_utc = utc_now_text()
+    action_config = load_action_config(DEFAULT_ACTION_CONFIG_PATH)
+    power_client = LvhvPowerOffClient(action_config)
 
     signal.signal(signal.SIGINT, handle_signal)
     signal.signal(signal.SIGTERM, handle_signal)
 
     logging.info(
-        "starting GPIO monitor chip=%s gpio6_line=%s gpio6_active_low=%s gpio21_line=%s gpio21_active_low=%s log_path=%s",
+        "starting GPIO monitor chip=%s gpio6_line=%s gpio6_active_low=%s gpio21_line=%s gpio21_active_low=%s log_path=%s action_config=%s lvhv_host=%s lvhv_port=%s gpio21_repeat_window_seconds=%s",
         DEFAULT_GPIO_CHIP,
         DEFAULT_GPIO6_LINE,
         DEFAULT_GPIO6_ACTIVE_LOW,
         DEFAULT_GPIO21_LINE,
         DEFAULT_GPIO21_ACTIVE_LOW,
         DEFAULT_LOG_PATH,
+        DEFAULT_ACTION_CONFIG_PATH,
+        action_config.lvhv_host,
+        action_config.lvhv_port,
+        action_config.gpio21_repeat_window_seconds,
     )
 
     http_server = start_http_server()
@@ -432,6 +632,7 @@ def main() -> int:
                 )
                 update_state(state)
                 log_event(state)
+                maybe_trigger_poweroff(state, power_client)
     finally:
         if http_server is not None:
             http_server.shutdown()
