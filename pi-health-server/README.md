@@ -7,6 +7,11 @@ The current monitors watch:
 - `GPIO6` for AC power status changes
 - `GPIO21` for AC fail changes
 
+and can trigger LV shutdown actions:
+
+- `GPIO6` AC loss immediately connects to `lvhv-server` and issues `powerOff`
+- `GPIO21` AC loss starts a timer; a second AC loss within the configured window issues `powerOff`
+
 and log:
 
 - AC power loss
@@ -36,7 +41,23 @@ in the systemd unit.
 ## Files
 
 - `pi-health-server.py`: GPIO event logger
+- `pi-health-actions.ini`: action config for LV shutdown behavior
 - `../systemd/pi-health-server.service`: systemd unit
+
+## Power-off action config
+
+The GPIO21 repeat-loss window is configured in `pi-health-actions.ini`:
+
+```ini
+[power_actions]
+gpio21_repeat_window_seconds = 10.0
+lvhv_host = 127.0.0.1
+lvhv_port = 12000
+lvhv_commands_path = /etc/mu2e-tracker-lvhv-tools/commands.h
+lvhv_poweroff_channel = 6
+```
+
+The service reads `/etc/pi-health-actions.ini` by default via `PI_HEALTH_ACTION_CONFIG_PATH`.
 
 ## HTTP API
 
@@ -69,6 +90,7 @@ Copy the script somewhere stable, for example:
 
 ```bash
 sudo install -m 0755 pi-health-server/pi-health-server.py /usr/local/bin/pi-health-server
+sudo install -m 0644 pi-health-server/pi-health-actions.ini /etc/pi-health-actions.ini
 sudo install -m 0644 systemd/pi-health-server.service /etc/systemd/system/pi-health-server.service
 sudo systemctl daemon-reload
 sudo systemctl enable --now pi-health-server.service
