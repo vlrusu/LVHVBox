@@ -12,6 +12,7 @@ class PowerSupplyServerConnection():
     def __init__(self, host, port, cpath='/etc/mu2e-tracker-lvhv-tools/commands.h'):
         self.host = host
         self.port = port
+        self.header = header
         self.reestablish()
 
         self.specials = {}
