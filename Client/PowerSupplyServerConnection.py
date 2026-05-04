@@ -9,14 +9,14 @@ from MessagingConnection import MessagingConnection
 from WireAnalogDigitalConversion import WireAnalogDigitalConversion
 
 class PowerSupplyServerConnection():
-    def __init__(self, host, port, cpath='/etc/mu2e-tracker-lvhv-tools/commands.h'):
+    def __init__(self, host, port, header='/etc/mu2e-tracker-lvhv-tools/commands.h', cpath=None):
         self.host = host
         self.port = port
         self.header = header
         self.reestablish()
 
         self.specials = {}
-        with open(cpath, 'r') as f:
+        with open(header, 'r') as f:
             for line in f:
                 line = line.strip()
                 tokens = line.split()
@@ -47,13 +47,15 @@ class PowerSupplyServerConnection():
         self.types['set_hv_by_dac'] = 'hv'
         self.MS_PER_NS = 1e-6
 
-        cdir = os.path.dirname(cpath)
-        path = os.path.join(cdir, 'measured-hv-dac-calibration.json')
         keys = [str(i) for i in range(12)]
-        if not os.path.exists(path):
-            print('warning: cannot find dedicated dac calibration. using a nominal calibration. monitor HV transitions, and be careful.')
-            path = os.path.join(cdir, 'nominal-hv-dac-calibration.json')
-            keys = ['nominal' for i in range(12)]
+        path = cpath
+        if path is None:
+            cdir = os.path.dirname(header)
+            path = os.path.join(cdir, 'measured-hv-dac-calibration.json')
+            if not os.path.exists(path):
+                print('warning: cannot find dedicated dac calibration. using a nominal calibration. monitor HV transitions, and be careful.')
+                path = os.path.join(cdir, 'nominal-hv-dac-calibration.json')
+                keys = ['nominal' for i in range(12)]
         self.wire_analog_digital_conversions = {
             i: WireAnalogDigitalConversion(path, key) \
                     for i,key in enumerate(keys)
