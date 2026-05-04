@@ -1,0 +1,12 @@
+#!/bin/bash
+bin="/usr/bin"
+lib="/usr/lib"
+python="${lib}/python3/dist-packages/PiHealthConnection"
+psmodule="${python}/PiHealthConnection.py"
+# post-process module imports to allow direct class imports
+echo 'from PiHealthConnection.PiHealthConnection import PiHealthConnection' >"${python}/__init__.py"
+# permissions
+chmod u+x "${binary}/pi-health-server"
+# auto-activate service
+systemctl enable pi-health-server.service
+systemctl restart pi-health-server.service

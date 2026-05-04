@@ -49,7 +49,7 @@ DEFAULT_GPIO21_ACTIVE_LOW = os.getenv("PI_HEALTH_GPIO21_ACTIVE_LOW", "0").lower(
     "no",
 }
 DEFAULT_LOG_PATH = Path(
-    os.getenv("PI_HEALTH_LOG_PATH", "/var/log/pi-health/ac-power-events.log")
+    os.getenv("PI_HEALTH_LOG_PATH", "/var/log/m2ue-tracker-pi-health-tools/ac-power-events.log")
 )
 DEFAULT_CONSUMER = os.getenv("PI_HEALTH_GPIO_CONSUMER", "pi-health-server")
 DEFAULT_HTTP_HOST = os.getenv("PI_HEALTH_HTTP_HOST", "0.0.0.0")
@@ -61,7 +61,7 @@ DEFAULT_BATTERY_I2C_ADDRESS = int(
     0,
 )
 DEFAULT_ACTION_CONFIG_PATH = Path(
-    os.getenv("PI_HEALTH_ACTION_CONFIG_PATH", "/etc/pi-health-actions.ini")
+    os.getenv("PI_HEALTH_ACTION_CONFIG_PATH", "/etc/mu2e-tracker-pi-health-tools/actions.ini")
 )
 DEFAULT_LVHV_HOST = "127.0.0.1"
 DEFAULT_LVHV_PORT = 12000

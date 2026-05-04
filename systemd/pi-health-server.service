@@ -4,7 +4,7 @@ After=local-fs.target
 
 [Service]
 Type=exec
-ExecStart=/usr/local/bin/pi-health-server
+ExecStart=/bin/pi-health-server
 User=root
 Restart=always
 RestartSec=2
@@ -13,10 +13,10 @@ Environment=PI_HEALTH_AC_GPIO6_LINE=6
 Environment=PI_HEALTH_GPIO6_ACTIVE_LOW=0
 Environment=PI_HEALTH_ACFAIL_GPIO21_LINE=21
 Environment=PI_HEALTH_GPIO21_ACTIVE_LOW=0
-Environment=PI_HEALTH_LOG_PATH=/var/log/pi-health/ac-power-events.log
+Environment=PI_HEALTH_LOG_PATH=/var/log/mu2e-tracker-pi-health-tools/ac-power-events.log
 Environment=PI_HEALTH_HTTP_HOST=0.0.0.0
 Environment=PI_HEALTH_HTTP_PORT=12002
-Environment=PI_HEALTH_ACTION_CONFIG_PATH=/etc/pi-health-actions.ini
+Environment=PI_HEALTH_ACTION_CONFIG_PATH=/etc/mu2e-tracker-pi-health-tools/actions.ini
 StandardOutput=journal
 StandardError=journal
 
