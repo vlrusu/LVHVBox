@@ -1,0 +1,18 @@
+[Unit]
+Description=Mu2e Tracker PSU Graphite metrics pusher
+After=network-online.target pi-health-server.service lvhv-server.service
+Wants=network-online.target
+
+[Service]
+Type=exec
+User=root
+Restart=always
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+Environment=GRAPHITE_PUSHER_ARGS=--graphite-host mu2e-dcs-01.fnal.gov --graphite-port 2003 --interval 10
+ExecStart=/bin/sh -c '/usr/local/bin/graphite-pusher ${GRAPHITE_PUSHER_ARGS}'
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
