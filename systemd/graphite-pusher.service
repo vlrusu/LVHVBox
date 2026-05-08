@@ -9,7 +9,7 @@ User=root
 Restart=always
 RestartSec=5
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/usr/local/bin/graphite-pusher --graphite-host mu2e-dcs-01.fnal.gov --graphite-port 2003 --interval 10
+ExecStart=/usr/local/bin/graphite-pusher --graphite-host mu2e-dcs-01.fnal.gov --graphite-port 2003 --interval 20
 StandardOutput=journal
 StandardError=journal
 
