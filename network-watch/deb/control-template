@@ -1,0 +1,9 @@
+Package: mu2e-tracker-network-watch
+Version: %%VERSION%%
+Architecture: arm64
+Section: mu2e
+Essential: no
+Priority: optional
+Depends:
+Maintainer: vrusu@fnal.gov
+Description: Local PSU network isolation watcher that powers off LV on connectivity loss.

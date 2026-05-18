@@ -1,0 +1,17 @@
+[Unit]
+Description=PSU fleet network isolation watcher
+After=network-online.target lvhv-server.service
+Wants=network-online.target
+
+[Service]
+Type=exec
+ExecStart=/bin/network-watch
+User=root
+Restart=always
+RestartSec=2
+EnvironmentFile=-/etc/mu2e-tracker-network-watch/network-watch.env
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -9,6 +9,7 @@ import subprocess
 from collections import namedtuple
 import ctypes
 from MessagingConnection import MessagingConnection
+from I2CSensorConnection import I2CSensorConnection
 from PiHealthConnection import PiHealthConnection
 import sys
 import os
@@ -64,7 +65,13 @@ commands = [
     Command("pcb_temp", "pico", "PCB Temperature, {:.2f} C", is_channel_cmd=False),
     Command("pico_current", "pico", "Pico Current, {:.2f} A", is_channel_cmd=False),
 ]
-special_commands = ["ac_status", "ac_events", "battery_status"]
+special_commands = [
+    "ac_status",
+    "ac_events",
+    "battery_status",
+    "sensor_status",
+    "sensor_readings",
+]
 
 
 # there are 12 (0-11) hv and 6 (0-5) lv channels.  issuing a command with idx
@@ -189,6 +196,20 @@ parser.add_argument(
     type=int,
     default=12002,
     help="Remote Pi health HTTP server port to forward",
+)
+parser.add_argument(
+    "--sensor-local-port",
+    dest="sensor_local_port",
+    type=int,
+    default=12003,
+    help="Local port to forward to the remote I2C sensor HTTP server",
+)
+parser.add_argument(
+    "--sensor-remote-port",
+    dest="sensor_remote_port",
+    type=int,
+    default=12003,
+    help="Remote I2C sensor HTTP server port to forward",
 )
 parser.add_argument(
     "--header",
@@ -354,6 +375,7 @@ def ensure_tunnel(host, user, gateway, local_port, remote_port):
 
 
 health_connection = None
+sensor_connection = None
 
 
 def get_health_connection():
@@ -375,6 +397,27 @@ def get_health_connection():
     )
     health_connection = PiHealthConnection("127.0.0.1", port)
     return health_connection
+
+
+def get_sensor_connection():
+    global sensor_connection
+    if sensor_connection is not None:
+        return sensor_connection
+
+    host = normalize_host(args.host)
+    if host in ("localhost", "127.0.0.1"):
+        sensor_connection = I2CSensorConnection(host, args.sensor_remote_port)
+        return sensor_connection
+
+    port = ensure_tunnel(
+        host,
+        args.user,
+        args.gateway,
+        args.sensor_local_port,
+        args.sensor_remote_port,
+    )
+    sensor_connection = I2CSensorConnection("127.0.0.1", port)
+    return sensor_connection
 
 
 def print_ac_status():
@@ -416,7 +459,71 @@ def print_battery_status():
     print("Battery source:", payload.get("battery_source"))
 
 
-def print_ac_events(limit):
+def print_sensor_status():
+    try:
+        payload = get_sensor_connection().get_health()
+    except RuntimeError as exc:
+        print(f"Sensor query failed: {exc}")
+        return
+
+    reading = payload.get("last_sample") or {}
+    values = reading.get("values") or {}
+    sensor_type = payload.get("sensor_type") or reading.get("sensor_type")
+    print("Service status:", payload.get("status"))
+    print("Sensor type:", sensor_type)
+    print("Last attempt utc:", payload.get("last_attempt_utc"))
+    print("Last success utc:", payload.get("last_success_utc"))
+    print("Sample count:", payload.get("sample_count"))
+    print("No-data streak:", payload.get("no_data_streak"))
+    print("Last error:", payload.get("last_error"))
+    print("Source:", reading.get("source"))
+    print("Temperature [C]:", values.get("temperature_c"))
+    print("Pressure [hPa]:", values.get("pressure_hpa"))
+    print("Humidity [%RH]:", values.get("humidity_rh"))
+    print("Dew point [C]:", values.get("dew_point_c"))
+    print("Gas resistance [ohms]:", values.get("gas_resistance_ohms"))
+    print("Heat stable:", values.get("heat_stable"))
+    print("Reading local:", reading.get("timestamp_local"))
+    print("Reading utc:", reading.get("timestamp_utc"))
+
+
+def print_sensor_readings(limit, time_mode="local"):
+    try:
+        payload = get_sensor_connection().get_readings(limit)
+    except RuntimeError as exc:
+        print(f"Sensor query failed: {exc}")
+        return
+
+    readings = payload.get("readings", [])
+    if not readings:
+        print("No sensor readings recorded")
+        return
+
+    for reading in readings:
+        values = reading.get("values") or {}
+        local_time = reading.get("timestamp_local")
+        utc_time = reading.get("timestamp_utc")
+        if time_mode == "utc":
+            timestamp = utc_time or local_time
+        elif time_mode == "both":
+            if local_time and utc_time:
+                timestamp = f"{local_time} [UTC {utc_time}]"
+            else:
+                timestamp = local_time or utc_time
+        else:
+            timestamp = local_time or utc_time
+        print(
+            f"{timestamp} "
+            f"type={reading.get('sensor_type')} "
+            f"T={values.get('temperature_c')}C "
+            f"P={values.get('pressure_hpa')}hPa "
+            f"RH={values.get('humidity_rh')}% "
+            f"Dew={values.get('dew_point_c')}C "
+            f"Gas={values.get('gas_resistance_ohms')}"
+        )
+
+
+def print_ac_events(limit, time_mode="local"):
     try:
         payload = get_health_connection().get_events(limit)
     except RuntimeError as exc:
@@ -429,8 +536,19 @@ def print_ac_events(limit):
         return
 
     for event in events:
+        local_time = event.get("local_time")
+        utc_time = event.get("utc_time")
+        if time_mode == "utc":
+            timestamp = utc_time or local_time
+        elif time_mode == "both":
+            if local_time and utc_time:
+                timestamp = f"{local_time} [UTC {utc_time}]"
+            else:
+                timestamp = local_time or utc_time
+        else:
+            timestamp = local_time or utc_time
         print(
-            f"{event.get('utc_time')} {event.get('signal_name')} "
+            f"{timestamp} {event.get('signal_name')} "
             f"gpio={event.get('gpio_line')} {event.get('event')} "
             f"raw_gpio={event.get('raw_gpio')} source={event.get('source')}"
         )
@@ -447,12 +565,34 @@ def process_command(line):
     if keys[0] == "battery_status":
         print_battery_status()
         return
+    if keys[0] == "sensor_status":
+        print_sensor_status()
+        return
     if keys[0] == "ac_events":
-        try:
-            limit = int(keys[1]) if 1 < len(keys) else 20
-        except ValueError:
-            limit = 20
-        print_ac_events(limit)
+        limit = 20
+        time_mode = "local"
+        for token in keys[1:]:
+            if token in ("local", "utc", "both"):
+                time_mode = token
+                continue
+            try:
+                limit = int(token)
+            except ValueError:
+                pass
+        print_ac_events(limit, time_mode)
+        return
+    if keys[0] == "sensor_readings":
+        limit = 20
+        time_mode = "local"
+        for token in keys[1:]:
+            if token in ("local", "utc", "both"):
+                time_mode = token
+                continue
+            try:
+                limit = int(token)
+            except ValueError:
+                pass
+        print_sensor_readings(limit, time_mode)
         return
 
     command = next((c for c in commands if c.name == keys[0]), None)

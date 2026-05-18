@@ -1,0 +1,16 @@
+[Unit]
+Description=I2C sensor alerting service
+After=network-online.target i2c-sensor-server.service
+
+[Service]
+Type=exec
+ExecStart=/bin/i2c-sensor-alerts
+User=root
+Restart=always
+RestartSec=2
+EnvironmentFile=-/etc/mu2e-tracker-i2c-sensor-alerts/i2c-sensor-alerts.env
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

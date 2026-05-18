@@ -1,0 +1,5 @@
+#!/bin/bash
+bin="/usr/bin"
+chmod u+x "${bin}/network-watch"
+systemctl enable network-watch.service
+systemctl restart network-watch.service

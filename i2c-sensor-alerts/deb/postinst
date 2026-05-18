@@ -1,0 +1,5 @@
+#!/bin/bash
+bin="/usr/bin"
+chmod u+x "${bin}/i2c-sensor-alerts"
+systemctl enable i2c-sensor-alerts.service
+systemctl restart i2c-sensor-alerts.service

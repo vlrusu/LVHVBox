@@ -1,0 +1,8 @@
+#!/bin/bash
+bin="/usr/bin"
+lib="/usr/lib"
+python="${lib}/python3/dist-packages/I2CSensorConnection"
+echo 'from I2CSensorConnection.I2CSensorConnection import I2CSensorConnection' >"${python}/__init__.py"
+chmod u+x "${bin}/i2c-sensor-server"
+systemctl enable i2c-sensor-server.service
+systemctl restart i2c-sensor-server.service
