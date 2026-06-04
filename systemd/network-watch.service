@@ -5,7 +5,7 @@ Wants=network-online.target
 
 [Service]
 Type=exec
-ExecStart=/bin/network-watch
+ExecStart=/usr/bin/network-watch
 User=root
 Restart=always
 RestartSec=2

@@ -35,8 +35,8 @@ By default the alert service targets:
 ## Install
 
 ```bash
-sudo install -m 0755 i2c-sensor-alerts/i2c-sensor-alerts.py /usr/local/bin/i2c-sensor-alerts
-sudo install -m 0644 i2c-sensor-alerts/i2c-sensor-alerts.env /etc/mu2e-tracker-i2c-sensor-tools/i2c-sensor-alerts.env
+sudo install -m 0755 i2c-sensor-alerts/i2c-sensor-alerts.py /usr/bin/i2c-sensor-alerts
+sudo install -m 0644 i2c-sensor-alerts/i2c-sensor-alerts.env /etc/mu2e-tracker-i2c-sensor-alerts/i2c-sensor-alerts.env
 sudo install -m 0644 systemd/i2c-sensor-alerts.service /etc/systemd/system/i2c-sensor-alerts.service
 sudo systemctl daemon-reload
 sudo systemctl enable --now i2c-sensor-alerts.service
@@ -53,5 +53,5 @@ i2c-sensor-alerts --dry-run
 Under `systemd`, use:
 
 ```bash
-ExecStart=/bin/i2c-sensor-alerts --dry-run
+ExecStart=/usr/bin/i2c-sensor-alerts --dry-run
 ```

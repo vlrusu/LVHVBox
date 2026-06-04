@@ -52,7 +52,7 @@ Use the separate `i2c-sensor-alerts` service if you want Pushover notifications.
 ## Install
 
 ```bash
-sudo install -m 0755 i2c-sensor-server/i2c-sensor-server.py /usr/local/bin/i2c-sensor-server
+sudo install -m 0755 i2c-sensor-server/i2c-sensor-server.py /usr/bin/i2c-sensor-server
 sudo install -m 0644 i2c-sensor-server/i2c-sensor.env /etc/mu2e-tracker-i2c-sensor-tools/i2c-sensor.env
 sudo install -m 0644 systemd/i2c-sensor-server.service /etc/systemd/system/i2c-sensor-server.service
 sudo systemctl daemon-reload

@@ -4,7 +4,7 @@ After=network-online.target i2c-sensor-server.service
 
 [Service]
 Type=exec
-ExecStart=/bin/i2c-sensor-alerts
+ExecStart=/usr/bin/i2c-sensor-alerts
 User=root
 Restart=always
 RestartSec=2

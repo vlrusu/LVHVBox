@@ -4,7 +4,7 @@ After=local-fs.target network-online.target
 
 [Service]
 Type=exec
-ExecStart=/bin/i2c-sensor-server
+ExecStart=/usr/bin/i2c-sensor-server
 User=root
 Restart=always
 RestartSec=2

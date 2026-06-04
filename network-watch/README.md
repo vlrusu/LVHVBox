@@ -25,7 +25,7 @@ Default policy:
 ## Install
 
 ```bash
-sudo install -m 0755 network-watch/network-watch.py /usr/local/bin/network-watch
+sudo install -m 0755 network-watch/network-watch.py /usr/bin/network-watch
 sudo install -m 0644 network-watch/network-watch.env /etc/mu2e-tracker-network-watch/network-watch.env
 sudo install -m 0644 systemd/network-watch.service /etc/systemd/system/network-watch.service
 sudo systemctl daemon-reload
@@ -43,5 +43,5 @@ network-watch --dry-run
 Under `systemd`, use:
 
 ```bash
-ExecStart=/bin/network-watch --dry-run
+ExecStart=/usr/bin/network-watch --dry-run
 ```
