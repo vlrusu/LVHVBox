@@ -11,6 +11,7 @@ import socket
 import struct
 import sys
 import time
+from dataclasses import dataclass
 from pathlib import Path
 
 
@@ -28,6 +29,7 @@ DEFAULT_MASTER_HOSTS = [
     if host.strip()
 ]
 DEFAULT_REMOTE_PORT = int(os.getenv("NETWORK_WATCH_REMOTE_PORT", "12000"))
+DEFAULT_MASTER_ENDPOINTS_RAW = os.getenv("NETWORK_WATCH_MASTER_ENDPOINTS", "").strip()
 DEFAULT_CONNECT_TIMEOUT_S = float(os.getenv("NETWORK_WATCH_CONNECT_TIMEOUT_S", "3.0"))
 DEFAULT_FAILURE_STREAK_TRIGGER = int(os.getenv("NETWORK_WATCH_FAILURE_STREAK_TRIGGER", "3"))
 DEFAULT_LVHV_HOST = os.getenv("NETWORK_WATCH_LVHV_HOST", "127.0.0.1")
@@ -41,6 +43,16 @@ running = True
 failure_streak = 0
 shutdown_latched = False
 runtime_args = None
+
+
+@dataclass(frozen=True)
+class ProbeEndpoint:
+    host: str
+    port: int
+
+    @property
+    def label(self) -> str:
+        return f"{self.host}:{self.port}"
 
 
 def handle_signal(signum: int, _frame) -> None:
@@ -157,14 +169,40 @@ class LocalPowerOffClient:
         )
 
 
-def build_master_hosts() -> list[str]:
-    return list(DEFAULT_MASTER_HOSTS)
+def parse_endpoint(raw_endpoint: str) -> ProbeEndpoint:
+    endpoint = raw_endpoint.strip()
+    if not endpoint:
+        raise ValueError("empty endpoint")
+    if ":" not in endpoint:
+        return ProbeEndpoint(endpoint, DEFAULT_REMOTE_PORT)
+    host, port_text = endpoint.rsplit(":", 1)
+    host = host.strip()
+    port_text = port_text.strip()
+    if not host or not port_text:
+        raise ValueError(f"invalid endpoint {raw_endpoint!r}; expected host:port")
+    try:
+        port = int(port_text, 10)
+    except ValueError as exc:
+        raise ValueError(f"invalid endpoint port in {raw_endpoint!r}") from exc
+    if not (1 <= port <= 65535):
+        raise ValueError(f"invalid endpoint port in {raw_endpoint!r}; expected 1-65535")
+    return ProbeEndpoint(host, port)
 
 
-def probe_host(host: str) -> tuple[bool, str | None]:
+def build_master_endpoints() -> list[ProbeEndpoint]:
+    if DEFAULT_MASTER_ENDPOINTS_RAW:
+        return [
+            parse_endpoint(endpoint)
+            for endpoint in DEFAULT_MASTER_ENDPOINTS_RAW.split(",")
+            if endpoint.strip()
+        ]
+    return [ProbeEndpoint(host, DEFAULT_REMOTE_PORT) for host in DEFAULT_MASTER_HOSTS]
+
+
+def probe_endpoint(endpoint: ProbeEndpoint) -> tuple[bool, str | None]:
     try:
         with socket.create_connection(
-            (host, DEFAULT_REMOTE_PORT),
+            (endpoint.host, endpoint.port),
             timeout=DEFAULT_CONNECT_TIMEOUT_S,
         ):
             return True, None
@@ -182,15 +220,20 @@ def main() -> int:
     signal.signal(signal.SIGTERM, handle_signal)
 
     power_client = LocalPowerOffClient(DEFAULT_LVHV_COMMANDS_PATH)
-    master_hosts = build_master_hosts()
-    if not DEFAULT_MASTER_HOSTS:
-        raise SystemExit("no master hosts configured; set NETWORK_WATCH_MASTER_HOSTS")
+    try:
+        master_endpoints = build_master_endpoints()
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+    if not master_endpoints:
+        raise SystemExit(
+            "no master endpoints configured; set NETWORK_WATCH_MASTER_ENDPOINTS "
+            "or NETWORK_WATCH_MASTER_HOSTS"
+        )
 
     logging.info(
-        "starting network-watch local_host=%s masters=%s remote_port=%s policy=all trigger_streak=%s dry_run=%s",
+        "starting network-watch local_host=%s endpoints=%s policy=all trigger_streak=%s dry_run=%s",
         DEFAULT_LOCAL_HOSTNAME,
-        ",".join(master_hosts),
-        DEFAULT_REMOTE_PORT,
+        ",".join(endpoint.label for endpoint in master_endpoints),
         DEFAULT_FAILURE_STREAK_TRIGGER,
         runtime_args.dry_run,
     )
@@ -198,14 +241,14 @@ def main() -> int:
     while running:
         reachable = []
         failed = []
-        for host in master_hosts:
-            ok, error = probe_host(host)
+        for endpoint in master_endpoints:
+            ok, error = probe_endpoint(endpoint)
             if ok:
-                reachable.append(host)
+                reachable.append(endpoint)
             else:
-                failed.append((host, error or "unknown"))
+                failed.append((endpoint, error or "unknown"))
 
-        if len(reachable) == len(master_hosts):
+        if len(reachable) == len(master_endpoints):
             if shutdown_latched:
                 logging.info(
                     "master connectivity restored reachable=%s failed=%s; clearing network shutdown latch",
@@ -221,13 +264,13 @@ def main() -> int:
                 failure_streak,
                 DEFAULT_FAILURE_STREAK_TRIGGER,
                 len(reachable),
-                len(master_hosts),
-                ", ".join(f"{host}: {error}" for host, error in failed),
+                len(master_endpoints),
+                ", ".join(f"{endpoint.label}: {error}" for endpoint, error in failed),
             )
             if failure_streak >= DEFAULT_FAILURE_STREAK_TRIGGER:
                 reason = (
                     f"master isolation reachable={len(reachable)} "
-                    f"required={len(master_hosts)} streak={failure_streak}"
+                    f"required={len(master_endpoints)} streak={failure_streak}"
                 )
                 if runtime_args.dry_run:
                     logging.warning("dry-run: would issue local powerOff reason=%s", reason)

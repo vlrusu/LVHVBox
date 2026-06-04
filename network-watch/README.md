@@ -10,11 +10,17 @@ It:
 
 Default policy:
 
-- probe the configured `NETWORK_WATCH_MASTER_HOSTS`
-- connect to port `12000`
-- require all configured masters to be reachable, including self if self is listed
+- probe the configured `NETWORK_WATCH_MASTER_ENDPOINTS`
+- fall back to `NETWORK_WATCH_MASTER_HOSTS` plus `NETWORK_WATCH_REMOTE_PORT` for older env files
+- require all configured endpoints to be reachable
 - require `3` consecutive failed polls before shutdown
 - once isolated, re-send local `powerOff` on every poll until connectivity returns
+
+Endpoint entries use `host:port`, for example:
+
+```text
+NETWORK_WATCH_MASTER_ENDPOINTS=mu2e-trk-psu13.fnal.gov:12000,mu2egateway01.fnal.gov:22
+```
 
 ## Files
 
