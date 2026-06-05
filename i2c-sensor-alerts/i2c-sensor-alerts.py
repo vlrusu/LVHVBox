@@ -51,6 +51,11 @@ DEFAULT_NO_DATA_ALERT_COOLDOWN_S = float(
     os.getenv("I2C_SENSOR_ALERTS_NO_DATA_ALERT_COOLDOWN_S", str(6 * 60 * 60))
 )
 DEFAULT_PUSHOVER_USER_KEY = os.getenv("I2C_SENSOR_ALERTS_PUSHOVER_USER_KEY", "")
+DEFAULT_PUSHOVER_USER_KEYS = [
+    key.strip()
+    for key in DEFAULT_PUSHOVER_USER_KEY.split(",")
+    if key.strip()
+]
 DEFAULT_PUSHOVER_API_TOKEN = os.getenv("I2C_SENSOR_ALERTS_PUSHOVER_API_TOKEN", "")
 DEFAULT_LVHV_HOST_PREFIX = os.getenv("I2C_SENSOR_ALERTS_LVHV_HOST_PREFIX", "mu2e-trk-psu")
 DEFAULT_LVHV_HOST_SUFFIX = os.getenv("I2C_SENSOR_ALERTS_LVHV_HOST_SUFFIX", "")
@@ -116,29 +121,31 @@ def can_alert(key: str, now: float, cooldown_s: float) -> bool:
 def pushover_send(title: str, message: str, priority: int = 0) -> None:
     if runtime_args is not None and runtime_args.dry_run:
         logging.warning(
-            "dry-run: would send pushover title=%r priority=%s message=%r",
+            "dry-run: would send pushover recipients=%s title=%r priority=%s message=%r",
+            len(DEFAULT_PUSHOVER_USER_KEYS),
             title,
             priority,
             message,
         )
         return
-    if not (DEFAULT_PUSHOVER_API_TOKEN and DEFAULT_PUSHOVER_USER_KEY):
+    if not (DEFAULT_PUSHOVER_API_TOKEN and DEFAULT_PUSHOVER_USER_KEYS):
         logging.warning("pushover skipped: credentials not configured")
         return
 
-    payload = {
-        "token": DEFAULT_PUSHOVER_API_TOKEN,
-        "user": DEFAULT_PUSHOVER_USER_KEY,
-        "title": title,
-        "message": message,
-        "priority": str(priority),
-    }
-    response = requests.post(
-        "https://api.pushover.net/1/messages.json",
-        timeout=10,
-        data=payload,
-    )
-    response.raise_for_status()
+    for user_key in DEFAULT_PUSHOVER_USER_KEYS:
+        payload = {
+            "token": DEFAULT_PUSHOVER_API_TOKEN,
+            "user": user_key,
+            "title": title,
+            "message": message,
+            "priority": str(priority),
+        }
+        response = requests.post(
+            "https://api.pushover.net/1/messages.json",
+            timeout=10,
+            data=payload,
+        )
+        response.raise_for_status()
 
 
 class FleetPowerOffClient:

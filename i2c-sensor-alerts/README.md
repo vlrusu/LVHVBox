@@ -37,6 +37,15 @@ By default the alert service targets:
 - `i2c-sensor-alerts.env`: alert thresholds and Pushover config
 - `../systemd/i2c-sensor-alerts.service`: systemd unit
 
+## Pushover
+
+Set `I2C_SENSOR_ALERTS_PUSHOVER_USER_KEY` to one user key or a comma-separated list of user keys.
+
+```text
+I2C_SENSOR_ALERTS_PUSHOVER_USER_KEY=key1,key2
+I2C_SENSOR_ALERTS_PUSHOVER_API_TOKEN=app_token
+```
+
 ## Install
 
 ```bash
