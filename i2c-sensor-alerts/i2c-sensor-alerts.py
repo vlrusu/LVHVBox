@@ -41,6 +41,9 @@ DEFAULT_DEWPOINT_APPROACH_MARGIN_C = float(
 DEFAULT_ALERT_COOLDOWN_S = float(
     os.getenv("I2C_SENSOR_ALERTS_ALERT_COOLDOWN_S", str(20 * 60))
 )
+DEFAULT_CONDITION_STREAK_TRIGGER = int(
+    os.getenv("I2C_SENSOR_ALERTS_CONDITION_STREAK_TRIGGER", "3")
+)
 DEFAULT_NO_DATA_STREAK_TRIGGER = int(
     os.getenv("I2C_SENSOR_ALERTS_NO_DATA_STREAK_TRIGGER", "5")
 )
@@ -65,6 +68,7 @@ last_alert_ts: dict[str, float] = {}
 no_data_streak = 0
 last_seen_sample_ts = None
 shutdown_condition_active: dict[str, bool] = {}
+condition_streaks: dict[str, int] = {}
 runtime_args = None
 
 
@@ -258,6 +262,29 @@ def clear_shutdown_condition(reason_key: str) -> None:
     shutdown_condition_active[reason_key] = False
 
 
+def reset_condition(reason_key: str) -> None:
+    if condition_streaks.get(reason_key, 0):
+        logging.info("cleared condition streak key=%s", reason_key)
+    condition_streaks[reason_key] = 0
+    clear_shutdown_condition(reason_key)
+
+
+def condition_ready(reason_key: str, reason_text: str) -> bool:
+    streak = condition_streaks.get(reason_key, 0) + 1
+    condition_streaks[reason_key] = streak
+    if streak < DEFAULT_CONDITION_STREAK_TRIGGER:
+        logging.warning(
+            "condition pending key=%s streak=%s/%s reason=%s",
+            reason_key,
+            streak,
+            DEFAULT_CONDITION_STREAK_TRIGGER,
+            reason_text,
+        )
+        return False
+    condition_streaks[reason_key] = DEFAULT_CONDITION_STREAK_TRIGGER
+    return True
+
+
 def fetch_health() -> dict[str, object]:
     with urlopen(DEFAULT_SENSOR_URL, timeout=10.0) as response:
         return json.load(response)
@@ -287,55 +314,52 @@ def alert_if_needed(hostname: str, sensor_type: str, values: dict[str, object]) 
     dew_point = values.get("dew_point_c")
 
     if isinstance(temperature_c, (float, int)) and temperature_c > DEFAULT_TEMP_HIGH_C:
-        enforce_shutdown_if_needed(
-            "temp_high",
-            f"temp_high sensor_type={sensor_type} temperature_c={temperature_c:.2f}",
-        )
-        if can_alert("temp_high", now, DEFAULT_ALERT_COOLDOWN_S):
-            pushover_send(
-                title=f"[{hostname}] {sensor_type} TEMP HIGH",
-                message=f"Temperature {temperature_c:.2f} C exceeds {DEFAULT_TEMP_HIGH_C:.2f} C",
-            )
-            last_alert_ts["temp_high"] = now
+        reason_text = f"temp_high sensor_type={sensor_type} temperature_c={temperature_c:.2f}"
+        if condition_ready("temp_high", reason_text):
+            enforce_shutdown_if_needed("temp_high", reason_text)
+            if can_alert("temp_high", now, DEFAULT_ALERT_COOLDOWN_S):
+                pushover_send(
+                    title=f"[{hostname}] {sensor_type} TEMP HIGH",
+                    message=f"Temperature {temperature_c:.2f} C exceeds {DEFAULT_TEMP_HIGH_C:.2f} C",
+                )
+                last_alert_ts["temp_high"] = now
     else:
-        clear_shutdown_condition("temp_high")
+        reset_condition("temp_high")
 
     if isinstance(humidity_rh, (float, int)) and humidity_rh > DEFAULT_HUMID_HIGH_RH:
-        enforce_shutdown_if_needed(
-            "humid_high",
-            f"humid_high sensor_type={sensor_type} humidity_rh={humidity_rh:.2f}",
-        )
-        if can_alert("humid_high", now, DEFAULT_ALERT_COOLDOWN_S):
-            pushover_send(
-                title=f"[{hostname}] {sensor_type} HUMIDITY HIGH",
-                message=f"Humidity {humidity_rh:.2f}% exceeds {DEFAULT_HUMID_HIGH_RH:.2f}%",
-            )
-            last_alert_ts["humid_high"] = now
+        reason_text = f"humid_high sensor_type={sensor_type} humidity_rh={humidity_rh:.2f}"
+        if condition_ready("humid_high", reason_text):
+            enforce_shutdown_if_needed("humid_high", reason_text)
+            if can_alert("humid_high", now, DEFAULT_ALERT_COOLDOWN_S):
+                pushover_send(
+                    title=f"[{hostname}] {sensor_type} HUMIDITY HIGH",
+                    message=f"Humidity {humidity_rh:.2f}% exceeds {DEFAULT_HUMID_HIGH_RH:.2f}%",
+                )
+                last_alert_ts["humid_high"] = now
     else:
-        clear_shutdown_condition("humid_high")
+        reset_condition("humid_high")
 
     if isinstance(dew_point, (float, int)):
         trigger_level = DEFAULT_DEW_POINT_THRESHOLD_C - DEFAULT_DEWPOINT_APPROACH_MARGIN_C
         if dew_point >= trigger_level:
-            enforce_shutdown_if_needed(
-                "dew_approach",
-                f"dew_approach sensor_type={sensor_type} dew_point_c={dew_point:.2f}",
-            )
-            if can_alert("dew_approach", now, DEFAULT_ALERT_COOLDOWN_S):
-                pushover_send(
-                    title=f"[{hostname}] {sensor_type} DEW POINT APPROACHING LIMIT",
-                    message=(
-                        f"Dew point {dew_point:.2f} C is within "
-                        f"{DEFAULT_DEWPOINT_APPROACH_MARGIN_C:.1f} C of threshold "
-                        f"{DEFAULT_DEW_POINT_THRESHOLD_C:.2f} C"
-                    ),
-                    priority=1,
-                )
-                last_alert_ts["dew_approach"] = now
+            reason_text = f"dew_approach sensor_type={sensor_type} dew_point_c={dew_point:.2f}"
+            if condition_ready("dew_approach", reason_text):
+                enforce_shutdown_if_needed("dew_approach", reason_text)
+                if can_alert("dew_approach", now, DEFAULT_ALERT_COOLDOWN_S):
+                    pushover_send(
+                        title=f"[{hostname}] {sensor_type} DEW POINT APPROACHING LIMIT",
+                        message=(
+                            f"Dew point {dew_point:.2f} C is within "
+                            f"{DEFAULT_DEWPOINT_APPROACH_MARGIN_C:.1f} C of threshold "
+                            f"{DEFAULT_DEW_POINT_THRESHOLD_C:.2f} C"
+                        ),
+                        priority=1,
+                    )
+                    last_alert_ts["dew_approach"] = now
         else:
-            clear_shutdown_condition("dew_approach")
+            reset_condition("dew_approach")
     else:
-        clear_shutdown_condition("dew_approach")
+        reset_condition("dew_approach")
 
 
 def main() -> int:
@@ -347,12 +371,14 @@ def main() -> int:
     signal.signal(signal.SIGINT, handle_signal)
     signal.signal(signal.SIGTERM, handle_signal)
     logging.info(
-        "starting i2c-sensor-alerts sensor_url=%s lvhv_hosts=%s..%s prefix=%s port=%s dry_run=%s",
+        "starting i2c-sensor-alerts sensor_url=%s lvhv_hosts=%s..%s prefix=%s port=%s condition_trigger_streak=%s no_data_trigger_streak=%s dry_run=%s",
         DEFAULT_SENSOR_URL,
         DEFAULT_LVHV_HOST_START,
         DEFAULT_LVHV_HOST_STOP,
         DEFAULT_LVHV_HOST_PREFIX,
         DEFAULT_LVHV_PORT,
+        DEFAULT_CONDITION_STREAK_TRIGGER,
+        DEFAULT_NO_DATA_STREAK_TRIGGER,
         runtime_args.dry_run,
     )
 

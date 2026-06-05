@@ -11,6 +11,10 @@ It:
 
 The default alert polling period is `30` seconds.
 
+Temperature, humidity, and dew-point shutdown conditions require `3` consecutive unsafe polls by default.
+
+No-data shutdown uses a separate default trigger of `5` consecutive no-fresh-data polls.
+
 Shutdown enforcement is latched per condition and re-sent on every alert poll until the condition returns to safe.
 
 The sensor server remains responsible for:
