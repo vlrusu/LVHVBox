@@ -27,6 +27,7 @@ The sensor server remains responsible for:
 By default the alert service targets:
 
 - `mu2e-trk-psu0` through `mu2e-trk-psu17`
+- host suffix `.fnal.gov`
 - port `12000`
 - LV `powerOff` channel `6` on each host
 

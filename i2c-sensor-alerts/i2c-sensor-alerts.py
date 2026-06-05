@@ -53,6 +53,7 @@ DEFAULT_NO_DATA_ALERT_COOLDOWN_S = float(
 DEFAULT_PUSHOVER_USER_KEY = os.getenv("I2C_SENSOR_ALERTS_PUSHOVER_USER_KEY", "")
 DEFAULT_PUSHOVER_API_TOKEN = os.getenv("I2C_SENSOR_ALERTS_PUSHOVER_API_TOKEN", "")
 DEFAULT_LVHV_HOST_PREFIX = os.getenv("I2C_SENSOR_ALERTS_LVHV_HOST_PREFIX", "mu2e-trk-psu")
+DEFAULT_LVHV_HOST_SUFFIX = os.getenv("I2C_SENSOR_ALERTS_LVHV_HOST_SUFFIX", "")
 DEFAULT_LVHV_HOST_START = int(os.getenv("I2C_SENSOR_ALERTS_LVHV_HOST_START", "0"))
 DEFAULT_LVHV_HOST_STOP = int(os.getenv("I2C_SENSOR_ALERTS_LVHV_HOST_STOP", "17"))
 DEFAULT_LVHV_PORT = int(os.getenv("I2C_SENSOR_ALERTS_LVHV_PORT", "12000"))
@@ -214,7 +215,7 @@ class FleetPowerOffClient:
 
 def build_fleet_hosts() -> list[str]:
     return [
-        f"{DEFAULT_LVHV_HOST_PREFIX}{index}"
+        f"{DEFAULT_LVHV_HOST_PREFIX}{index}{DEFAULT_LVHV_HOST_SUFFIX}"
         for index in range(DEFAULT_LVHV_HOST_START, DEFAULT_LVHV_HOST_STOP + 1)
     ]
 
@@ -371,11 +372,12 @@ def main() -> int:
     signal.signal(signal.SIGINT, handle_signal)
     signal.signal(signal.SIGTERM, handle_signal)
     logging.info(
-        "starting i2c-sensor-alerts sensor_url=%s lvhv_hosts=%s..%s prefix=%s port=%s condition_trigger_streak=%s no_data_trigger_streak=%s dry_run=%s",
+        "starting i2c-sensor-alerts sensor_url=%s lvhv_hosts=%s..%s prefix=%s suffix=%s port=%s condition_trigger_streak=%s no_data_trigger_streak=%s dry_run=%s",
         DEFAULT_SENSOR_URL,
         DEFAULT_LVHV_HOST_START,
         DEFAULT_LVHV_HOST_STOP,
         DEFAULT_LVHV_HOST_PREFIX,
+        DEFAULT_LVHV_HOST_SUFFIX,
         DEFAULT_LVHV_PORT,
         DEFAULT_CONDITION_STREAK_TRIGGER,
         DEFAULT_NO_DATA_STREAK_TRIGGER,
