@@ -4,9 +4,26 @@
 
 import ctypes
 import os.path
+import threading
 import time
 from MessagingConnection import MessagingConnection
 from WireAnalogDigitalConversion import WireAnalogDigitalConversion
+
+class SharedValue:
+    def __init__(self, value):
+        self.value = value
+        self.lock = threading.Lock()
+
+    def Get(self):
+        self.lock.acquire()
+        rv = self.value
+        self.lock.release()
+        return rv
+
+    def Set(self, value):
+        self.lock.acquire()
+        self.value = value
+        self.lock.release()
 
 class PowerSupplyServerConnection():
     def __init__(self, host, port, header='/etc/mu2e-tracker-lvhv-tools/commands.h', cpath=None):
@@ -41,6 +58,7 @@ class PowerSupplyServerConnection():
                       'pcb_temp'     : 'pico',
                       'pico_current' : 'pico',
                       'query_hv_dac_cache': 'hv',
+                      'current_burst': 'pico',
                      }
 
         self.specials['COMMAND_set_hv_by_dac'] = 344631823
@@ -61,6 +79,8 @@ class PowerSupplyServerConnection():
                     for i,key in enumerate(keys)
         }
         self.minimum_hv_step = 0.01
+
+        self.hv_lock = [SharedValue(False) for i in range(12)]
 
     def reestablish(self):
         self.connection = MessagingConnection(self.host, self.port)
@@ -176,6 +196,13 @@ class PowerSupplyServerConnection():
         rv = rvs[0][0]
         return rv
 
+    def GetHVLock(self, channel):
+        rv = self.hv_lock[channel].Get()
+        return rv
+
+    def SetHVLock(self, channel, value):
+        self.hv_lock[channel].Set(value)
+
     def _set_hv_by_dac(self, channel, dac):
         rvs = self.WriteRead('set_hv_by_dac', channel, dac)
         return rvs
@@ -185,131 +212,109 @@ class PowerSupplyServerConnection():
         rv = conversion.AnalogToDigital(voltage)
         return rv
 
-    def _timed_hv_set(self, channel, value, pause):
-        dac = self._voltage_to_dac(channel, value)
+    def _timed_dac_set(self, channel, dac, pause):
+        if self.GetHVLock(channel):
+            return None
         self._set_hv_by_dac(channel, dac)
-
         time.sleep(pause)
+
+    def _take_dac_steps(self, channel, step, steps, pause):
+        current = self.QueryLastHVSetting(channel)
+        for i in range(steps):
+            if self.GetHVLock(channel):
+                rv = self.QueryWireVoltage(channel)
+                return rv
+            target = current + step
+            if target < 0:
+                break
+            self._timed_dac_set(channel, target, pause)
+            current = target
         rv = self.QueryWireVoltage(channel)
         return rv
 
-    def _transition_wire_voltage_linear(self, channel, target,
-                                        tolerance, speed, timestep):
-        # speed in V / ms, step size, timestep in ms
+    def _walk_dac_steps(self, channel, target, step, pause, readback):
+        sign = +1
         current = self.QueryWireVoltage(channel)
-        sign = 1 if (current < target) else -1
-        step = speed * sign * timestep
-        remaining = target - current
+        if target < current:
+            step = -step
+            sign = -1
 
-        finetunethreshold = 50
-        finetunespeed = 2
-
-        tried = 0
         stop = False
-        while tolerance < abs(remaining) and 0 < sign*remaining and not stop:
-
-            if (abs(remaining) < finetunethreshold):
-                # as I decrease the speed, the HV values are closer and closer, settling time can influence the reading. So I need to increase the timestep
-                timestep = 3
-                step = finetunespeed * sign * timestep
-
-            stage = current + step
-            updated = self._timed_hv_set(channel, stage, timestep)
-            print(current,updated, timestep, step,timestep)
-            change = updated - current
-            current = updated
-
-            tried += 1
-            if sign*change < 0 and tolerance < abs(change):
-                print("Stopped on tolerance or overshoot",sign*change,change, tolerance, channel)
+        while not stop:
+            if self.GetHVLock(channel):
+                current = self.QueryWireVoltage(channel)
+                return current
+            current = self._take_dac_steps(channel, step, readback, pause)
+            remaining = target - current
+            if sign * remaining < 0:
                 stop = True
-            elif 9 < tried and abs(change) < self.minimum_hv_step:
-                stop = True
-            else:
-                remaining = target - current
-                if (tolerance < abs(change)):
-                    tried = 0
 
         return current
 
-    def _ramp_wire_voltage_bilinear(self, channel, target,
-                                    tolerance, transition,
-                                    speed_lo, timestep_lo,
-                                    speed_hi, timestep_hi):
-        if transition < target:
-            rv = self._transition_wire_voltage_linear(channel, transition,
-                                                      tolerance,
-                                                      speed_lo, timestep_lo)
-        rv = self._transition_wire_voltage_linear(channel, target,
-                                                  tolerance,
-                                                  speed_hi, timestep_hi)
+
+    def _take_macro_step(self, channel, target, step, pause, readback):
+        if self.GetHVLock(channel):
+            rv = self.QueryWireVoltage(channel)
+            return rv
+        rv = self._walk_dac_steps(channel, target, step, pause, readback)
         return rv
 
-    def _ramp_wire_voltage_trilinear(self, channel, target, tolerance,
-                                     transition_md, transition_hi,
-                                     speed_lo, timestep_lo,
-                                     speed_md, timestep_md,
-                                     speed_hi, timestep_hi):
-        rv = self.QueryWireVoltage(channel)
-        if rv < transition_md and transition_md < target:
-            rv = self._transition_wire_voltage_linear(channel, transition_md,
-                                                      tolerance,
-                                                      speed_lo, timestep_lo)
-            '''
-            if tolerance < abs(rv - transition_md):
-                return rv
-            '''
-        if rv < transition_hi and transition_hi < target:
-            rv = self._transition_wire_voltage_linear(channel, transition_hi,
-                                                      tolerance,
-                                                      speed_md, timestep_md)
-            '''
-            if tolerance < abs(rv - transition_hi):
-                return rv
-            '''
-        rv = self._transition_wire_voltage_linear(channel, target,
-                                                  tolerance,
-                                                  speed_hi, timestep_hi)
-        return rv
+    def _set_wire_voltage(self, channel, voltage):
+        volts_per_dac = 0.1
+        max_step = 50
+        max_readback = 10
+        max_pause = 0.01
+        med_step = 10
+        med_readback = 10
+        med_pause = 0.01
+        min_step = 2
+        min_readback = 1
+        min_pause = 0.1
 
-    def _set_wire_voltage(self, channel, value):
-        tolerance = 1.0
-        transition_onset = 20.0
-        transition_bulk = 40.0
-        speed_early = 10.0
-        timestep_early = 0.5
-        speed_bulk = 50.0
-        timestep_bulk = 0.5
-        transition_fine = value - 1.0*speed_bulk*timestep_bulk
-        speed_fine = 5.0
-        timestep_fine = 0.5
+        max_tolerance = max_step * max_readback * volts_per_dac
+        med_tolerance = med_step * med_readback * volts_per_dac
+        min_tolerance = 1.0
 
-        current = self.QueryWireVoltage(channel)
-        # if ramping up, first get out of baseline-region
-        if current < value and current < transition_onset:
-                rv = self._timed_hv_set(channel, transition_onset,
-                                        timestep_early)
-        # if ramping down, first drop to below the setpoint
-        else:
-            rv = self._transition_wire_voltage_linear(channel, value,
-                                                      tolerance,
-                                                      speed_bulk, timestep_bulk)
-        # ramp up to setpoint
-        rv = self._ramp_wire_voltage_trilinear(channel, value, tolerance,
-                                              transition_bulk, transition_fine,
-                                              speed_early, timestep_early,
-                                              speed_bulk, timestep_bulk,
-                                              speed_fine, timestep_fine)
+        last_action = None
+        target = voltage
 
+        stop = False
+        while not stop:
+            sign = +1
+            current = self.QueryWireVoltage(channel)
+            if voltage < current:
+                sign = -1
+
+            remaining = abs(voltage - current)
+            if self.GetHVLock(channel):
+                last_action = 'HV lock set'
+                stop = True
+            elif remaining < min_tolerance:
+                tup = (target, current, remaining, min_tolerance)
+                last_action = 'stop @ %.1f (%.1f): %.1f vs %.1f' % tup
+                stop = True
+            elif remaining < 2*med_tolerance:
+                target = voltage
+                last_action = 'min_step'
+                self._take_macro_step(channel, target,
+                                      min_step, min_pause, min_readback)
+            elif remaining < 2*max_tolerance:
+                last_action = 'med_step'
+                target = voltage - sign*med_tolerance
+                self._take_macro_step(channel, target,
+                                      med_step, med_pause, med_readback)
+            else:
+                last_action = 'max_step'
+                target = voltage - sign*max_tolerance
+                self._take_macro_step(channel, target,
+                                      max_step, max_pause, max_readback)
+        rv = last_action
         return rv
 
     def SetWireVoltage(self, channel, value):
         tolerance = 1.0
         start = self.QueryWireVoltage(channel)
         rv = self._set_wire_voltage(channel, value)
-        # if the transition overshot the target, then retune
-        if tolerance < abs(rv - value):
-            rv = self._set_wire_voltage(channel, value)
         return rv
 
     def _step_hv_dac(self, channel, target, step, interval):
