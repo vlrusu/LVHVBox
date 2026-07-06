@@ -450,7 +450,10 @@ class PiHealthHandler(BaseHTTPRequestHandler):
         self.send_error(HTTPStatus.NOT_FOUND, "not found")
 
     def log_message(self, format_str: str, *args) -> None:
-        logging.info("http %s - %s", self.address_string(), format_str % args)
+        message = format_str % args
+        if '"GET /health ' in message and message.endswith('" 200 -'):
+            return
+        logging.info("http %s - %s", self.address_string(), message)
 
     def send_json(self, payload: dict) -> None:
         body = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
