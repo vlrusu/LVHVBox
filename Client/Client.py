@@ -13,7 +13,12 @@ from I2CSensorConnection import I2CSensorConnection
 from PiHealthConnection import PiHealthConnection
 import sys
 import os
-import matplotlib.pyplot as plt
+import re
+
+try:
+    import matplotlib.pyplot as plt
+except ModuleNotFoundError:
+    plt = None
 
 HISTORY_REQUEST_MAX = 100
 current_buffer_len = 8000  # must be divisible by 10
@@ -158,10 +163,22 @@ readline.parse_and_bind("tab: complete")
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
-    "host",
-    nargs="?",
-    default="localhost",
-    help="Hostname like psu15 or fully-qualified mu2e-trk-psu15.fnal.gov. Use localhost/127.0.0.1 to skip SSH tunnel.",
+    "hosts",
+    nargs="*",
+    help=(
+        "Hostnames like psu15, slot15, or fully-qualified "
+        "mu2e-trk-psu15.fnal.gov. Use localhost/127.0.0.1 to skip SSH "
+        "tunnel. Defaults to localhost."
+    ),
+)
+parser.add_argument(
+    "-c",
+    "--command",
+    action="append",
+    help=(
+        "Run one command non-interactively, for example -c readMonV48 or "
+        "-c 'readMonV48 0'. Repeat -c to run multiple commands."
+    ),
 )
 parser.add_argument(
     "--user",
@@ -172,6 +189,29 @@ parser.add_argument(
     "--gateway",
     default="mu2egateway01.fnal.gov",
     help="SSH jump host",
+)
+parser.add_argument(
+    "--ssh-connect-timeout",
+    type=int,
+    default=10,
+    help="Seconds to wait for each SSH TCP connection attempt",
+)
+parser.add_argument(
+    "--host-delay",
+    type=float,
+    default=1.0,
+    help="Seconds to wait between one-shot hosts",
+)
+parser.add_argument(
+    "--max-tunnel-failures",
+    type=int,
+    default=2,
+    help="Abort one-shot host list after this many consecutive SSH tunnel failures",
+)
+parser.add_argument(
+    "--ssh-batch-mode",
+    action="store_true",
+    help="Disable interactive SSH auth prompts during tunnel setup",
 )
 parser.add_argument(
     "--local-port",
@@ -218,6 +258,28 @@ parser.add_argument(
     help="Path to opcode macro header"
 )
 args = parser.parse_args()
+current_host = None
+tunnel_processes = []
+TRACKER_SLOT_TO_PSU = {
+    0: 0,
+    1: 1,
+    2: 2,
+    3: 3,
+    4: 4,
+    5: 5,
+    6: 6,
+    7: 7,
+    8: 8,
+    9: 11,
+    10: 14,
+    11: 13,
+    12: 15,
+    13: 9,
+    14: 10,
+    15: 12,
+    16: 17,
+    17: 16,
+}
 
 
 def create_command_string_default():
@@ -286,6 +348,10 @@ def execute_command(sock, command, channel, val):
 
 
 def current_burst(sock, keys):
+    if plt is None:
+        print("current_burst requires matplotlib")
+        return
+
     channel = int(keys[1])
 
     command_dict = command_map()
@@ -333,6 +399,55 @@ def normalize_host(hostname):
     return f"mu2e-trk-{hostname}.fnal.gov"
 
 
+def first_host():
+    hosts = expanded_hosts()
+    if hosts:
+        return hosts[0]
+    return "localhost"
+
+
+def expanded_hosts():
+    hosts = []
+    for item in args.hosts:
+        for token in item.split(","):
+            token = token.strip()
+            if not token:
+                continue
+            match = re.fullmatch(r"(psu|slot)(\d+)-(\d+)", token)
+            if match:
+                prefix = match.group(1)
+                start = int(match.group(2))
+                end = int(match.group(3))
+                step = 1 if start <= end else -1
+                hosts.extend(expand_host_token(prefix, i) for i in range(start, end + step, step))
+            else:
+                hosts.append(expand_host_token_from_string(token))
+    return hosts
+
+
+def expand_host_token(prefix, number):
+    if prefix == "slot":
+        return slot_to_psu(number)
+    return f"{prefix}{number}"
+
+
+def expand_host_token_from_string(token):
+    match = re.fullmatch(r"slot(\d+)", token)
+    if match:
+        return slot_to_psu(int(match.group(1)))
+    return token
+
+
+def slot_to_psu(slot):
+    try:
+        return f"psu{TRACKER_SLOT_TO_PSU[slot]}"
+    except KeyError:
+        parser.error(
+            f"slot{slot} is not in the cached tracker slot mapping "
+            "(known slots: 0-17)"
+        )
+
+
 def local_port_open(port):
     try:
         with socket.create_connection(("127.0.0.1", port), timeout=0.5):
@@ -350,28 +465,60 @@ def find_free_port():
 
 
 def ensure_tunnel(host, user, gateway, local_port, remote_port):
+    global tunnel_processes
+
     if local_port_open(local_port):
         local_port = find_free_port()
         print(f"Local port in use, using {local_port} instead")
     ssh_cmd = [
         "ssh",
-        "-f",
         "-KX",
         "-N",
+        "-o",
+        "ExitOnForwardFailure=yes",
+        "-o",
+        f"ConnectTimeout={args.ssh_connect_timeout}",
+        "-o",
+        "ConnectionAttempts=1",
         "-L",
         f"{local_port}:localhost:{remote_port}",
         f"{user}@{host}",
         "-J",
         gateway,
     ]
-    result = subprocess.run(ssh_cmd)
-    if result.returncode != 0:
-        raise RuntimeError("Failed to establish SSH tunnel")
-    for _ in range(10):
+    if args.ssh_batch_mode:
+        ssh_cmd[1:1] = ["-o", "BatchMode=yes"]
+    proc = subprocess.Popen(ssh_cmd)
+    tunnel_processes.append(proc)
+    for _ in range(75):
+        if proc.poll() is not None:
+            tunnel_processes.remove(proc)
+            raise RuntimeError("Failed to establish SSH tunnel")
         if local_port_open(local_port):
             return local_port
         time.sleep(0.2)
+    close_tunnel(proc)
     raise RuntimeError("SSH tunnel did not become ready")
+
+
+def close_tunnel(proc):
+    global tunnel_processes
+
+    if proc in tunnel_processes:
+        tunnel_processes.remove(proc)
+    if proc.poll() is not None:
+        return
+    proc.terminate()
+    try:
+        proc.wait(timeout=2)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait(timeout=2)
+
+
+def close_tunnels():
+    for proc in tunnel_processes[:]:
+        close_tunnel(proc)
 
 
 health_connection = None
@@ -383,7 +530,7 @@ def get_health_connection():
     if health_connection is not None:
         return health_connection
 
-    host = normalize_host(args.host)
+    host = normalize_host(current_host or first_host())
     if host in ("localhost", "127.0.0.1"):
         health_connection = PiHealthConnection(host, args.health_remote_port)
         return health_connection
@@ -404,7 +551,7 @@ def get_sensor_connection():
     if sensor_connection is not None:
         return sensor_connection
 
-    host = normalize_host(args.host)
+    host = normalize_host(current_host or first_host())
     if host in ("localhost", "127.0.0.1"):
         sensor_connection = I2CSensorConnection(host, args.sensor_remote_port)
         return sensor_connection
@@ -558,6 +705,8 @@ def print_ac_events(limit, time_mode="local"):
 def process_command(line):
     keys = line.split(" ")  # command <channel> <input_value>
     keys = [k for k in keys if 0 < len(k)]
+    if not keys:
+        return
 
     if keys[0] == "ac_status":
         print_ac_status()
@@ -652,15 +801,25 @@ def process_command(line):
         execute_command(connection, command)
 
 
-if __name__ == "__main__":
-    host = normalize_host(args.host)
+def connect_to_host(host_arg):
+    host = normalize_host(host_arg)
     if host in ("localhost", "127.0.0.1"):
-        connection = MessagingConnection(host, args.remote_port)
-    else:
-        port = ensure_tunnel(
-            host, args.user, args.gateway, args.local_port, args.remote_port
-        )
-        connection = MessagingConnection("127.0.0.1", port)
+        return MessagingConnection(host, args.remote_port)
+
+    port = ensure_tunnel(
+        host, args.user, args.gateway, args.local_port, args.remote_port
+    )
+    return MessagingConnection("127.0.0.1", port)
+
+
+def run_interactive():
+    global connection, current_host
+
+    if len(expanded_hosts()) > 1:
+        parser.error("multiple hosts require --command/-c")
+
+    current_host = first_host()
+    connection = connect_to_host(current_host)
 
     path = args.header
     read_commands(path)
@@ -681,3 +840,57 @@ if __name__ == "__main__":
     finally:
         print("Ending...")
         readline.write_history_file(HISTORY_FILENAME)
+        try:
+            connection.close()
+        except Exception:
+            pass
+        close_tunnels()
+
+
+def run_one_shot():
+    global connection, current_host, health_connection, sensor_connection
+
+    hosts = expanded_hosts() or ["localhost"]
+    read_commands(args.header)
+    consecutive_tunnel_failures = 0
+
+    for index, host in enumerate(hosts):
+        current_host = host
+        health_connection = None
+        sensor_connection = None
+        connection = None
+        if len(hosts) > 1:
+            print(f"{host}:")
+        try:
+            connection = connect_to_host(host)
+            for command_line in args.command:
+                process_command(command_line)
+            consecutive_tunnel_failures = 0
+        except AssertionError:
+            print("Ensure that all arguments are valid")
+        except Exception as e:
+            print((type(e), e))
+            if isinstance(e, RuntimeError) and "tunnel" in str(e).lower():
+                consecutive_tunnel_failures += 1
+                if consecutive_tunnel_failures >= args.max_tunnel_failures:
+                    print(
+                        "Stopping after "
+                        f"{consecutive_tunnel_failures} consecutive tunnel failures"
+                    )
+                    break
+        finally:
+            if connection is not None:
+                try:
+                    connection.close()
+                except Exception:
+                    pass
+            close_tunnels()
+        if index < len(hosts) - 1 and args.host_delay > 0:
+            time.sleep(args.host_delay)
+
+
+if __name__ == "__main__":
+    if args.command:
+        run_one_shot()
+    else:
+        run_interactive()

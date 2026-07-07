@@ -6,6 +6,7 @@ import gpiod  # Replacement for RPi.GPIO
 import time
 import struct
 import json
+import csv
 
 import argparse
 
@@ -44,7 +45,19 @@ def parse_args():
 
     parser = argparse.ArgumentParser(description="Send RS485 command and process response.")
     parser.add_argument("address", type=int, help="9-bit address (0–512)")
-    parser.add_argument("--name", help="Name of the parameter to read (if omitted, reads all)")
+    parser.add_argument(
+        "--name",
+        help="Name of the parameter to read (if omitted, reads all)",
+    )
+    parser.add_argument(
+        "--calibrations",
+        default="panel_calibrations.csv",
+        help="CSV with variable,mn,factor,offset columns for Flow calibration",
+    )
+    parser.add_argument(
+        "--panel",
+        help="Panel/MN calibration key, for example MN034. Defaults to MN{address:03d}",
+    )
     return parser.parse_args()
 
 
@@ -105,6 +118,28 @@ def apply_transformation(x,expression):
     return result
 
 
+def panel_name_from_address(address):
+    return f"MN{address:03d}"
+
+
+def load_calibrations(path):
+    calibrations = {}
+    with open(path, newline="") as f:
+        for row in csv.DictReader(f):
+            variable = row["variable"].strip()
+            mn = row["mn"].strip()
+            calibrations[(variable, mn)] = (
+                float(row["factor"]),
+                float(row["offset"]),
+            )
+    return calibrations
+
+
+def apply_calibration(x, calibrations, variable, mn):
+    factor, offset = calibrations[(variable, mn)]
+    return factor * x + offset
+
+
 # Main
 if __name__ == "__main__":
 
@@ -118,12 +153,14 @@ if __name__ == "__main__":
     json_path = "transformations.json"
     with open(json_path, 'r') as f:
         rules = json.load(f)
+    panel = args.panel or panel_name_from_address(address)
 
 
     
     try:
 
         targets = [args.name] if args.name else list(rules.keys())
+        calibrations = load_calibrations(args.calibrations) if "Flow" in targets else {}
 
         for name in targets:
             if name not in rules:
@@ -155,7 +192,21 @@ if __name__ == "__main__":
                 lsb = received_data[1]
                 msb = received_data[2]
                 combined_word = (msb << 8) | lsb
-                transformed = apply_transformation(combined_word, expression)
+                if name == "Flow":
+                    calibration_key = ("A0", panel)
+                    if calibration_key not in calibrations:
+                        print(
+                            f"{name}: no calibration for "
+                            f"{calibration_key[0]},{calibration_key[1]}"
+                        )
+                        continue
+                    transformed = apply_calibration(
+                        combined_word,
+                        calibrations,
+                        *calibration_key,
+                    )
+                else:
+                    transformed = apply_transformation(combined_word, expression)
                 if format_spec == "int":
                     print(f"{name:<20} = {transformed:8d}")
                 elif format_spec == "hex":

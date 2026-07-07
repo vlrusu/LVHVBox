@@ -7,7 +7,7 @@
     "V1.8HV":         { "expression": "x * 3.3 * 2 / 4096",                                        "cmdid": 5 },
     "V3.3HV":         { "expression": "x * 3.3 * 2 / 4096",                                        "cmdid": 6 },
     "V2.5":           { "expression": "x * 3.3 * 2 / 4096",                                        "cmdid": 7 },
-    "Flow":           { "expression": "x * 3.3 / 4096",                                            "cmdid": 8 },
+    "Flow":           { "expression": "x",                                                         "cmdid": 8 },
     "AbsPressure":    { "expression": "x * 3.3 / 4096",                                            "cmdid": 9 },
     "DMBTEMP":        { "expression": "(-3.9083E-3 + (3.9083E-3**2 - 4*-5.775E-7*(1 - (3.3 - x * 3.3 / 4096)/(x * 3.3 / 4096)))**0.5) / (2 * -5.775e-7)", "cmdid": 10 },
     "A3":             { "expression": "x * 3.3 / 4096",                                            "cmdid": 11 },

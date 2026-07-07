@@ -11,6 +11,7 @@ from matplotlib import pyplot as plt
 from matplotlib.animation import FuncAnimation
 import numpy as np
 import os.path
+import re
 import socket
 import subprocess
 import threading
@@ -86,18 +87,18 @@ class ClockedBuffer(deque):
         while 0 < len(self) and (self.expiration < (rn - self[0][1])):
             self.popleft()
 
-def query_and_set(supply, cmd, channel, out):
-    rv = supply.WriteRead(cmd, channel)
+def query_and_set(supply, cmd, target, out):
+    rv = supply.WriteRead(cmd, target['channel'])
     rv = rv[0][0]
-    out.Assign(channel, rv)
+    out.Assign(target['label'], rv)
 
-def threaded_queries(supplies, cmd, channels, out):
+def threaded_queries(supplies, cmd, targets, out):
     threads = []
-    for supply,channel in zip(supplies,channels):
-        thread = threading.Thread(name='Channel %d' % channel,
+    for supply,target in zip(supplies,targets):
+        thread = threading.Thread(name=target['label'],
                                   daemon=True,
                                   target=query_and_set,
-                                  args=(supply,cmd,channel,out))
+                                  args=(supply,cmd,target,out))
         threads.append(thread)
 
     for thread in threads:
@@ -109,64 +110,181 @@ def threaded_queries(supplies, cmd, channels, out):
             if not thread.is_alive():
                 threads.remove(thread)
 
-def timeseries(supplies, channels, cmd, label, xlim, ylim, yscale, logger, machine_name):
+
+def subplot_grid(count):
+    return count, 1
+
+
+def timeseries(supplies, targets, cmd, label, xlim, ylim, yscale, logger, machine_name, value_decimals):
     expire = xlim[1]
     buff = ClockedBuffer(expiration=datetime.timedelta(seconds=expire))
 
-    fig = plt.figure()
-    fig.suptitle(f'{label} - {machine_name}')
+    hosts = []
+    for target in targets:
+        if target['display'] not in hosts:
+            hosts.append(target['display'])
+
+    nrows, ncols = subplot_grid(len(hosts))
+    fig_height = max(4.0, min(30.0, 1.7 * len(hosts)))
+    fig, axes_grid = plt.subplots(
+        nrows,
+        ncols,
+        squeeze=False,
+        sharex=True,
+        sharey=True,
+        figsize=(10.0, fig_height),
+    )
     if fig.canvas.manager is not None:
         fig.canvas.manager.set_window_title(f'hv-monitor - {machine_name}')
-    plt.xlabel('Time ago [s]')
-    plt.ylabel(label)
-    ax = plt.gca()
-    lines = {}
-    for channel in channels:
-        label = 'Channel %d' % channel
-        lines[channel], *rest = ax.plot([], [], '-', label=label)
 
-    legend = None
+    axes = {}
+    flat_axes = list(axes_grid.flat)
+    for index, (host, ax) in enumerate(zip(hosts, flat_axes)):
+        axes[host] = ax
+        ax.text(
+            0.01,
+            0.96,
+            host,
+            transform=ax.transAxes,
+            ha='left',
+            va='top',
+            fontsize='small',
+            bbox=dict(boxstyle='round,pad=0.15', fc='white', ec='0.8', alpha=0.75),
+        )
+        ax.set_xlabel('Time ago [s]' if index == len(hosts) - 1 else '')
+        ax.set_ylabel(label if index == 0 else '')
+    for ax in flat_axes[len(hosts):]:
+        ax.set_visible(False)
+
+    lines = {}
+    line_labels = {}
+    line_keys = {}
+    for target in targets:
+        target_label = target['label']
+        channel_label = str(target['channel'])
+        line_labels[target_label] = channel_label
+        lines[target_label], *rest = axes[target['display']].plot(
+            [], [], '-', label=channel_label, picker=5
+        )
+        line_keys[lines[target_label]] = target_label
+
+    legends = {}
+    legend_ncols = min(6, max(1, len({target['channel'] for target in targets})))
+
+    def make_legend(ax):
+        return ax.legend(
+            ncols=legend_ncols,
+            loc='upper right',
+            fontsize='xx-small',
+            framealpha=0.75,
+            borderpad=0.2,
+            labelspacing=0.2,
+            handlelength=1.0,
+            handletextpad=0.3,
+            columnspacing=0.6,
+        )
+
+    annotations = {}
+    for host, ax in axes.items():
+        annotations[ax] = ax.annotate(
+            '',
+            xy=(0, 0),
+            xytext=(12, 12),
+            textcoords='offset points',
+            bbox=dict(boxstyle='round', fc='white', ec='0.5', alpha=0.9),
+            arrowprops=dict(arrowstyle='->'),
+        )
+        annotations[ax].set_visible(False)
+
+    def hide_annotations():
+        changed = False
+        for annotation in annotations.values():
+            if annotation.get_visible():
+                annotation.set_visible(False)
+                changed = True
+        return changed
+
+    def on_hover(event):
+        if event.inaxes not in axes.values():
+            if hide_annotations():
+                fig.canvas.draw_idle()
+            return
+
+        for line, target_label in line_keys.items():
+            if line.axes is not event.inaxes:
+                continue
+            contains, details = line.contains(event)
+            if not contains:
+                continue
+
+            indices = details.get('ind', [])
+            if len(indices) == 0:
+                continue
+
+            index = indices[0]
+            xdata = line.get_xdata()
+            ydata = line.get_ydata()
+            if len(xdata) <= index or len(ydata) <= index:
+                continue
+
+            annotation = annotations[line.axes]
+            annotation.xy = (xdata[index], ydata[index])
+            annotation.set_text(
+                f"{line_labels[target_label]}/{ydata[index]:.{value_decimals}f}\n"
+                f"{xdata[index]:.1f}s ago"
+            )
+            hide_annotations()
+            annotation.set_visible(True)
+            fig.canvas.draw_idle()
+            return
+
+        if hide_annotations():
+            fig.canvas.draw_idle()
+
+    fig.canvas.mpl_connect('motion_notify_event', on_hover)
 
     def init():
-        nonlocal legend
-        ax.set_xlim(*xlim)
-        ax.set_ylim(*ylim)
-        ax.set_yscale(yscale)
-        legend = ax.legend(ncols=3)
-        ax.invert_xaxis()
+        nonlocal legends
+        for host, ax in axes.items():
+            ax.set_xlim(*xlim)
+            ax.set_ylim(*ylim)
+            ax.set_yscale(yscale)
+            legends[host] = make_legend(ax)
+            ax.invert_xaxis()
+        fig.subplots_adjust(hspace=0.0, top=0.99, bottom=0.06, left=0.08, right=0.99)
         return list(lines.values())
 
     def update(frame, lines, buff):
-        nonlocal legend
+        nonlocal legends
         buff.Consume(frame)
         rn = now()
         latest_values = {}
         for k in lines.keys():
-            # TODO this loop structure assumes the timeseries are aligned
-            # which is not guaranteed
-            if k in buff[0][0].keys():
-                xx = [(rn - pair[1]).total_seconds() for pair in buff]
-                yy = [pair[0][k] for pair in buff]
+            pairs = [pair for pair in buff if k in pair[0]]
+            if 0 < len(pairs):
+                xx = [(rn - pair[1]).total_seconds() for pair in pairs]
+                yy = [pair[0][k] for pair in pairs]
                 lines[k].set_data(xx, yy)
                 if 0 < len(yy):
                     latest_values[k] = yy[-1]
 
-        for k in channels:
+        for k in lines.keys():
             if k in latest_values:
-                lines[k].set_label(f'{latest_values[k]:.3f}\nChannel {k}')
+                lines[k].set_label(f'{line_labels[k]}/{latest_values[k]:.{value_decimals}f}')
             else:
-                lines[k].set_label(f'Channel {k}')
+                lines[k].set_label(line_labels[k])
 
-        if legend is not None:
-            legend.remove()
-        legend = ax.legend(ncols=3)
+        for host, legend in legends.items():
+            if legend is not None:
+                legend.remove()
+            legends[host] = make_legend(axes[host])
         return lines.values()
 
     def queries(cmd):
         while True:
             sleep(0.01)
             rv = ThreadSafeDict()
-            threaded_queries(supplies, cmd, channels, rv)
+            threaded_queries(supplies, cmd, targets, rv)
             rv = rv.AsDict()
             logger(rv)
             yield rv
@@ -180,20 +298,84 @@ def timeseries(supplies, channels, cmd, label, xlim, ylim, yscale, logger, machi
     return animation
 
 
-def make_logger(logfile_path, channels, cmd_label):
+def make_logger(logfile_path, targets, cmd_label):
     if logfile_path is None:
         return lambda *_: None  # no-op
     f = open(logfile_path, 'w')
-    header = 'timestamp,' + ','.join(f'{cmd_label}_ch{ch}' for ch in channels)
+    labels = [target['label'] for target in targets]
+    header = 'timestamp,' + ','.join(f'{cmd_label}_{label}' for label in labels)
     print(header, file=f)
 
     def logger(measurements):
         ts = now().isoformat()
-        line = ts + ',' + ','.join(f"{measurements.get(ch, ''):.3f}" if ch in measurements else '' for ch in channels)
-#        line = ts + ',' + ','.join(str(measurements.get(ch, '')) for ch in channels)
+        line = ts + ',' + ','.join(f"{measurements.get(label, ''):.3f}" if label in measurements else '' for label in labels)
+#        line = ts + ',' + ','.join(str(measurements.get(label, '')) for label in labels)
         print(line, file=f, flush=True)
 
     return logger
+
+
+def display_host(host):
+    short = host.split('.')[0]
+    if short.startswith('mu2e-trk-'):
+        return short[len('mu2e-trk-'):]
+    return short
+
+
+def expand_host_token(token):
+    match = re.fullmatch(r'([A-Za-z_-]+)(\d+)-(\d+)', token)
+    if match is None:
+        return [token]
+
+    prefix = match.group(1)
+    start = int(match.group(2))
+    stop = int(match.group(3))
+    step = 1 if start <= stop else -1
+    return [f'{prefix}{index}' for index in range(start, stop + step, step)]
+
+
+def expand_hosts(hosts):
+    expanded = []
+    for host in hosts:
+        expanded.extend(expand_host_token(host))
+    return expanded
+
+
+def make_connection_specs(hosts, args):
+    specs = []
+    for raw_host in expand_hosts(hosts):
+        host = normalize_host(raw_host)
+        if host in ("localhost", "127.0.0.1"):
+            connection_host = host
+            connection_port = args.remote_port
+        else:
+            connection_host = "127.0.0.1"
+            connection_port = ensure_tunnel(
+                host, args.user, args.gateway, args.local_port, args.remote_port
+            )
+        specs.append({
+            'raw_host': raw_host,
+            'host': host,
+            'display': display_host(raw_host),
+            'connection_host': connection_host,
+            'connection_port': connection_port,
+        })
+    return specs
+
+
+def make_targets(connection_specs, channels):
+    targets = []
+    include_host = 1 < len(connection_specs)
+    for spec in connection_specs:
+        for channel in channels:
+            channel_label = f'ch{channel}'
+            label = f"{spec['display']}_{channel_label}" if include_host else channel_label
+            targets.append({
+                **spec,
+                'channel': channel,
+                'label': label,
+            })
+    return targets
 
 
 def main(args):
@@ -204,19 +386,16 @@ def main(args):
         this = os.path.dirname(this)
         header = os.path.join(this, 'commands.h')
 
-    host = normalize_host(args.host)
-    machine_name = args.host
-    if host in ("localhost", "127.0.0.1"):
-        connection_host = host
-        connection_port = args.remote_port
-    else:
-        connection_host = "127.0.0.1"
-        connection_port = ensure_tunnel(
-            host, args.user, args.gateway, args.local_port, args.remote_port
-        )
-    mksupply = lambda: PowerSupplyServerConnection(connection_host, connection_port, header)
-    mksupplies = lambda chs: [mksupply() for ch in chs]
     channels = args.channels
+    connection_specs = make_connection_specs(args.hosts, args)
+    targets = make_targets(connection_specs, channels)
+    mksupply = lambda target: PowerSupplyServerConnection(
+        target['connection_host'], target['connection_port'], header
+    )
+    mksupplies = lambda tgts: [mksupply(target) for target in tgts]
+    machine_name = ', '.join(spec['display'] for spec in connection_specs)
+    print(f"Monitoring PSUs: {machine_name}")
+    print(f"Monitoring channels: {', '.join(str(ch) for ch in channels)}")
 
     if args.logfile is None:
         log_prefix = None  # No logging
@@ -229,18 +408,18 @@ def main(args):
     voltage_log = f'{log_prefix}_voltage.csv'
     current_log = f'{log_prefix}_current.csv'
 
-    volt_logger = make_logger(f'{log_prefix}_voltage.csv' if log_prefix else None, channels, 'voltage')
-    curr_logger = make_logger(f'{log_prefix}_current.csv' if log_prefix else None, channels, 'current')
+    volt_logger = make_logger(f'{log_prefix}_voltage.csv' if log_prefix else None, targets, 'voltage')
+    curr_logger = make_logger(f'{log_prefix}_current.csv' if log_prefix else None, targets, 'current')
 
     if args.no_plots:
         # If no plots, just run the loggers in background forever
-        supplies_v = mksupplies(channels)
-        supplies_i = mksupplies(channels)
+        supplies_v = mksupplies(targets)
+        supplies_i = mksupplies(targets)
 
         def run_query_loop(cmd, supplies, logger):
             while True:
                 rv = ThreadSafeDict()
-                threaded_queries(supplies, cmd, channels, rv)
+                threaded_queries(supplies, cmd, targets, rv)
                 logger(rv.AsDict())
                 sleep(0.1)
 
@@ -254,19 +433,21 @@ def main(args):
         except KeyboardInterrupt:
             print("Logging interrupted.")
     else:
-        voltages = timeseries(mksupplies(channels), channels,
+        voltages = timeseries(mksupplies(targets), targets,
                               'get_vhv', 'Voltage [V]',
-                              (0.0, 300.0), (1.0, 3e3),
+                              (0.0, 300.0), (0.0, 1900.0),
                               'linear',
                               volt_logger,
                               machine_name,
+                              0,
                              )
-        currents = timeseries(mksupplies(channels), channels,
+        currents = timeseries(mksupplies(targets), targets,
                               'get_ihv', 'Current [uA]',
-                              (0.0, 300.0), (1.0, 30.0),
+                              (0.0, 300.0), (0.0, 30.0),
                               'linear',
                               curr_logger,
                               machine_name,
+                              1,
                              )
         #pcbtemp = timeseries(mksupplies(channels), channels,
         #                      'pcb_temp', 'PCB Temperature [degC]',
@@ -281,12 +462,19 @@ def main(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('-c', type=int, dest='channels', nargs='+', default=[])
     parser.add_argument(
-        'host',
-        nargs='?',
-        default='localhost',
-        help='Hostname like psu13 or fully-qualified mu2e-trk-psu13.fnal.gov',
+        '-c',
+        type=int,
+        dest='channels',
+        nargs='+',
+        default=list(range(12)),
+        help='HV channels to monitor; defaults to all 12 channels',
+    )
+    parser.add_argument(
+        'hosts',
+        nargs='*',
+        default=['localhost'],
+        help='Hostnames like psu13 psu14, psu0-17, or fully-qualified mu2e-trk-psu13.fnal.gov',
     )
     parser.add_argument('--user', default='mu2e', help='SSH username for the remote host')
     parser.add_argument('--gateway', default='mu2egateway01.fnal.gov', help='SSH jump host')
