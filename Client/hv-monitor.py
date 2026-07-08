@@ -87,18 +87,41 @@ class ClockedBuffer(deque):
         while 0 < len(self) and (self.expiration < (rn - self[0][1])):
             self.popleft()
 
-def query_and_set(supply, cmd, target, out):
-    rv = supply.WriteRead(cmd, target['channel'])
-    rv = rv[0][0]
-    out.Assign(target['label'], rv)
+class MonitorSupply:
+    def __init__(self, spec, header):
+        self.spec = spec
+        self.connection = PowerSupplyServerConnection(
+            spec['connection_host'], spec['connection_port'], header
+        )
+        self.lock = threading.Lock()
 
-def threaded_queries(supplies, cmd, targets, out):
+    def close(self):
+        self.connection.close()
+
+    def query_values(self, cmd):
+        with self.lock:
+            if cmd == 'get_vhv':
+                return self.connection.QueryWireVoltages()
+            if cmd == 'get_ihv':
+                return self.connection.QueryWireCurrents()
+            raise ValueError('unsupported monitor command: %s' % cmd)
+
+
+def query_supply_and_set(supply, cmd, targets, out):
+    values = supply.query_values(cmd)
+    for target in targets:
+        channel = target['channel']
+        if channel < len(values):
+            out.Assign(target['label'], values[channel])
+
+
+def threaded_queries(supplies, cmd, targets_by_display, out):
     threads = []
-    for supply,target in zip(supplies,targets):
-        thread = threading.Thread(name=target['label'],
+    for display,supply in supplies.items():
+        thread = threading.Thread(name=display,
                                   daemon=True,
-                                  target=query_and_set,
-                                  args=(supply,cmd,target,out))
+                                  target=query_supply_and_set,
+                                  args=(supply, cmd, targets_by_display[display], out))
         threads.append(thread)
 
     for thread in threads:
@@ -115,7 +138,7 @@ def subplot_grid(count):
     return count, 1
 
 
-def timeseries(supplies, targets, cmd, label, xlim, ylim, yscale, logger, machine_name, value_decimals):
+def timeseries(supplies, targets, targets_by_display, cmd, label, xlim, ylim, yscale, logger, machine_name, value_decimals):
     expire = xlim[1]
     buff = ClockedBuffer(expiration=datetime.timedelta(seconds=expire))
 
@@ -284,7 +307,7 @@ def timeseries(supplies, targets, cmd, label, xlim, ylim, yscale, logger, machin
         while True:
             sleep(0.01)
             rv = ThreadSafeDict()
-            threaded_queries(supplies, cmd, targets, rv)
+            threaded_queries(supplies, cmd, targets_by_display, rv)
             rv = rv.AsDict()
             logger(rv)
             yield rv
@@ -378,6 +401,28 @@ def make_targets(connection_specs, channels):
     return targets
 
 
+def group_targets_by_display(targets):
+    rv = {}
+    for target in targets:
+        rv.setdefault(target['display'], []).append(target)
+    return rv
+
+
+def make_supplies(connection_specs, header):
+    return {
+        spec['display']: MonitorSupply(spec, header)
+        for spec in connection_specs
+    }
+
+
+def close_supplies(supplies):
+    for supply in supplies.values():
+        try:
+            supply.close()
+        except Exception as e:
+            print('warning: failed to close monitor supply: %s' % str(e))
+
+
 def main(args):
     header = args.header
     if header is None:
@@ -389,13 +434,12 @@ def main(args):
     channels = args.channels
     connection_specs = make_connection_specs(args.hosts, args)
     targets = make_targets(connection_specs, channels)
-    mksupply = lambda target: PowerSupplyServerConnection(
-        target['connection_host'], target['connection_port'], header
-    )
-    mksupplies = lambda tgts: [mksupply(target) for target in tgts]
+    targets_by_display = group_targets_by_display(targets)
+    supplies = make_supplies(connection_specs, header)
     machine_name = ', '.join(spec['display'] for spec in connection_specs)
     print(f"Monitoring PSUs: {machine_name}")
     print(f"Monitoring channels: {', '.join(str(ch) for ch in channels)}")
+    print(f"Opened {len(supplies)} LV/HV connection(s)")
 
     if args.logfile is None:
         log_prefix = None  # No logging
@@ -411,51 +455,51 @@ def main(args):
     volt_logger = make_logger(f'{log_prefix}_voltage.csv' if log_prefix else None, targets, 'voltage')
     curr_logger = make_logger(f'{log_prefix}_current.csv' if log_prefix else None, targets, 'current')
 
-    if args.no_plots:
-        # If no plots, just run the loggers in background forever
-        supplies_v = mksupplies(targets)
-        supplies_i = mksupplies(targets)
+    try:
+        if args.no_plots:
+            # If no plots, just run the loggers in background forever
+            def run_query_loop(cmd, logger):
+                while True:
+                    rv = ThreadSafeDict()
+                    threaded_queries(supplies, cmd, targets_by_display, rv)
+                    logger(rv.AsDict())
+                    sleep(0.1)
 
-        def run_query_loop(cmd, supplies, logger):
-            while True:
-                rv = ThreadSafeDict()
-                threaded_queries(supplies, cmd, targets, rv)
-                logger(rv.AsDict())
-                sleep(0.1)
-
-        t1 = threading.Thread(target=run_query_loop, args=('get_vhv', supplies_v, volt_logger), daemon=True)
-        t2 = threading.Thread(target=run_query_loop, args=('get_ihv', supplies_i, curr_logger), daemon=True)
-        t1.start()
-        t2.start()
-        try:
-            while True:
-                sleep(1)
-        except KeyboardInterrupt:
-            print("Logging interrupted.")
-    else:
-        voltages = timeseries(mksupplies(targets), targets,
-                              'get_vhv', 'Voltage [V]',
-                              (0.0, 300.0), (0.0, 1900.0),
-                              'linear',
-                              volt_logger,
-                              machine_name,
-                              0,
-                             )
-        currents = timeseries(mksupplies(targets), targets,
-                              'get_ihv', 'Current [uA]',
-                              (0.0, 300.0), (0.0, 30.0),
-                              'linear',
-                              curr_logger,
-                              machine_name,
-                              1,
-                             )
-        #pcbtemp = timeseries(mksupplies(channels), channels,
-        #                      'pcb_temp', 'PCB Temperature [degC]',
-        #                      (0.0, 300.0), (25.0, 35.0),
-        #                      'linear',
-        #                      lambda *args: None,
-        #                     )
-        plt.show()
+            t1 = threading.Thread(target=run_query_loop, args=('get_vhv', volt_logger), daemon=True)
+            t2 = threading.Thread(target=run_query_loop, args=('get_ihv', curr_logger), daemon=True)
+            t1.start()
+            t2.start()
+            try:
+                while True:
+                    sleep(1)
+            except KeyboardInterrupt:
+                print("Logging interrupted.")
+        else:
+            voltages = timeseries(supplies, targets, targets_by_display,
+                                  'get_vhv', 'Voltage [V]',
+                                  (0.0, 300.0), (0.0, 1900.0),
+                                  'linear',
+                                  volt_logger,
+                                  machine_name,
+                                  0,
+                                 )
+            currents = timeseries(supplies, targets, targets_by_display,
+                                  'get_ihv', 'Current [uA]',
+                                  (0.0, 300.0), (0.0, 30.0),
+                                  'linear',
+                                  curr_logger,
+                                  machine_name,
+                                  1,
+                                 )
+            #pcbtemp = timeseries(mksupplies(channels), channels,
+            #                      'pcb_temp', 'PCB Temperature [degC]',
+            #                      (0.0, 300.0), (25.0, 35.0),
+            #                      'linear',
+            #                      lambda *args: None,
+            #                     )
+            plt.show()
+    finally:
+        close_supplies(supplies)
 
     
  

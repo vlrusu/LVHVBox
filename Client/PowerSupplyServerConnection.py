@@ -9,6 +9,9 @@ import time
 from MessagingConnection import MessagingConnection
 from WireAnalogDigitalConversion import WireAnalogDigitalConversion
 
+MAXDACALLOWED = 16383
+DAC_LOG_PATH = '/tmp/lvhv-dac-values.log'
+
 class SharedValue:
     def __init__(self, value):
         self.value = value
@@ -26,9 +29,10 @@ class SharedValue:
         self.lock.release()
 
 class PowerSupplyServerConnection():
-    def __init__(self, host, port, header='/etc/mu2e-tracker-lvhv-tools/commands.h', cpath=None):
+    def __init__(self, host, port, header='/etc/mu2e-tracker-lvhv-tools/commands.h', cpath=None, psu_label=None):
         self.host = host
         self.port = port
+        self.psu_label = psu_label if psu_label is not None else host
         self.header = header
         self.reestablish()
 
@@ -203,7 +207,30 @@ class PowerSupplyServerConnection():
     def SetHVLock(self, channel, value):
         self.hv_lock[channel].Set(value)
 
+    def _dac_allowed(self, channel, dac):
+        rv = dac <= MAXDACALLOWED
+        if not rv:
+            print('error: channel %d DAC target %.1f exceeds MAXDACALLOWED %d; stopping ramp' % (
+                channel, dac, MAXDACALLOWED
+            ))
+        return rv
+
+    def _log_dac_value(self, channel, dac):
+        try:
+            with open(DAC_LOG_PATH, 'a') as f:
+                f.write('%s %s %d %s %d %.1f\n' % (
+                    time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()),
+                    self.host, self.port, self.psu_label, channel, dac
+                ))
+        except OSError as e:
+            print('warning: failed to write DAC log %s: %s' % (
+                DAC_LOG_PATH, str(e)
+            ))
+
     def _set_hv_by_dac(self, channel, dac):
+        if not self._dac_allowed(channel, dac):
+            return None
+        self._log_dac_value(channel, dac)
         rvs = self.WriteRead('set_hv_by_dac', channel, dac)
         return rvs
 
@@ -226,7 +253,10 @@ class PowerSupplyServerConnection():
                 return rv
             target = current + step
             if target < 0:
-                break
+                self._timed_dac_set(channel, 0, pause)
+                return self.QueryWireVoltage(channel)
+            if not self._dac_allowed(channel, target):
+                return None
             self._timed_dac_set(channel, target, pause)
             current = target
         rv = self.QueryWireVoltage(channel)
@@ -245,6 +275,8 @@ class PowerSupplyServerConnection():
                 current = self.QueryWireVoltage(channel)
                 return current
             current = self._take_dac_steps(channel, step, readback, pause)
+            if current is None:
+                return None
             remaining = target - current
             if sign * remaining < 0:
                 stop = True
@@ -293,21 +325,33 @@ class PowerSupplyServerConnection():
                 tup = (target, current, remaining, min_tolerance)
                 last_action = 'stop @ %.1f (%.1f): %.1f vs %.1f' % tup
                 stop = True
+            elif voltage <= 0 and self.QueryLastHVSetting(channel) <= 0:
+                last_action = 'stop @ DAC 0'
+                stop = True
             elif remaining < 2*med_tolerance:
                 target = voltage
                 last_action = 'min_step'
-                self._take_macro_step(channel, target,
-                                      min_step, min_pause, min_readback)
+                current = self._take_macro_step(channel, target,
+                                                min_step, min_pause, min_readback)
+                if current is None:
+                    last_action = 'DAC limit exceeded'
+                    stop = True
             elif remaining < 2*max_tolerance:
                 last_action = 'med_step'
                 target = voltage - sign*med_tolerance
-                self._take_macro_step(channel, target,
-                                      med_step, med_pause, med_readback)
+                current = self._take_macro_step(channel, target,
+                                                med_step, med_pause, med_readback)
+                if current is None:
+                    last_action = 'DAC limit exceeded'
+                    stop = True
             else:
                 last_action = 'max_step'
                 target = voltage - sign*max_tolerance
-                self._take_macro_step(channel, target,
-                                      max_step, max_pause, max_readback)
+                current = self._take_macro_step(channel, target,
+                                                max_step, max_pause, max_readback)
+                if current is None:
+                    last_action = 'DAC limit exceeded'
+                    stop = True
         rv = last_action
         return rv
 
@@ -330,6 +374,8 @@ class PowerSupplyServerConnection():
         remaining = target - current
         while 0 < sign*remaining:
             dac = current + sign*step
+            if not self._dac_allowed(channel, dac):
+                return current
             self._set_hv_by_dac(channel, dac)
             time.sleep(interval)
             current = self.QueryLastHVSetting(channel)
