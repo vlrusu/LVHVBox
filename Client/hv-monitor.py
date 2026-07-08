@@ -138,7 +138,32 @@ def subplot_grid(count):
     return count, 1
 
 
-def timeseries(supplies, targets, targets_by_display, cmd, label, xlim, ylim, yscale, logger, machine_name, value_decimals):
+def set_window_geometry(fig, window_index):
+    if window_index is None or fig.canvas.manager is None:
+        return
+
+    positions = [
+        (0, 0),
+        (960, 0),
+        (0, 540),
+        (960, 540),
+    ]
+    width = 940
+    height = 500
+    x,y = positions[window_index % len(positions)]
+    manager = fig.canvas.manager
+    try:
+        manager.window.wm_geometry('%dx%d+%d+%d' % (width, height, x, y))
+        return
+    except Exception:
+        pass
+    try:
+        manager.window.setGeometry(x, y, width, height)
+    except Exception:
+        pass
+
+
+def timeseries(supplies, targets, targets_by_display, cmd, label, xlim, ylim, yscale, logger, machine_name, value_decimals, window_index=None):
     expire = xlim[1]
     buff = ClockedBuffer(expiration=datetime.timedelta(seconds=expire))
 
@@ -148,17 +173,18 @@ def timeseries(supplies, targets, targets_by_display, cmd, label, xlim, ylim, ys
             hosts.append(target['display'])
 
     nrows, ncols = subplot_grid(len(hosts))
-    fig_height = max(4.0, min(30.0, 1.7 * len(hosts)))
+    fig_height = max(4.0, min(10.0, 0.95 * len(hosts)))
     fig, axes_grid = plt.subplots(
         nrows,
         ncols,
         squeeze=False,
         sharex=True,
         sharey=True,
-        figsize=(10.0, fig_height),
+        figsize=(9.4, fig_height),
     )
     if fig.canvas.manager is not None:
         fig.canvas.manager.set_window_title(f'hv-monitor - {machine_name}')
+    set_window_geometry(fig, window_index)
 
     axes = {}
     flat_axes = list(axes_grid.flat)
@@ -408,6 +434,34 @@ def group_targets_by_display(targets):
     return rv
 
 
+def split_specs(connection_specs, parts):
+    rv = []
+    count = len(connection_specs)
+    for index in range(parts):
+        start = (count * index) // parts
+        stop = (count * (index + 1)) // parts
+        rv.append(connection_specs[start:stop])
+    return rv
+
+
+def displays_for_specs(connection_specs):
+    return {spec['display'] for spec in connection_specs}
+
+
+def filter_targets_for_specs(targets, connection_specs):
+    displays = displays_for_specs(connection_specs)
+    return [target for target in targets if target['display'] in displays]
+
+
+def filter_supplies_for_specs(supplies, connection_specs):
+    displays = displays_for_specs(connection_specs)
+    return {
+        display: supply
+        for display,supply in supplies.items()
+        if display in displays
+    }
+
+
 def make_supplies(connection_specs, header):
     return {
         spec['display']: MonitorSupply(spec, header)
@@ -434,7 +488,7 @@ def main(args):
     channels = args.channels
     connection_specs = make_connection_specs(args.hosts, args)
     targets = make_targets(connection_specs, channels)
-    targets_by_display = group_targets_by_display(targets)
+    target_map = group_targets_by_display(targets)
     supplies = make_supplies(connection_specs, header)
     machine_name = ', '.join(spec['display'] for spec in connection_specs)
     print(f"Monitoring PSUs: {machine_name}")
@@ -461,7 +515,7 @@ def main(args):
             def run_query_loop(cmd, logger):
                 while True:
                     rv = ThreadSafeDict()
-                    threaded_queries(supplies, cmd, targets_by_display, rv)
+                    threaded_queries(supplies, cmd, target_map, rv)
                     logger(rv.AsDict())
                     sleep(0.1)
 
@@ -475,22 +529,45 @@ def main(args):
             except KeyboardInterrupt:
                 print("Logging interrupted.")
         else:
-            voltages = timeseries(supplies, targets, targets_by_display,
-                                  'get_vhv', 'Voltage [V]',
-                                  (0.0, 300.0), (0.0, 1900.0),
-                                  'linear',
-                                  volt_logger,
-                                  machine_name,
-                                  0,
-                                 )
-            currents = timeseries(supplies, targets, targets_by_display,
-                                  'get_ihv', 'Current [uA]',
-                                  (0.0, 300.0), (0.0, 30.0),
-                                  'linear',
-                                  curr_logger,
-                                  machine_name,
-                                  1,
-                                 )
+            animations = []
+            plot_groups = [
+                spec_group
+                for spec_group in split_specs(connection_specs, 2)
+                if 0 < len(spec_group)
+            ]
+            for index,spec_group in enumerate(plot_groups):
+                group_targets = filter_targets_for_specs(targets, spec_group)
+                group_target_map = group_targets_by_display(group_targets)
+                group_supplies = filter_supplies_for_specs(supplies, spec_group)
+                group_machine_name = ', '.join(spec['display'] for spec in spec_group)
+                group_volt_logger = make_logger(
+                    f'{log_prefix}_voltage_{index + 1}.csv' if log_prefix else None,
+                    group_targets,
+                    'voltage',
+                )
+                group_curr_logger = make_logger(
+                    f'{log_prefix}_current_{index + 1}.csv' if log_prefix else None,
+                    group_targets,
+                    'current',
+                )
+                animations.append(timeseries(group_supplies, group_targets, group_target_map,
+                                             'get_vhv', 'Voltage [V]',
+                                             (0.0, 300.0), (0.0, 1900.0),
+                                             'linear',
+                                             group_volt_logger,
+                                             'Voltage %d: %s' % (index + 1, group_machine_name),
+                                             0,
+                                             window_index=index,
+                                            ))
+                animations.append(timeseries(group_supplies, group_targets, group_target_map,
+                                             'get_ihv', 'Current [uA]',
+                                             (0.0, 300.0), (0.0, 30.0),
+                                             'linear',
+                                             group_curr_logger,
+                                             'Current %d: %s' % (index + 1, group_machine_name),
+                                             1,
+                                             window_index=index + 2,
+                                            ))
             #pcbtemp = timeseries(mksupplies(channels), channels,
             #                      'pcb_temp', 'PCB Temperature [degC]',
             #                      (0.0, 300.0), (25.0, 35.0),
@@ -517,7 +594,7 @@ if __name__ == '__main__':
     parser.add_argument(
         'hosts',
         nargs='*',
-        default=['localhost'],
+        default=['psu0-17'],
         help='Hostnames like psu13 psu14, psu0-17, or fully-qualified mu2e-trk-psu13.fnal.gov',
     )
     parser.add_argument('--user', default='mu2e', help='SSH username for the remote host')
