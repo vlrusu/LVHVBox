@@ -4,7 +4,7 @@ import json
 from http.client import RemoteDisconnected
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 
 
 class PiHealthConnection:
@@ -38,3 +38,23 @@ class PiHealthConnection:
 
     def get_events(self, limit=20):
         return self._get_json("/events", {"limit": int(limit)})
+
+    def soft_shutdown(self):
+        url = f"http://{self.host}:{self.port}/soft-shutdown"
+        request = Request(url, data=b"", method="POST")
+        try:
+            with urlopen(request, timeout=self.timeout) as response:
+                return json.load(response)
+        except (
+            HTTPError,
+            URLError,
+            TimeoutError,
+            ConnectionResetError,
+            ConnectionAbortedError,
+            BrokenPipeError,
+            RemoteDisconnected,
+            OSError,
+        ) as exc:
+            raise RuntimeError(
+                f"failed to request Pi soft shutdown at {url}: {exc}"
+            ) from exc

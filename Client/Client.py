@@ -74,6 +74,7 @@ special_commands = [
     "ac_status",
     "ac_events",
     "battery_status",
+    "soft_shutdown",
     "sensor_status",
     "sensor_readings",
 ]
@@ -606,6 +607,15 @@ def print_battery_status():
     print("Battery source:", payload.get("battery_source"))
 
 
+def request_soft_shutdown():
+    try:
+        payload = get_health_connection().soft_shutdown()
+    except RuntimeError as exc:
+        print(f"Soft shutdown request failed: {exc}")
+        return
+    print(payload.get("message", "X728 soft shutdown request accepted"))
+
+
 def print_sensor_status():
     try:
         payload = get_sensor_connection().get_health()
@@ -713,6 +723,12 @@ def process_command(line):
         return
     if keys[0] == "battery_status":
         print_battery_status()
+        return
+    if keys[0] == "soft_shutdown":
+        if keys[1:] != ["confirm"]:
+            print("Refusing shutdown; use: soft_shutdown confirm")
+            return
+        request_soft_shutdown()
         return
     if keys[0] == "sensor_status":
         print_sensor_status()

@@ -8,5 +8,7 @@ echo 'from PiHealthConnection.PiHealthConnection import PiHealthConnection' >"${
 # permissions
 chmod u+x "${bin}/pi-health-server"
 # auto-activate service
+# pi-health-server owns the X728 GPIO5 line and replaces Geekworm's daemon.
+systemctl disable --now x728-pwr.service 2>/dev/null || true
 systemctl enable pi-health-server.service
 systemctl restart pi-health-server.service

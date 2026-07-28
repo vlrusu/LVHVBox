@@ -5,12 +5,14 @@ from __future__ import annotations
 
 import configparser
 import ctypes
+import ipaddress
 import json
 import logging
 import os
 import signal
 import socket
 import struct
+import subprocess
 import sys
 import threading
 import time
@@ -48,6 +50,7 @@ DEFAULT_GPIO21_ACTIVE_LOW = os.getenv("PI_HEALTH_GPIO21_ACTIVE_LOW", "0").lower(
     "false",
     "no",
 }
+DEFAULT_X728_POWER_LINE = int(os.getenv("PI_HEALTH_X728_POWER_GPIO5_LINE", "5"))
 DEFAULT_LOG_PATH = Path(
     os.getenv("PI_HEALTH_LOG_PATH", "/var/log/m2ue-tracker-pi-health-tools/ac-power-events.log")
 )
@@ -68,6 +71,11 @@ DEFAULT_LVHV_PORT = 12000
 DEFAULT_LVHV_COMMANDS_PATH = Path("/etc/mu2e-tracker-lvhv-tools/commands.h")
 DEFAULT_LVHV_POWEROFF_CHANNEL = 6
 DEFAULT_GPIO21_REPEAT_WINDOW_SECONDS = 10.0
+DEFAULT_X728_SOFT_SHUTDOWN_LINE = 26
+DEFAULT_X728_SOFT_SHUTDOWN_PULSE_SECONDS = 2.0
+DEFAULT_X728_REBOOT_PULSE_MINIMUM_SECONDS = 0.2
+DEFAULT_X728_SHUTDOWN_PULSE_MINIMUM_SECONDS = 0.6
+DEFAULT_SYSTEMCTL_PATH = "/usr/bin/systemctl"
 
 
 running = True
@@ -79,6 +87,22 @@ started_at_utc = None
 http_server = None
 power_action_lock = threading.Lock()
 gpio21_last_loss_monotonic = None
+soft_shutdown_lock = threading.Lock()
+soft_shutdown_status = {
+    "state": "idle",
+    "requested_at_utc": None,
+    "error": None,
+}
+x728_power_status = {
+    "gpio_line": DEFAULT_X728_POWER_LINE,
+    "state": "idle",
+    "pulse_started_at_utc": None,
+    "last_pulse_seconds": None,
+    "last_action": None,
+    "last_action_at_utc": None,
+    "error": None,
+}
+x728_power_lock = threading.Lock()
 
 
 @dataclass(frozen=True)
@@ -88,6 +112,11 @@ class PowerActionConfig:
     lvhv_port: int
     lvhv_commands_path: Path
     lvhv_poweroff_channel: int
+    x728_soft_shutdown_line: int
+    x728_soft_shutdown_pulse_seconds: float
+    x728_reboot_pulse_minimum_seconds: float
+    x728_shutdown_pulse_minimum_seconds: float
+    systemctl_path: Path
 
 
 def handle_signal(signum: int, _frame) -> None:
@@ -266,6 +295,23 @@ def load_action_config(config_path: Path) -> PowerActionConfig:
             "lvhv_poweroff_channel",
             DEFAULT_LVHV_POWEROFF_CHANNEL,
         ),
+        x728_soft_shutdown_line=get_int(
+            "x728_soft_shutdown_line",
+            DEFAULT_X728_SOFT_SHUTDOWN_LINE,
+        ),
+        x728_soft_shutdown_pulse_seconds=get_float(
+            "x728_soft_shutdown_pulse_seconds",
+            DEFAULT_X728_SOFT_SHUTDOWN_PULSE_SECONDS,
+        ),
+        x728_reboot_pulse_minimum_seconds=get_float(
+            "x728_reboot_pulse_minimum_seconds",
+            DEFAULT_X728_REBOOT_PULSE_MINIMUM_SECONDS,
+        ),
+        x728_shutdown_pulse_minimum_seconds=get_float(
+            "x728_shutdown_pulse_minimum_seconds",
+            DEFAULT_X728_SHUTDOWN_PULSE_MINIMUM_SECONDS,
+        ),
+        systemctl_path=Path(get_string("systemctl_path", DEFAULT_SYSTEMCTL_PATH)),
     )
 
 
@@ -381,6 +427,10 @@ def build_health_payload() -> dict:
         state = current_state
         history_size = len(event_history)
         states = dict(input_states)
+    with soft_shutdown_lock:
+        shutdown_state = dict(soft_shutdown_status)
+    with x728_power_lock:
+        power_state = dict(x728_power_status)
     battery = read_battery_status()
     payload = {
         "service": "pi-health-server",
@@ -390,6 +440,8 @@ def build_health_payload() -> dict:
         "battery_capacity_pct": battery.capacity_pct,
         "battery_source": battery.source,
         "battery_error": battery.error,
+        "soft_shutdown": shutdown_state,
+        "x728_power": power_state,
         "ac_inputs": {
             name: {
                 "gpio_line": signal_state.line_offset,
@@ -429,7 +481,152 @@ def build_events_payload(limit: int) -> dict:
     }
 
 
+def peer_is_loopback(address: str) -> bool:
+    try:
+        return ipaddress.ip_address(address).is_loopback
+    except ValueError:
+        return False
+
+
+def run_x728_soft_shutdown(config: PowerActionConfig) -> None:
+    line = config.x728_soft_shutdown_line
+    pulse_seconds = config.x728_soft_shutdown_pulse_seconds
+    request = None
+    chip = None
+    try:
+        chip = gpiod.Chip(DEFAULT_GPIO_CHIP)
+        line_settings = gpiod.LineSettings(
+            direction=Direction.OUTPUT,
+            output_value=gpiod.line.Value.INACTIVE,
+        )
+        request = chip.request_lines(
+            consumer=f"{DEFAULT_CONSUMER}-soft-shutdown",
+            config={line: line_settings},
+        )
+        logging.warning(
+            "requesting X728 soft shutdown gpio_line=%s pulse_seconds=%.3f",
+            line,
+            pulse_seconds,
+        )
+        request.set_value(line, gpiod.line.Value.ACTIVE)
+        time.sleep(pulse_seconds)
+        request.set_value(line, gpiod.line.Value.INACTIVE)
+        with soft_shutdown_lock:
+            soft_shutdown_status.update(state="pulse_complete", error=None)
+        logging.warning("X728 soft shutdown pulse completed gpio_line=%s", line)
+    except Exception as exc:
+        with soft_shutdown_lock:
+            soft_shutdown_status.update(state="failed", error=str(exc))
+        logging.exception("X728 soft shutdown failed: %s", exc)
+    finally:
+        if request is not None:
+            try:
+                request.set_value(line, gpiod.line.Value.INACTIVE)
+            except Exception as exc:
+                logging.error(
+                    "failed to restore X728 soft shutdown gpio_line=%s LOW: %s",
+                    line,
+                    exc,
+                )
+            finally:
+                request.release()
+        if chip is not None:
+            chip.close()
+
+
+def request_x728_soft_shutdown(config: PowerActionConfig) -> bool:
+    with soft_shutdown_lock:
+        if soft_shutdown_status["state"] == "pulsing":
+            return False
+        soft_shutdown_status.update(
+            state="pulsing",
+            requested_at_utc=utc_now_text(),
+            error=None,
+        )
+    threading.Thread(
+        target=run_x728_soft_shutdown,
+        args=(config,),
+        name="x728-soft-shutdown",
+        # Keep the process alive long enough to restore the line LOW while
+        # systemd is beginning the shutdown triggered by the X728.
+        daemon=False,
+    ).start()
+    return True
+
+
+def issue_system_action(action: str, config: PowerActionConfig) -> bool:
+    with x728_power_lock:
+        if x728_power_status["last_action"] in {"poweroff", "reboot"}:
+            return False
+        x728_power_status.update(
+            state=f"{action}_requested",
+            last_action=action,
+            last_action_at_utc=utc_now_text(),
+            error=None,
+        )
+    logging.warning("X728 requested system action=%s", action)
+    try:
+        subprocess.Popen(
+            [str(config.systemctl_path), action],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+    except OSError as exc:
+        with x728_power_lock:
+            x728_power_status.update(
+                state="action_failed",
+                last_action=None,
+                error=str(exc),
+            )
+        logging.exception("failed to execute X728 system action=%s: %s", action, exc)
+        return False
+    return True
+
+
+def handle_x728_power_edge(
+    raw_value: int,
+    config: PowerActionConfig,
+    pulse_started_monotonic: float | None,
+) -> float | None:
+    now = time.monotonic()
+    if raw_value == 1:
+        if pulse_started_monotonic is None:
+            with x728_power_lock:
+                x728_power_status.update(
+                    state="pulse_high",
+                    pulse_started_at_utc=utc_now_text(),
+                    error=None,
+                )
+            logging.info("X728 power signal HIGH gpio_line=%s", DEFAULT_X728_POWER_LINE)
+            return now
+        return pulse_started_monotonic
+
+    if pulse_started_monotonic is None:
+        return None
+
+    duration = now - pulse_started_monotonic
+    with x728_power_lock:
+        x728_power_status.update(
+            state="idle",
+            last_pulse_seconds=round(duration, 3),
+        )
+    logging.info(
+        "X728 power signal LOW gpio_line=%s pulse_seconds=%.3f",
+        DEFAULT_X728_POWER_LINE,
+        duration,
+    )
+    if duration > config.x728_shutdown_pulse_minimum_seconds:
+        issue_system_action("poweroff", config)
+    elif duration > config.x728_reboot_pulse_minimum_seconds:
+        issue_system_action("reboot", config)
+    return None
+
+
 class PiHealthHandler(BaseHTTPRequestHandler):
+    action_config = None
+
     def do_GET(self) -> None:
         path, _, query = self.path.partition("?")
         if path == "/health":
@@ -449,15 +646,42 @@ class PiHealthHandler(BaseHTTPRequestHandler):
             return
         self.send_error(HTTPStatus.NOT_FOUND, "not found")
 
+    def do_POST(self) -> None:
+        path, _, _query = self.path.partition("?")
+        if path != "/soft-shutdown":
+            self.send_error(HTTPStatus.NOT_FOUND, "not found")
+            return
+        if not peer_is_loopback(self.client_address[0]):
+            self.send_error(
+                HTTPStatus.FORBIDDEN,
+                "soft shutdown is restricted to loopback clients; use the SSH tunnel",
+            )
+            return
+        if self.action_config is None:
+            self.send_error(HTTPStatus.SERVICE_UNAVAILABLE, "action config unavailable")
+            return
+        accepted = request_x728_soft_shutdown(self.action_config)
+        self.send_json(
+            {
+                "accepted": accepted,
+                "message": (
+                    "X728 soft shutdown pulse started"
+                    if accepted
+                    else "X728 soft shutdown is already in progress"
+                ),
+            },
+            status=HTTPStatus.ACCEPTED if accepted else HTTPStatus.CONFLICT,
+        )
+
     def log_message(self, format_str: str, *args) -> None:
         message = format_str % args
         if '"GET /health ' in message and message.endswith('" 200 -'):
             return
         logging.info("http %s - %s", self.address_string(), message)
 
-    def send_json(self, payload: dict) -> None:
+    def send_json(self, payload: dict, status: HTTPStatus = HTTPStatus.OK) -> None:
         body = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
-        self.send_response(HTTPStatus.OK)
+        self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
@@ -470,14 +694,25 @@ def request_line(chip_path: str, line_offset: int):
 
 def request_lines(chip_path: str, line_offsets):
     chip = gpiod.Chip(chip_path)
-    line_settings = gpiod.LineSettings(
+    ac_line_settings = gpiod.LineSettings(
         direction=Direction.INPUT,
         edge_detection=Edge.BOTH,
         bias=Bias.PULL_UP,
     )
+    x728_power_settings = gpiod.LineSettings(
+        direction=Direction.INPUT,
+        edge_detection=Edge.BOTH,
+    )
     request = chip.request_lines(
         consumer=DEFAULT_CONSUMER,
-        config={line_offset: line_settings for line_offset in line_offsets},
+        config={
+            line_offset: (
+                x728_power_settings
+                if line_offset == DEFAULT_X728_POWER_LINE
+                else ac_line_settings
+            )
+            for line_offset in line_offsets
+        },
     )
     return chip, request
 
@@ -493,7 +728,8 @@ def read_line_value(request, line_offset: int) -> int:
     return int(value)
 
 
-def start_http_server() -> ThreadingHTTPServer:
+def start_http_server(action_config: PowerActionConfig) -> ThreadingHTTPServer:
+    PiHealthHandler.action_config = action_config
     server = ThreadingHTTPServer((DEFAULT_HTTP_HOST, DEFAULT_HTTP_PORT), PiHealthHandler)
     thread = threading.Thread(
         target=server.serve_forever,
@@ -568,12 +804,13 @@ def main() -> int:
     signal.signal(signal.SIGTERM, handle_signal)
 
     logging.info(
-        "starting GPIO monitor chip=%s gpio6_line=%s gpio6_active_low=%s gpio21_line=%s gpio21_active_low=%s log_path=%s action_config=%s lvhv_host=%s lvhv_port=%s gpio21_repeat_window_seconds=%s",
+        "starting GPIO monitor chip=%s gpio6_line=%s gpio6_active_low=%s gpio21_line=%s gpio21_active_low=%s x728_power_line=%s log_path=%s action_config=%s lvhv_host=%s lvhv_port=%s gpio21_repeat_window_seconds=%s",
         DEFAULT_GPIO_CHIP,
         DEFAULT_GPIO6_LINE,
         DEFAULT_GPIO6_ACTIVE_LOW,
         DEFAULT_GPIO21_LINE,
         DEFAULT_GPIO21_ACTIVE_LOW,
+        DEFAULT_X728_POWER_LINE,
         DEFAULT_LOG_PATH,
         DEFAULT_ACTION_CONFIG_PATH,
         action_config.lvhv_host,
@@ -581,7 +818,7 @@ def main() -> int:
         action_config.gpio21_repeat_window_seconds,
     )
 
-    http_server = start_http_server()
+    http_server = start_http_server(action_config)
     signal_configs = {
         "gpio6_ac_status": {
             "line_offset": DEFAULT_GPIO6_LINE,
@@ -594,8 +831,10 @@ def main() -> int:
     }
     chip, request = request_lines(
         DEFAULT_GPIO_CHIP,
-        [config["line_offset"] for config in signal_configs.values()],
+        [config["line_offset"] for config in signal_configs.values()]
+        + [DEFAULT_X728_POWER_LINE],
     )
+    x728_pulse_started = None
     try:
         for signal_name, config in signal_configs.items():
             initial_value = read_line_value(request, config["line_offset"])
@@ -609,13 +848,37 @@ def main() -> int:
             update_state(initial_state)
             log_event(initial_state)
 
+        initial_x728_value = read_line_value(request, DEFAULT_X728_POWER_LINE)
+        if initial_x728_value == 1:
+            x728_pulse_started = handle_x728_power_edge(
+                initial_x728_value,
+                action_config,
+                None,
+            )
+
         while running:
-            if not request.wait_edge_events(timeout=1.0):
+            if (
+                x728_pulse_started is not None
+                and time.monotonic() - x728_pulse_started
+                > action_config.x728_shutdown_pulse_minimum_seconds
+            ):
+                issue_system_action("poweroff", action_config)
+
+            if not request.wait_edge_events(
+                timeout=0.05 if x728_pulse_started is not None else 1.0
+            ):
                 continue
 
             for event in request.read_edge_events():
                 line_offset = event.line_offset
                 value = read_line_value(request, line_offset)
+                if line_offset == DEFAULT_X728_POWER_LINE:
+                    x728_pulse_started = handle_x728_power_edge(
+                        value,
+                        action_config,
+                        x728_pulse_started,
+                    )
+                    continue
                 signal_name = next(
                     name
                     for name, config in signal_configs.items()

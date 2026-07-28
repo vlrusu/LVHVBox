@@ -4,6 +4,7 @@ This service is separate from the main LV/HV server and is intended to monitor R
 
 The current monitors watch:
 
+- `GPIO5` for X728 shutdown/reboot requests
 - `GPIO6` for AC power status changes
 - `GPIO21` for AC fail changes
 
@@ -21,6 +22,7 @@ and log:
 - battery voltage from the X728 fuel gauge
 - battery capacity percentage from the X728 fuel gauge
 - a read-only HTTP status API for local or remote clients
+- an X728 v2.x software-safe-shutdown action
 
 ## Assumptions
 
@@ -55,24 +57,37 @@ lvhv_host = 127.0.0.1
 lvhv_port = 12000
 lvhv_commands_path = /etc/mu2e-tracker-lvhv-tools/commands.h
 lvhv_poweroff_channel = 6
+x728_soft_shutdown_line = 26
+x728_soft_shutdown_pulse_seconds = 2.0
+x728_reboot_pulse_minimum_seconds = 0.2
+x728_shutdown_pulse_minimum_seconds = 0.6
+systemctl_path = /usr/bin/systemctl
 ```
 
 The service reads `/etc/pi-health-actions.ini` by default via `PI_HEALTH_ACTION_CONFIG_PATH`.
 
 ## HTTP API
 
-The service also exposes a small read-only HTTP API on port `12002` by default.
+The service exposes an HTTP API on port `12002` by default. Status and event
+queries are read-only; the soft-shutdown route is the single action endpoint.
 
 - `GET /health`: current AC power state and the last event
 - `GET /health`: also includes `battery_voltage_v` and `battery_capacity_pct`
 - `GET /health`: also includes per-input states under `ac_inputs`
 - `GET /events?limit=20`: recent AC power events
+- `POST /soft-shutdown`: pulse the X728 v2.x shutdown input and start a safe
+  operating-system shutdown
+
+The shutdown endpoint only accepts loopback clients. Remote clients must use the
+existing SSH tunnel. This prevents unauthenticated shutdown requests from the
+network even when the read-only status API listens on all interfaces.
 
 Example:
 
 ```bash
 curl http://localhost:12002/health
 curl http://localhost:12002/events?limit=10
+curl -X POST http://localhost:12002/soft-shutdown
 ```
 
 ## Runtime requirements
@@ -118,6 +133,22 @@ journalctl -u pi-health-server.service -f
 ac_status
 ac_events
 ac_events 50
+soft_shutdown confirm
+```
+
+`soft_shutdown confirm` implements Geekworm's X728 v2.0-v2.5 software shutdown:
+GPIO26 is driven high for two seconds and then restored low. The X728 responds
+on GPIO5; `pi-health-server` interprets that pulse and invokes `systemctl
+poweroff`. It also handles the onboard button's reboot and shutdown requests.
+X728 v1.2/v1.3 boards use GPIO16 instead of GPIO26, which can be selected in
+`pi-health-actions.ini`.
+
+Do not run Geekworm's `x728-pwr.service` at the same time because both services
+would attempt to claim GPIO5:
+
+```bash
+sudo systemctl disable --now x728-pwr.service
+sudo systemctl restart pi-health-server.service
 ```
 
 If the client is remote, it uses the same SSH gateway flow as the LV/HV connection, but forwards the health HTTP service on port `12002` by default.
