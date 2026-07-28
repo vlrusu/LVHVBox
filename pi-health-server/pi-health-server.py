@@ -73,6 +73,7 @@ DEFAULT_LVHV_POWEROFF_CHANNEL = 6
 DEFAULT_GPIO21_REPEAT_WINDOW_SECONDS = 10.0
 DEFAULT_X728_SOFT_SHUTDOWN_LINE = 26
 DEFAULT_X728_SOFT_SHUTDOWN_PULSE_SECONDS = 2.0
+DEFAULT_X728_SHUTDOWN_COMMAND = Path("/usr/local/bin/x728-shutdown")
 DEFAULT_X728_REBOOT_PULSE_MINIMUM_SECONDS = 0.2
 DEFAULT_X728_SHUTDOWN_PULSE_MINIMUM_SECONDS = 0.6
 DEFAULT_SYSTEMCTL_PATH = "/usr/bin/systemctl"
@@ -489,49 +490,27 @@ def peer_is_loopback(address: str) -> bool:
 
 
 def run_x728_soft_shutdown(config: PowerActionConfig) -> None:
-    line = config.x728_soft_shutdown_line
-    pulse_seconds = config.x728_soft_shutdown_pulse_seconds
-    request = None
-    chip = None
     try:
-        chip = gpiod.Chip(DEFAULT_GPIO_CHIP)
-        line_settings = gpiod.LineSettings(
-            direction=Direction.OUTPUT,
-            output_value=gpiod.line.Value.INACTIVE,
-        )
-        request = chip.request_lines(
-            consumer=f"{DEFAULT_CONSUMER}-soft-shutdown",
-            config={line: line_settings},
-        )
         logging.warning(
-            "requesting X728 soft shutdown gpio_line=%s pulse_seconds=%.3f",
-            line,
-            pulse_seconds,
+            "requesting X728 soft shutdown command=%s",
+            DEFAULT_X728_SHUTDOWN_COMMAND,
         )
-        request.set_value(line, gpiod.line.Value.ACTIVE)
-        time.sleep(pulse_seconds)
-        request.set_value(line, gpiod.line.Value.INACTIVE)
+        result = subprocess.run(
+            [str(DEFAULT_X728_SHUTDOWN_COMMAND)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
         with soft_shutdown_lock:
             soft_shutdown_status.update(state="pulse_complete", error=None)
-        logging.warning("X728 soft shutdown pulse completed gpio_line=%s", line)
-    except Exception as exc:
+        logging.warning(
+            "X728 soft shutdown command completed stdout=%s",
+            result.stdout.strip(),
+        )
+    except (OSError, subprocess.CalledProcessError) as exc:
         with soft_shutdown_lock:
             soft_shutdown_status.update(state="failed", error=str(exc))
         logging.exception("X728 soft shutdown failed: %s", exc)
-    finally:
-        if request is not None:
-            try:
-                request.set_value(line, gpiod.line.Value.INACTIVE)
-            except Exception as exc:
-                logging.error(
-                    "failed to restore X728 soft shutdown gpio_line=%s LOW: %s",
-                    line,
-                    exc,
-                )
-            finally:
-                request.release()
-        if chip is not None:
-            chip.close()
 
 
 def request_x728_soft_shutdown(config: PowerActionConfig) -> bool:
