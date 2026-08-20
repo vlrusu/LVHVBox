@@ -56,6 +56,10 @@ def collect_power_metrics(psu, prefix, timestamp):
         add_numeric_metric(lines, f"{prefix}.channels.ch{channel}.v6_v", value, timestamp)
     for channel, value in enumerate(psu.QuerySwitchingCurrents()):
         add_numeric_metric(lines, f"{prefix}.channels.ch{channel}.i6_a", value, timestamp)
+    for channel, value in enumerate(psu.QueryWireVoltages()):
+        add_numeric_metric(lines, f"{prefix}.channels.ch{channel}.vhv_v", value, timestamp)
+    for channel, value in enumerate(psu.QueryWireCurrents()):
+        add_numeric_metric(lines, f"{prefix}.channels.ch{channel}.ihv_ua", value, timestamp)
 
     add_numeric_metric(lines, f"{prefix}.pcb_temp_c", psu.QueryPcbTemp(), timestamp)
     return lines
