@@ -79,14 +79,13 @@ void* client_handler(void* args){
     as_uints(message->blocks[1], &u);
     task.command.name = (uint32_t) (*u);
     free(u);
-    sprintf(msg, "client %d received command label %u", addr, task.command.name);
+    snprintf(msg, sizeof(msg), "client %d received command %s (%" PRIu32 ")",
+             addr, command_name(task.command.name), task.command.name);
     log_write(logger, msg, LOG_DETAIL);
 
     as_uints(message->blocks[2], &u);
     task.command.type = (uint32_t) (*u);
     free(u);
-    sprintf(msg, "client %d received command label %u", addr, task.command.name);
-    log_write(logger, msg, LOG_DETAIL);
 
     char* c;
     as_chars(message->blocks[3], &c);

@@ -386,7 +386,8 @@ void* pico_loop(void* args){
     }
     QueueItem_t* item = queue_pop(queue);
     task_t* task = (task_t*) (item->payload);
-    sprintf(msg, "pico %d received command label %u", pico->id, task->command.name);
+    snprintf(msg, sizeof(msg), "pico %d received command %s (%" PRIu32 ")",
+             pico->id, command_name(task->command.name), task->command.name);
     log_write(logger, msg, LOG_VERBOSE);
 
     Message_t* rv = NULL;

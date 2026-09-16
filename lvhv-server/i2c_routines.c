@@ -618,7 +618,8 @@ void* i2c_loop(void* args){
     // pop next task off the stack
     QueueItem_t* item = queue_pop(queue);
     task_t* task = (task_t*) (item->payload);
-    sprintf(msg, "i2c received command label %u", task->command.name);
+    snprintf(msg, sizeof(msg), "i2c received command %s (%" PRIu32 ")",
+             command_name(task->command.name), task->command.name);
     log_write(logger, msg, LOG_VERBOSE);
 
     // execute i2c operation

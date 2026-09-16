@@ -14,4 +14,7 @@ typedef struct {
   float float_parameter;
 } command_t;
 
+// Return the protocol command name, or "unknown" for an unrecognized ID.
+const char* command_name(uint32_t name);
+
 #endif
