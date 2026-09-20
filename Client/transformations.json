@@ -39,6 +39,8 @@
     "HV_RAIL_1.8V":   { "expression": "x / 8",                                                     "cmdid": 37 },
     "HV_RAIL_2.5V":   { "expression": "x / 8",                                                     "cmdid": 38 },
     "HV_TEMP":        { "expression": "x / 16 - 273.15",                                           "cmdid": 39 },
+    "ILP_TEMP":       { "expression": "(x if x < 32768 else x - 65536) / 100",                     "cmdid": 40, "unit": "C" },
+    "ILP_PRESSURE":   { "expression": "(x if x < 2147483648 else x - 4294967296) / 524288",        "cmdids": [41, 42], "unit": "hPa" },
     "DBG":            {"expression":"x",                          "cmdid":254, "format": "hex"},
     "HB":             {"expression":"x", "cmdid":253,"format": "int"},
     "ID":             {"expression":"x", "cmdid":252, "format": "int"}    

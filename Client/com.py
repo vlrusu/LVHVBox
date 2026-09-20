@@ -169,6 +169,9 @@ if __name__ == "__main__":
 
             time.sleep(0.5)
             rule = rules[name]
+            if "cmdids" in rule:
+                print(f"{name}: requires com_v2.py and updated ROC CPU software")
+                continue
             cmdid = rule["cmdid"]
             expression = rule["expression"]
             format_spec = rule.get("format", "float")  # default to "float" if not present
