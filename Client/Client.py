@@ -11,6 +11,7 @@ import ctypes
 from MessagingConnection import MessagingConnection
 from I2CSensorConnection import I2CSensorConnection
 from PiHealthConnection import PiHealthConnection
+from RS485Connection import RS485Connection
 import sys
 import os
 import re
@@ -71,6 +72,9 @@ commands = [
     Command("pico_current", "pico", "Pico Current, {:.2f} A", is_channel_cmd=False),
 ]
 special_commands = [
+    "rs485_list",
+    "rs485_read",
+    "rs485_status",
     "ac_status",
     "ac_events",
     "battery_status",
@@ -258,6 +262,12 @@ parser.add_argument(
     default="/etc/mu2e-tracker-lvhv-tools/commands.h",
     help="Path to opcode macro header"
 )
+parser.add_argument('--rs485-local-port', type=int, default=12004,
+                    help='Local SSH tunnel port for RS485 telemetry')
+parser.add_argument('--rs485-remote-port', type=int, default=12004,
+                    help='Remote RS485 HTTP server port')
+parser.add_argument('--rs485-timeout', type=float, default=30.0,
+                    help='HTTP timeout, including bus holdoff and both pressure words')
 args = parser.parse_args()
 current_host = None
 tunnel_processes = []
@@ -524,6 +534,29 @@ def close_tunnels():
 
 health_connection = None
 sensor_connection = None
+rs485_connection = None
+connection = None
+
+
+def get_rs485_connection():
+    global rs485_connection
+    if rs485_connection is None:
+        host = normalize_host(current_host or first_host())
+        port = args.rs485_remote_port
+        if host not in ("localhost", "127.0.0.1"):
+            port = ensure_tunnel(host, args.user, args.gateway,
+                                 args.rs485_local_port, args.rs485_remote_port)
+            host = "127.0.0.1"
+        rs485_connection = RS485Connection(host, port, args.rs485_timeout)
+    return rs485_connection
+
+
+def get_lvhv_connection():
+    global connection
+    if connection is None:
+        read_commands(args.header)
+        connection = connect_to_host(current_host or first_host())
+    return connection
 
 
 def get_health_connection():
@@ -718,6 +751,26 @@ def process_command(line):
     if not keys:
         return
 
+    if keys[0] == "rs485_list":
+        if len(keys) != 1:
+            raise ValueError("usage: rs485_list")
+        for item in get_rs485_connection().get_parameters()['parameters']:
+            print(item['name'] + (" [" + item['unit'] + "]" if item.get('unit') else ""))
+        return
+    if keys[0] == "rs485_status":
+        if len(keys) != 1:
+            raise ValueError("usage: rs485_status")
+        print(get_rs485_connection().get_health())
+        return
+    if keys[0] == "rs485_read":
+        if len(keys) < 3:
+            raise ValueError("usage: rs485_read <ROC/MN address> <variable> [variable ...]")
+        for name in keys[2:]:
+            result = get_rs485_connection().read(keys[1], name)
+            unit = " " + result['unit'] if result.get('unit') else ""
+            print(f"{result['panel']} {result['formatted']}{unit}")
+        return
+
     if keys[0] == "ac_status":
         print_ac_status()
         return
@@ -765,6 +818,8 @@ def process_command(line):
     if command == None:
         print("Unknown command")
         return
+
+    get_lvhv_connection()
 
     if command.name == "current_burst":
         return current_burst(connection, keys)
@@ -835,16 +890,16 @@ def run_interactive():
         parser.error("multiple hosts require --command/-c")
 
     current_host = first_host()
-    connection = connect_to_host(current_host)
-
-    path = args.header
-    read_commands(path)
+    connection = None
 
     try:
         while True:
             line = input("Input Command: ")
             if line:
-                process_command(line)
+                try:
+                    process_command(line)
+                except (RuntimeError, ValueError) as exc:
+                    print(exc)
     except KeyboardInterrupt:
         exit(0)
     except AssertionError:
@@ -864,27 +919,29 @@ def run_interactive():
 
 
 def run_one_shot():
-    global connection, current_host, health_connection, sensor_connection
+    global connection, current_host, health_connection, sensor_connection, rs485_connection
 
     hosts = expanded_hosts() or ["localhost"]
-    read_commands(args.header)
+    failed = False
     consecutive_tunnel_failures = 0
 
     for index, host in enumerate(hosts):
         current_host = host
         health_connection = None
         sensor_connection = None
+        rs485_connection = None
         connection = None
         if len(hosts) > 1:
             print(f"{host}:")
         try:
-            connection = connect_to_host(host)
             for command_line in args.command:
                 process_command(command_line)
             consecutive_tunnel_failures = 0
         except AssertionError:
+            failed = True
             print("Ensure that all arguments are valid")
         except Exception as e:
+            failed = True
             print((type(e), e))
             if isinstance(e, RuntimeError) and "tunnel" in str(e).lower():
                 consecutive_tunnel_failures += 1
@@ -904,9 +961,11 @@ def run_one_shot():
         if index < len(hosts) - 1 and args.host_delay > 0:
             time.sleep(args.host_delay)
 
+    return int(failed)
+
 
 if __name__ == "__main__":
     if args.command:
-        run_one_shot()
+        sys.exit(run_one_shot())
     else:
         run_interactive()

@@ -5,9 +5,11 @@
 
 import argparse
 import atexit
+import fcntl
 import json
 import os.path
 import re
+import select
 import socket
 import subprocess
 import time
@@ -58,6 +60,10 @@ atexit.register(cleanup_tunnels)
 def set_voltage(supply, channel, voltage):
     tripped = supply.QueryTripStatus(channel)
     if tripped:
+        if voltage <= 0:
+            print('Channel %d is tripped; setting DAC to 0' % channel)
+            supply._set_hv_by_dac(channel, 0)
+            return
         print('Skipping channel %d: trip status is set' % channel)
         return
     supply.SetWireVoltage(channel, voltage)
@@ -195,6 +201,77 @@ def psu_host_key(host):
     if match:
         return match.group(1)
     return host
+
+class RampLock:
+    def __init__(self, file=None, process=None):
+        self.file = file
+        self.process = process
+
+    def close(self):
+        if self.file is not None:
+            self.file.close()
+            self.file = None
+        if self.process is not None:
+            if self.process.stdin is not None:
+                self.process.stdin.close()
+            try:
+                self.process.wait(timeout=2.0)
+            except subprocess.TimeoutExpired:
+                self.process.terminate()
+                self.process.wait()
+            self.process = None
+
+def acquire_local_ramp_lock():
+    lock = open('/tmp/ramp-hv.lock', 'a+')
+    try:
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        lock.close()
+        return None
+    lock.seek(0)
+    lock.truncate()
+    lock.write('%d\n' % os.getpid())
+    lock.flush()
+    return RampLock(file=lock)
+
+def acquire_remote_ramp_lock(host, args):
+    ssh_cmd = [
+        'ssh',
+        '-T',
+        '-o',
+        'ConnectTimeout=%d' % args.ssh_connect_timeout,
+        '-o',
+        'ConnectionAttempts=1',
+        '%s@%s' % (args.user, normalize_host(host)),
+        '-J',
+        args.gateway,
+        "flock -n /tmp/ramp-hv.lock sh -c 'echo LOCKED; cat >/dev/null'",
+    ]
+    if args.ssh_batch_mode:
+        ssh_cmd[1:1] = ['-o', 'BatchMode=yes']
+
+    process = subprocess.Popen(ssh_cmd, stdin=subprocess.PIPE,
+                               stdout=subprocess.PIPE,
+                               stderr=subprocess.DEVNULL, text=True)
+    ready, _, _ = select.select([process.stdout], [], [],
+                                args.ssh_connect_timeout + 2.0)
+    if ready and process.stdout.readline().strip() == 'LOCKED':
+        return RampLock(process=process)
+
+    if process.poll() is None:
+        process.terminate()
+    return_code = process.wait()
+    if return_code == 1:
+        return None
+    raise RuntimeError('Failed to acquire ramp lock on %s (ssh exit %d)' % (
+        host, return_code
+    ))
+
+def acquire_ramp_lock(host, args):
+    """Acquire the lock on the PSU so clients on all machines share it."""
+    if normalize_host(host) in ('localhost', '127.0.0.1'):
+        return acquire_local_ramp_lock()
+    return acquire_remote_ramp_lock(host, args)
 
 def subconfig_for_host(host, config):
     key = psu_host_key(host)
@@ -346,25 +423,31 @@ def main(args):
         print('No channels left to ramp after applying HV off defaults')
         return
 
-    psu_label = psu_host_key(selected_host(args))
-    connection_host, connection_port = connection_target(args)
+    target_host = selected_host(args)
+    psu_label = psu_host_key(target_host)
+    ramp_lock = acquire_ramp_lock(target_host, args)
+    if ramp_lock is None:
+        print('A ramp-hv process is already running on %s; not starting another' % psu_label)
+        return 1
+
     threads = []
     active_supplies = []
-    for channel in channels:
-        supply = PowerSupplyServerConnection(connection_host, connection_port, args.header,
-                                             psu_label=psu_label)
-        active_supplies.append((supply, channel))
-        thread = threading.Thread(name='Channel %d' % channel,
-                                  daemon=True,
-                                  target=set_voltage,
-                                  args=(supply,channel,args.voltage),
-                                 )
-        threads.append(thread)
-
-    for thread in threads:
-        thread.start()
-
     try:
+        connection_host, connection_port = connection_target(args)
+        for channel in channels:
+            supply = PowerSupplyServerConnection(connection_host, connection_port, args.header,
+                                                 psu_label=psu_label)
+            active_supplies.append((supply, channel))
+            thread = threading.Thread(name='Channel %d' % channel,
+                                      daemon=True,
+                                      target=set_voltage,
+                                      args=(supply,channel,args.voltage),
+                                     )
+            threads.append(thread)
+
+        for thread in threads:
+            thread.start()
+
         while 0 < len(threads):
             for thread in list(threads):
                 thread.join(timeout=0.1)
@@ -382,6 +465,9 @@ def main(args):
         threads = join_threads(threads, 1.0)
         if 0 < len(threads):
             print('warning: %d ramp thread(s) still alive after cleanup' % len(threads))
+        ramp_lock.close()
+
+    return 0
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -414,7 +500,7 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
     try:
-        main(args)
+        raise SystemExit(main(args))
     except KeyboardInterrupt:
         raise SystemExit(130)
     finally:

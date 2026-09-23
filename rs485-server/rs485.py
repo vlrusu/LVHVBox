@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""Pi RS485 v2 scalar client. Hardware is opened only by main(), never on import.
-
-Wire codec copied from ROC_FW/tools/rs485_v2.py; no legacy-protocol support.
-Uses existing transformations.json and optional panel_calibrations.csv.
-"""
+"""Shared ROC RS485 v2 implementation; importing this module never opens hardware."""
 from dataclasses import dataclass
 import struct
 
@@ -97,9 +93,10 @@ class Packet:
         return int.from_bytes(self.payload[1:], 'little')
 
 
-# Pi transport and CLI. Importing the codec does not require Pi dependencies.
-import argparse
-from contextlib import ExitStack
+# Pi transport. Hardware dependencies are imported only when opening a bus.
+from datetime import datetime, timezone
+import threading
+from contextlib import ExitStack, contextmanager
 import csv
 import hashlib
 import json
@@ -166,7 +163,7 @@ class BusSession:
             try:
                 fcntl.flock(self.file, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError:
-                raise RuntimeError('another v2 client owns this UART') from None
+                raise RuntimeError('another RS485 process owns this UART; stop rs485-server before using com_v2.py') from None
             self.file.seek(0)
             content = self.file.read()
             self.state = json.loads(content) if content else {
@@ -177,14 +174,20 @@ class BusSession:
                     not isinstance(self.state.get('not_before'), (int, float)) or
                     not math.isfinite(self.state['not_before'])):
                 raise ValueError('invalid RS485 transaction state: ' + str(self.path))
-            delay = self.state['not_before'] - time.time()
-            if delay > 0:
-                print(f'Waiting {delay:.2f}s for previous response window', file=sys.stderr)
-                time.sleep(delay)
+            self.wait_ready()
             return self
         except BaseException:
             self.file.close()
             raise
+
+    def wait_ready(self):
+        delay = self.state['not_before'] - time.time()
+        if delay > 0:
+            print(f'Waiting {delay:.2f}s for previous response window', file=sys.stderr)
+            time.sleep(delay)
+        # This process has waited out the old window; keep the disk record
+        # until the next reservation/complete for interrupted-process safety.
+        self.state['not_before'] = 0.0
 
     def save(self):
         self.file.seek(0)
@@ -194,6 +197,8 @@ class BusSession:
         os.fsync(self.file.fileno())
 
     def reserve(self, window):
+        # Also enforce holdoff within a long-lived server session after failure.
+        self.wait_ready()
         transaction = self.state['next_id']
         self.state['next_id'] = (transaction + 1) & 0xFFFF
         self.state['not_before'] = time.time() + window
@@ -290,13 +295,20 @@ def read_rule(bus, address, rule):
     return (high << 16) | low
 
 
-def format_value(name, raw, rule, calibrations, panel):
+def convert_value(name, raw, rule, calibrations, panel):
     if name == 'Flow':
         factor, offset = calibrations[('A0', panel)]
         value = factor * raw + offset
     else:
-        # Same trusted local expressions and raw unsigned word as com.py.
+        # Expressions come only from trusted local configuration.
         value = eval(rule['expression'], {'__builtins__': {}}, {'x': raw})
+    if type(value) not in (int, float) or not math.isfinite(value):
+        raise ValueError('conversion did not produce a finite real number')
+    return value
+
+
+def format_value(name, raw, rule, calibrations, panel):
+    value = convert_value(name, raw, rule, calibrations, panel)
     kind = rule.get('format', 'float')
     if kind == 'int':
         return f'{name:<20} = {int(value):8d}'
@@ -305,101 +317,138 @@ def format_value(name, raw, rule, calibrations, panel):
     return f'{name:<20} = {value:8.4f}'
 
 
-def parse_args(argv=None):
-    here = Path(__file__).resolve().parent
-    parser = argparse.ArgumentParser(description='Read ROC scalar telemetry over RS485 v2.')
-    parser.add_argument('address', type=int, help='ROC/MN address, 0..511')
-    parser.add_argument('--name', help='Parameter name; omit to read all transformation rules')
-    parser.add_argument('--rules', type=Path, default=here / 'transformations.json')
-    parser.add_argument('--calibrations', type=Path, default=here / 'panel_calibrations.csv')
-    parser.add_argument('--panel', help='Flow calibration key; default MN{address:03d}')
-    parser.add_argument('--port', default='/dev/ttyAMA0')
-    parser.add_argument('--gpiochip', default='/dev/gpiochip0')
-    parser.add_argument('--dir-pin', type=int, default=24, help='GPIO line offset, active-high DE')
-    parser.add_argument('--timeout', type=float, default=6.0,
-                        help='Response window in seconds, minimum 6 (default FPGA timers/delay)')
-    parser.add_argument('--debug', action='store_true', help='Print raw UART TX/RX to stderr')
-    parser.add_argument('--dry-run', action='store_true', help='Show requests without opening hardware')
-    args = parser.parse_args(argv)
-    if not 0 <= args.address <= 511:
-        parser.error('address must be 0..511')
-    if not math.isfinite(args.timeout) or args.timeout < 6:
-        parser.error('--timeout must be finite and at least 6 seconds')
-    if args.dir_pin < 0:
-        parser.error('--dir-pin must be nonnegative')
-    return args
+@contextmanager
+def open_bus(port='/dev/ttyAMA0', gpiochip='/dev/gpiochip0', dir_pin=24,
+             timeout=6.0, debug=False):
+    """Own the UART and GPIO until context exit; honor persisted reply holdoff."""
+    # Lazy imports: --help, --dry-run and offline tests need no Pi libraries.
+    import serial
+    import gpiod
+    from gpiod.line import Direction, Value
+    with ExitStack() as stack:
+        session = stack.enter_context(BusSession(default_lock_path(port)))
+        lines = stack.enter_context(gpiod.request_lines(
+            gpiochip, consumer='LVHVBox-rs485-v2',
+            config={dir_pin: gpiod.LineSettings(
+                direction=Direction.OUTPUT, output_value=Value.INACTIVE)}))
+        def direction(transmit):
+            lines.set_value(dir_pin, Value.ACTIVE if transmit else Value.INACTIVE)
+        # Explicit low before release even if opening UART or executing a read fails.
+        stack.callback(direction, False)
+        uart = stack.enter_context(serial.Serial(
+            port=port, baudrate=38400, bytesize=serial.EIGHTBITS,
+            parity=serial.PARITY_NONE, stopbits=serial.STOPBITS_ONE,
+            timeout=0.05, write_timeout=1.0, exclusive=True))
+        yield PiBus(uart, direction, session, timeout, debug)
 
 
-def main(argv=None):
-    args = parse_args(argv)
-    try:
-        with args.rules.open() as source:
-            rules = json.load(source)
-        targets = [args.name] if args.name else list(rules)
-        panel = args.panel or f'MN{args.address:03d}'
-        for name in targets:
-            if name not in rules:
-                raise ValueError(f'{name}: not found in {args.rules}')
-            command_ids(rules[name])
-            compile(rules[name]['expression'], str(args.rules), 'eval')
-        calibrations = {}
-        if 'Flow' in targets and not args.dry_run:
-            with args.calibrations.open(newline='') as source:
+DATA_DIR = Path(__file__).resolve().parent
+
+
+class BusyError(RuntimeError):
+    pass
+
+
+class RS485:
+    """Named telemetry and exclusive bus ownership shared by server and CLI.
+
+    Construction loads configuration only. Use ``with RS485() as device`` to
+    acquire the UART/GPIO once, read any number of variables, then release them.
+    ``bus_factory`` is an optional context-manager factory for offline testing.
+    """
+    def __init__(self, rules_path=None, calibrations_path=None, *,
+                 port='/dev/ttyAMA0', gpiochip='/dev/gpiochip0', dir_pin=24,
+                 timeout=6.0, debug=False, bus_factory=None):
+        if not math.isfinite(timeout) or timeout < 6:
+            raise ValueError('timeout must be finite and at least 6 seconds')
+        if type(dir_pin) is not int or dir_pin < 0:
+            raise ValueError('dir_pin must be a nonnegative integer')
+        self.rules = json.loads(Path(rules_path or DATA_DIR / 'transformations.json').read_text())
+        if not isinstance(self.rules, dict) or not self.rules:
+            raise ValueError('rules must be a nonempty object')
+        for rule in self.rules.values():
+            command_ids(rule)
+            compile(rule['expression'], '<transformation>', 'eval')
+            if rule.get('format', 'float') not in ('float', 'int', 'hex'):
+                raise ValueError('unknown transformation format')
+        self.calibrations = {}
+        path = Path(calibrations_path or DATA_DIR / 'panel_calibrations.csv')
+        # Missing calibrations do not disable unrelated variables. Flow is
+        # validated before its request is sent, never silently uncalibrated.
+        if path.exists():
+            with path.open(newline='') as source:
                 for row in csv.DictReader(source):
-                    calibrations[(row['variable'].strip(), row['mn'].strip())] = (
-                        float(row['factor']), float(row['offset']))
-            if ('A0', panel) not in calibrations:
-                raise ValueError(f'Flow: no calibration for A0,{panel}')
-        if args.dry_run:
-            index = 0
-            for name in targets:
-                for command in command_ids(rules[name]):
-                    packet = Packet(REQUEST, args.address, index & 0xFFFF, command)
-                    print(f'{name:<20} cmd={packet.command} request={packet.encode().hex(" ")}')
-                    index += 1
-            return 0
+                    values = float(row['factor']), float(row['offset'])
+                    if not all(math.isfinite(x) for x in values):
+                        raise ValueError('non-finite Flow calibration')
+                    self.calibrations[(row['variable'].strip(), row['mn'].strip())] = values
+        self._bus_factory = bus_factory or (lambda: open_bus(port, gpiochip, dir_pin, timeout, debug))
+        self._bus = None
+        self._stack = None
+        self.lock = threading.Lock()
 
-        # Lazy imports: --help, --dry-run and offline tests need no Pi libraries.
-        import serial
-        import gpiod
-        from gpiod.line import Direction, Value
-        with ExitStack() as stack:
-            session = stack.enter_context(BusSession(default_lock_path(args.port)))
-            lines = stack.enter_context(gpiod.request_lines(
-                args.gpiochip, consumer='LVHVBox-rs485-v2',
-                config={args.dir_pin: gpiod.LineSettings(
-                    direction=Direction.OUTPUT, output_value=Value.INACTIVE)}))
-            def direction(transmit):
-                lines.set_value(args.dir_pin, Value.ACTIVE if transmit else Value.INACTIVE)
-            # Explicit low before release even if opening UART or executing a read fails.
-            stack.callback(direction, False)
-            uart = stack.enter_context(serial.Serial(
-                port=args.port, baudrate=38400, bytesize=serial.EIGHTBITS,
-                parity=serial.PARITY_NONE, stopbits=serial.STOPBITS_ONE,
-                timeout=0.05, write_timeout=1.0, exclusive=True))
-            bus = PiBus(uart, direction, session, args.timeout, args.debug)
-            failed = False
-            for name in targets:
-                try:
-                    raw = read_rule(bus, args.address, rules[name])
-                    print(format_value(name, raw, rules[name], calibrations, panel))
-                except ROCError as exc:
-                    print(f'{name}: {exc}', file=sys.stderr)
-                    failed = True
-                except (TimeoutError, OSError):
-                    # Stop the whole scan; a pending reply may still own the bus.
-                    raise
-                except (ValueError, ArithmeticError) as exc:
-                    print(f'{name}: conversion failed: {exc}', file=sys.stderr)
-                    failed = True
-            return int(failed)
-    except KeyboardInterrupt:
-        print('Interrupted; RS485 driver released.', file=sys.stderr)
-        return 130
-    except (OSError, ValueError, RuntimeError, KeyError, ImportError) as exc:
-        print(f'RS485 v2: {exc}', file=sys.stderr)
-        return 1
+    def __enter__(self):
+        with self.lock:
+            if self._stack is not None:
+                raise RuntimeError('RS485 device is already open')
+            with ExitStack() as stack:
+                self._bus = stack.enter_context(self._bus_factory())
+                self._stack = stack.pop_all()
+        return self
 
+    def __exit__(self, *exc):
+        self.close()
 
-if __name__ == '__main__':
-    sys.exit(main())
+    def close(self):
+        # Wait for an active read to finish before releasing the device.
+        with self.lock:
+            try:
+                if self._stack is not None:
+                    self._stack.close()
+            finally:
+                self._stack = self._bus = None
+
+    def parameters(self):
+        return {'parameters': [dict(name=name, commands=command_ids(rule),
+                                    format=rule.get('format', 'float'), unit=rule.get('unit'))
+                               for name, rule in self.rules.items()]}
+
+    def validate(self, address, name, panel=None, *, require_calibration=True):
+        if type(address) is not int or not 0 <= address <= 511:
+            raise ValueError('address must be 0..511 (ROC/MN address, not LV/HV channel)')
+        if name not in self.rules:
+            raise ValueError('unknown parameter: ' + name)
+        panel = panel or f'MN{address:03d}'
+        if require_calibration and name == 'Flow' and ('A0', panel) not in self.calibrations:
+            raise ValueError('Flow: no calibration for A0,' + panel)
+        return panel
+
+    def preview(self, address, names):
+        """Describe wire requests without acquiring GPIO/UART or reserving IDs."""
+        requests = []
+        for name in names:
+            self.validate(address, name, require_calibration=False)
+            for command in command_ids(self.rules[name]):
+                packet = Packet(REQUEST, address, len(requests) & 0xFFFF, command)
+                requests.append(dict(name=name, command=command, request=packet.encode().hex(' ')))
+        return requests
+
+    def read(self, address, name, panel=None):
+        panel = self.validate(address, name, panel)
+        if not self.lock.acquire(blocking=False):
+            raise BusyError('RS485 bus is busy; request was not sent')
+        try:
+            if self._bus is None:
+                raise RuntimeError('RS485 device is not open; use it as a context manager')
+            rule = self.rules[name]
+            # Keep both pressure words under one lock. BusSession.reserve()
+            # honors pending holdoff after a timeout even without reopening.
+            raw = read_rule(self._bus, address, rule)
+            value = convert_value(name, raw, rule, self.calibrations, panel)
+            return dict(address=address, panel=panel, name=name, raw=raw,
+                        value=value, unit=rule.get('unit'),
+                        formatted=format_value(name, raw, rule, self.calibrations, panel),
+                        commands=command_ids(rule), atomic=len(command_ids(rule)) == 1,
+                        timestamp_utc=datetime.now(timezone.utc).isoformat())
+        finally:
+            self.lock.release()

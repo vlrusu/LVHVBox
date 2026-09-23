@@ -9,7 +9,7 @@ import time
 from MessagingConnection import MessagingConnection
 from WireAnalogDigitalConversion import WireAnalogDigitalConversion
 
-MAXDACALLOWED = 16383
+MAXDACALLOWED = 15000
 DAC_LOG_PATH = '/tmp/lvhv-dac-values.log'
 
 class SharedValue:
@@ -245,12 +245,19 @@ class PowerSupplyServerConnection():
         self._set_hv_by_dac(channel, dac)
         time.sleep(pause)
 
-    def _take_dac_steps(self, channel, step, steps, pause):
+    def _take_dac_steps(self, channel, step, steps, pause, trip_zero=False):
         current = self.QueryLastHVSetting(channel)
         for i in range(steps):
             if self.GetHVLock(channel):
                 rv = self.QueryWireVoltage(channel)
                 return rv
+            if self.QueryTripStatus(channel):
+                if trip_zero:
+                    print('error: channel %d tripped; setting DAC to 0' % channel)
+                    self._timed_dac_set(channel, 0, pause)
+                    return self.QueryWireVoltage(channel)
+                print('error: channel %d tripped; stopping ramp' % channel)
+                return None
             target = current + step
             if target < 0:
                 self._timed_dac_set(channel, 0, pause)
@@ -262,7 +269,7 @@ class PowerSupplyServerConnection():
         rv = self.QueryWireVoltage(channel)
         return rv
 
-    def _walk_dac_steps(self, channel, target, step, pause, readback):
+    def _walk_dac_steps(self, channel, target, step, pause, readback, trip_zero=False):
         sign = +1
         current = self.QueryWireVoltage(channel)
         if target < current:
@@ -274,7 +281,14 @@ class PowerSupplyServerConnection():
             if self.GetHVLock(channel):
                 current = self.QueryWireVoltage(channel)
                 return current
-            current = self._take_dac_steps(channel, step, readback, pause)
+            if self.QueryTripStatus(channel):
+                if trip_zero:
+                    print('error: channel %d tripped; setting DAC to 0' % channel)
+                    self._timed_dac_set(channel, 0, pause)
+                    return self.QueryWireVoltage(channel)
+                print('error: channel %d tripped; stopping ramp' % channel)
+                return None
+            current = self._take_dac_steps(channel, step, readback, pause, trip_zero)
             if current is None:
                 return None
             remaining = target - current
@@ -284,11 +298,11 @@ class PowerSupplyServerConnection():
         return current
 
 
-    def _take_macro_step(self, channel, target, step, pause, readback):
+    def _take_macro_step(self, channel, target, step, pause, readback, trip_zero=False):
         if self.GetHVLock(channel):
             rv = self.QueryWireVoltage(channel)
             return rv
-        rv = self._walk_dac_steps(channel, target, step, pause, readback)
+        rv = self._walk_dac_steps(channel, target, step, pause, readback, trip_zero)
         return rv
 
     def _set_wire_voltage(self, channel, voltage):
@@ -312,6 +326,10 @@ class PowerSupplyServerConnection():
 
         stop = False
         while not stop:
+            if voltage <= 0 and self.QueryLastHVSetting(channel) <= 0:
+                last_action = 'stop @ DAC 0'
+                break
+
             sign = +1
             current = self.QueryWireVoltage(channel)
             if voltage < current:
@@ -321,18 +339,25 @@ class PowerSupplyServerConnection():
             if self.GetHVLock(channel):
                 last_action = 'HV lock set'
                 stop = True
-            elif remaining < min_tolerance:
+            elif self.QueryTripStatus(channel):
+                if voltage <= 0:
+                    last_action = 'trip status set; DAC 0'
+                    print('error: channel %d tripped; setting DAC to 0' % channel)
+                    self._set_hv_by_dac(channel, 0)
+                else:
+                    last_action = 'trip status set'
+                    print('error: channel %d tripped; stopping ramp' % channel)
+                stop = True
+            elif 0 < voltage and remaining < min_tolerance:
                 tup = (target, current, remaining, min_tolerance)
                 last_action = 'stop @ %.1f (%.1f): %.1f vs %.1f' % tup
-                stop = True
-            elif voltage <= 0 and self.QueryLastHVSetting(channel) <= 0:
-                last_action = 'stop @ DAC 0'
                 stop = True
             elif remaining < 2*med_tolerance:
                 target = voltage
                 last_action = 'min_step'
                 current = self._take_macro_step(channel, target,
-                                                min_step, min_pause, min_readback)
+                                                min_step, min_pause, min_readback,
+                                                voltage <= 0)
                 if current is None:
                     last_action = 'DAC limit exceeded'
                     stop = True
@@ -340,7 +365,8 @@ class PowerSupplyServerConnection():
                 last_action = 'med_step'
                 target = voltage - sign*med_tolerance
                 current = self._take_macro_step(channel, target,
-                                                med_step, med_pause, med_readback)
+                                                med_step, med_pause, med_readback,
+                                                voltage <= 0)
                 if current is None:
                     last_action = 'DAC limit exceeded'
                     stop = True
@@ -348,7 +374,8 @@ class PowerSupplyServerConnection():
                 last_action = 'max_step'
                 target = voltage - sign*max_tolerance
                 current = self._take_macro_step(channel, target,
-                                                max_step, max_pause, max_readback)
+                                                max_step, max_pause, max_readback,
+                                                voltage <= 0)
                 if current is None:
                     last_action = 'DAC limit exceeded'
                     stop = True

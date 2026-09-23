@@ -81,6 +81,8 @@ rsync ${psmodule} ${python}     || exit_on_error "failed to copy python module"
 rsync ${hvmodule} ${python}     || exit_on_error "failed to copy python module"
 rsync ${hvdac} ${etc}           || exit_on_error "failed to copy hv dac calibration"
 rsync ${client} ${ctarget}      || exit_on_error "failed to copy python client"
+rsync ../Client/RS485Connection.py "${lib}/python3/dist-packages/" \
+  || exit_on_error "failed to copy RS485 connection module"
 rsync ${gui} ${gtarget}         || exit_on_error "failed to copy gui monitor"
 rsync ${service} ${starget}     || exit_on_error "failed to copy systemd service"
 rsync ${desktop} ${dtarget}     || exit_on_error "failed to copy gui desktop entry"

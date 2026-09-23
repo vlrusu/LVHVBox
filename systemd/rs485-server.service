@@ -1,0 +1,18 @@
+[Unit]
+Description=Mu2e Tracker RS485 v2 telemetry server
+After=network.target
+
+[Service]
+Type=exec
+User=mu2e
+WorkingDirectory=/home/mu2e/LVHVBox
+ExecStart=/usr/bin/python3 /home/mu2e/LVHVBox/rs485-server/rs485_server.py
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+# Share the RS485 class transaction lock with the direct CLI; no PrivateTmp.
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
