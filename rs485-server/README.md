@@ -40,6 +40,14 @@ Defaults: `/dev/ttyAMA0`, 38400 baud/8N1, `/dev/gpiochip0`, GPIO24 active-high D
 Data paths default beside `rs485.py`, independent of the working directory.
 Python 3, pyserial and the gpiod **v2** bindings are required on the Pi.
 
+On Linux, transmit completion polls `TIOCSERGETLSR` for `TIOCSER_TEMT` before
+lowering GPIO24. This waits for the output queue and physical UART transmitter
+to empty, avoiding millisecond-scale `tcdrain()` wake-up delay that can overlap
+the FPGA's 1 ms direct reply. Unsupported UART drivers warn and fall back to
+`tcdrain()`; fast replies may fail on those drivers. This is not a real-time
+scheduling guarantee. PSU0/MN269 was verified with the hardware-empty method
+after reproducing a lost reply with `tcdrain()` on 2026-09-23.
+
 ## Server
 
 From the checkout root:
@@ -113,6 +121,7 @@ From the checkout root on the laptop (or use `localhost` on the Pi):
 
 ```sh
 python3 Client/Client.py psu8 -c rs485_list
+python3 Client/Client.py psu8 -c 'rs485_read MN253'
 python3 Client/Client.py psu8 -c 'rs485_read MN253 ROC_TEMP'
 python3 Client/Client.py psu8 -c 'rs485_read 253 DBG ILP_TEMP ILP_PRESSURE Flow'
 python3 Client/Client.py psu8
@@ -120,6 +129,9 @@ python3 Client/Client.py psu8
 
 The interactive prompt accepts these commands, `rs485_status`, and existing
 LV/HV commands. RS485-only use does not need `lvhv-server` or its opcode header.
+Omit variable names to discover and read every variable advertised by the server,
+in the server's order. Supplying names reads only those variables. Reads remain
+sequential and stop on the first error; earlier successful values stay printed.
 Use `--gateway mu2etrk@mu2egateway01.fnal.gov` if required by your SSH setup.
 `--rs485-local-port` and `--rs485-remote-port` default to 12004;
 `--rs485-timeout` defaults to 30 seconds. Increase this when increasing serial
@@ -139,7 +151,7 @@ Bind defaults to `127.0.0.1:12004`. The unauthenticated endpoint is intended
 for loopback access through the client's SSH tunnel. Rules are trusted local
 configuration loaded at startup; callers cannot submit expressions/command IDs.
 
-Reads are serialized by the class; concurrent attempts return HTTP409 without
+Reads are serialized by the class; concurrent attempts return HTTP 409 without
 sending or queuing. The process retains UART ownership through success and
 failure. Each subsequent transaction honors any pending response holdoff.
 Flow requires the panel's A0 calibration. Pressure holds the lock across both
@@ -180,3 +192,126 @@ Tests use simulated hardware and a loopback HTTP server. They cover all45
 transformations, real Client.py CLI, exclusive ownership even when idle,
 UART reuse across reads, timeout holdoff without reopening, cleanup, concurrent
 request rejection, and failed pressure words.
+
+
+## Manual golden-image recovery
+
+Requires the new ROC FPGA recovery HDL. No automatic recovery occurs on startup,
+CPU absence, telemetry failure, or timeout. In Client, `rs485_recovery_status MN253`
+reads the FPGA recovery status without CPU code.
+
+**[FLASHES FIRMWARE / AFFECTS DAQ]** The explicit command
+`rs485_recover_golden MN253` activates SPI image 0 on that one panel. Finish any
+SPI programming and stop the affected DAQ first. The valid running FPGA must
+contain the recovery handler, and the golden image must restore the CPU boot
+path. An acceptance ACK is not verification that programming/boot succeeded.
+The client reports `boot_verified: false`. Verify firmware identity/CPU response
+separately; a lost ACK means an unknown outcome, and is never automatically retried.
+
+The server endpoint is POST `/recover-golden` with Content-Type
+`application/json` and `{"address":253,"action":"activate-golden"}`.
+There is no activation GET route or arbitrary image selection. Read-only status
+is GET `/recovery-status?address=253`. Both share the existing bus lock.
+Keep the default loopback listener and access remotely through the SSH tunnel.
+
+For direct UART use after stopping the server, `com_v2.py 253 --recover-golden`
+performs the same manual action; `--dry-run` previews it with no hardware access.
+`com_v2.py 253 --recovery-status` only reads status. Old FPGA images ignore the new
+packet types and time out. No automatic fallback to a CPU command is attempted.
+
+
+## FPGA panel identity
+
+`rs485_panel_id MN253` in Client reads the cached, validated NVM panel ID directly
+from the FPGA, without ROC CPU software. Example output:
+`MN253 panel ID: 253 (FPGA cached NVM)`.
+
+The read-only HTTP endpoint is GET `/panel-id?address=253`. The direct UART CLI
+is `com_v2.py 253 --panel-id` (stop the server first to release the UART);
+`--dry-run` prints the frame without hardware access. It sends type03/command02
+with an empty payload and expects type04/status0 plus the 16-bit panel ID.
+This differs from the existing CPU-handled telemetry variable `ID`.
+
+Only the addressed panel with a valid cached NVM identity replies. Old firmware
+or an absent panel times out. No recovery/activation is requested. The query uses
+the existing host timeout and a separate 1 ms FPGA turnaround at 50 MHz; automatic scanning is not
+implemented by this command.
+
+## Direct FPGA temperature and rails
+
+With FPGA firmware implementing the direct TVS extension, the read-only Client
+command `rs485_direct_read MN253` reads ROC_RAIL_1V, ROC_RAIL_1.8V,
+ROC_RAIL_2.5V and ROC_TEMP without the CPU. Select one or more with, for example,
+`rs485_direct_read MN253 ROC_TEMP ROC_RAIL_1V`. The existing `rs485_read` and
+CPU implementation remain available.
+
+GET `/direct-read?address=253&name=ROC_TEMP` uses type03 request/type04 response,
+empty payload and commands03/04/05/06 respectively for the three rails and
+temperature. Responses use the existing transformations; `direct_command`
+metadata is separate from the original `cmdid`. `/parameters` advertises this
+metadata. Returned results identify `source: "FPGA TVS"` and the direct command.
+A direct TVS read performs no CPU fallback, activation or discovery scan.
+
+The FPGA caches samples independently of the CPU RAM read port. Samples not yet
+acquired or older than one second at 50 MHz return status7, surfaced as an HTTP
+502 error rather than a measurement. Samples are latched on request acceptance;
+the four reads are sequential, not a simultaneous sample. Fabric clocks, TVS
+acquisition and a validated NVM panel identity must be operational. Old firmware
+may return unsupported or time out. Existing UART locking, timeout and holdoff
+remain in effect; no automatic retries are added.
+
+Direct UART CLI, with the service stopped: `python3 com_v2.py 253 --direct`
+or `python3 com_v2.py 253 --direct ROC_TEMP`. Adding `--dry-run` only previews
+frames and needs no Pi hardware libraries. Implementation and tests are offline;
+the new FPGA and host software still need to be built/deployed.
+
+The direct FPGA interface now uses a separate 1 ms response turnaround at
+50 MHz (`DIRECT_TURNAROUND_CLKS=50000`), including panel ID, TVS and recovery
+responses. The legacy CPU delay remains unchanged. Expected direct read time is
+about 8–11 ms plus host/network overhead. Verify Pi driver release timing on the
+board after compilation/deployment; this is an offline timing change.
+
+## Fast panel discovery
+
+On service startup, the server scans addresses **0 through 300 inclusive** once
+using the read-only FPGA panel-ID request (type03/command02). Use firmware with
+the 1 ms direct turnaround on every connected panel before enabling this scan.
+`--no-discovery` skips the startup scan. `--check-config` never scans or opens
+the UART. Startup discovery finishes before the HTTP server handles requests.
+
+In Client:
+
+```text
+rs485_panels
+rs485_discover
+rs485_discover 250 300
+```
+
+`rs485_panels` displays the most recent completed scan without bus traffic.
+`rs485_discover` rescans 0..300, or an inclusive range supplied as integers or
+MN identifiers (maximum address 511). The completed scan replaces the in-memory
+inventory; a partial-range scan describes only that range. No inventory is
+persisted across service restarts. No power or recovery action is triggered.
+
+Discovery waits 50 ms after transmitting each request. A missing reply retains
+a 5 ms guard before another transaction can start. The longer write/crash
+reservation is shortened only after the request has fully left the UART. An
+outstanding ordinary request's holdoff is honored before starting discovery.
+Normal CPU reads, individual panel-ID reads and recovery requests retain their
+existing timeout/holdoff. There is no CPU fallback and no automatic retry.
+
+A mostly empty 0..300 range should take roughly 17–20 seconds on PSU0, including
+transmission and guard time; OS scheduling and any prior pending request add
+latency. This full-scan estimate has not yet been tested on live panels.
+The scanner owns the bus for the whole scan; competing hardware requests get
+HTTP 409, while health and cached inventory remain available during a manual
+scan. A UART write/drain failure aborts instead of treating remaining panels
+as absent; the previous completed inventory remains available with its timestamp.
+
+HTTP GET `/discover` (or `/discover?start=0&end=300`) returns found addresses,
+panel names, no-response addresses, protocol errors, elapsed time and timestamp.
+GET `/panels` returns that cached snapshot, or `scanned:false` before a scan.
+The Client allows at least 60 seconds for the scan HTTP request. No-response
+does **not** prove a panel is absent: old firmware, invalid cached NVM ID, or
+communication problems also prevent discovery. Address 0 is probed as requested,
+but the current NVM reader only validates IDs 1..511.

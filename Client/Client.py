@@ -74,7 +74,13 @@ commands = [
 special_commands = [
     "rs485_list",
     "rs485_read",
+    "rs485_direct_read",
     "rs485_status",
+    "rs485_discover",
+    "rs485_panels",
+    "rs485_recover_golden",
+    "rs485_recovery_status",
+    "rs485_panel_id",
     "ac_status",
     "ac_events",
     "battery_status",
@@ -746,8 +752,7 @@ def print_ac_events(limit, time_mode="local"):
 
 # parse user input and issue a command
 def process_command(line):
-    keys = line.split(" ")  # command <channel> <input_value>
-    keys = [k for k in keys if 0 < len(k)]
+    keys = line.split()  # command <channel> <input_value>
     if not keys:
         return
 
@@ -762,11 +767,50 @@ def process_command(line):
             raise ValueError("usage: rs485_status")
         print(get_rs485_connection().get_health())
         return
-    if keys[0] == "rs485_read":
-        if len(keys) < 3:
-            raise ValueError("usage: rs485_read <ROC/MN address> <variable> [variable ...]")
-        for name in keys[2:]:
-            result = get_rs485_connection().read(keys[1], name)
+    if keys[0] in ("rs485_discover", "rs485_panels"):
+        rs485 = get_rs485_connection()
+        if keys[0] == "rs485_discover":
+            if len(keys) not in (1, 3):
+                raise ValueError("usage: rs485_discover [start end]; default 0 300, inclusive")
+            result = rs485.discover(*keys[1:])
+        else:
+            if len(keys) != 1:
+                raise ValueError("usage: rs485_panels")
+            result = rs485.get_panels()
+        if not result['scanned']:
+            print('No completed discovery scan; run rs485_discover after firmware is ready.')
+        else:
+            print(f"Scan {result['start']}..{result['end']}: {result['count']} panels, "
+                  f"{len(result['no_response'])} no response, {len(result['errors'])} errors; "
+                  f"{result['elapsed_s']:.3f}s at {result['timestamp_utc']}")
+            print('Panels: ' + (', '.join(result['panels']) or '(none responded)'))
+            for error in result['errors']:
+                print(f"MN{error['address']:03d}: {error['error']}")
+        return
+    if keys[0] == "rs485_panel_id":
+        if len(keys) != 2:
+            raise ValueError("usage: rs485_panel_id <ROC/MN address>")
+        result = get_rs485_connection().panel_id(keys[1])
+        print(f"{result['panel']} panel ID: {result['panel_id']} ({result['source']})")
+        return
+    if keys[0] in ("rs485_recover_golden", "rs485_recovery_status"):
+        if len(keys) != 2:
+            raise ValueError("usage: " + keys[0] + " <ROC/MN address>")
+        result = get_rs485_connection().recovery(keys[1], activate=keys[0] == "rs485_recover_golden")
+        print(result)
+        return
+    if keys[0] in ("rs485_read", "rs485_direct_read"):
+        if len(keys) < 2:
+            raise ValueError("usage: " + keys[0] + " <ROC/MN address> [variable ...]; omit variables to read all")
+        rs485 = get_rs485_connection()
+        direct = keys[0] == 'rs485_direct_read'
+        names = keys[2:] or [item['name'] for item in rs485.get_parameters()['parameters']
+                             if not direct or item.get('direct_command') is not None]
+        if not names:
+            raise ValueError('server does not advertise FPGA direct parameters')
+        read = rs485.direct_read if direct else rs485.read
+        for name in names:
+            result = read(keys[1], name)
             unit = " " + result['unit'] if result.get('unit') else ""
             print(f"{result['panel']} {result['formatted']}{unit}")
         return

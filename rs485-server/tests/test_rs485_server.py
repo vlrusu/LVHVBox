@@ -10,7 +10,7 @@ import threading
 import unittest
 from unittest.mock import Mock, patch
 from urllib.error import HTTPError
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'Client'))
@@ -116,6 +116,121 @@ class ServerTests(unittest.TestCase):
             worker.join(5)
         self.assertEqual(results[0]['raw'], 0x1F179400)
 
+    def test_direct_tvs_http_conversions_and_client_commands(self):
+        names = ['ROC_RAIL_1V','ROC_RAIL_1.8V','ROC_RAIL_2.5V','ROC_TEMP']
+        raws = [8000,14400,20000,4800]
+        self.bus.read_direct.side_effect = lambda address, cmd: raws[cmd-3]
+        advertised = [item['name'] for item in self.client.get_parameters()['parameters']
+                      if item.get('direct_command') is not None]
+        self.assertEqual(advertised, names)
+        for name, raw, cmd in zip(names, raws, range(3,7)):
+            result = self.client.direct_read('MN253',name)
+            self.assertEqual(result['raw'],raw)
+            self.assertAlmostEqual(result['value'],raw/16-273.15 if cmd==6 else raw/8)
+            self.assertEqual(result['source'],'FPGA TVS')
+            self.assertEqual(result['commands'],[cmd])
+        self.bus.read_direct.reset_mock()
+        result = self.run_cli('rs485_direct_read MN253')
+        self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+        for name in names:
+            self.assertIn(name,result.stdout)
+        self.assertEqual([call.args for call in self.bus.read_direct.call_args_list],
+                         [(253,cmd) for cmd in range(3,7)])
+        self.bus.read_direct.reset_mock()
+        result = self.run_cli('rs485_direct_read MN253 ROC_TEMP ROC_RAIL_1.8V')
+        self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+        self.assertEqual([call.args for call in self.bus.read_direct.call_args_list],[(253,6),(253,4)])
+        self.bus.read_scalar.assert_not_called()
+        self.bus.control.assert_not_called()
+        # Original names/commands still use the CPU path.
+        for name, cmd in zip(names,range(28,32)):
+            self.assertEqual(self.client.read(253,name)['commands'],[cmd])
+        self.assertEqual([call.args for call in self.bus.read_scalar.call_args_list],
+                         [(253,cmd) for cmd in range(28,32)])
+
+    def test_direct_tvs_rejects_invalid_busy_and_stale_without_fallback(self):
+        for path in ('/direct-read?address=512&name=ROC_TEMP',
+                     '/direct-read?address=253&name=DBG',
+                     '/direct-read?address=253&name=ROC_TEMP&name=ROC_RAIL_1V',
+                     '/direct-read?address=253&name=ROC_TEMP&command=1'):
+            with self.assertRaises(HTTPError) as caught:
+                urlopen(f'http://127.0.0.1:{self.server.server_port}'+path)
+            self.assertEqual(caught.exception.code,400)
+            caught.exception.close()
+        with self.telemetry.lock:
+            with self.assertRaisesRegex(RuntimeError,'busy'):
+                self.client.direct_read(253,'ROC_TEMP')
+        self.bus.read_direct.assert_not_called()
+        for error in (com.ROCError('FPGA TVS sample unavailable or stale'),TimeoutError('no reply')):
+            self.bus.read_direct.side_effect = error
+            with self.assertRaisesRegex(RuntimeError,str(error)):
+                self.client.direct_read(253,'ROC_TEMP')
+            self.assertFalse(self.telemetry.lock.locked())
+        self.assertEqual(self.bus.read_direct.call_count,2)
+        self.bus.read_scalar.assert_not_called()
+        self.bus.control.assert_not_called()
+
+    def test_fpga_panel_id_http_and_actual_client(self):
+        self.bus.read_panel_id.return_value = 253
+        result = self.client.panel_id('MN253')
+        self.assertEqual(result, {'address':253,'panel_id':253,'panel':'MN253','source':'FPGA cached NVM'})
+        self.bus.read_panel_id.assert_called_once_with(253)
+        self.bus.read_panel_id.reset_mock()
+        result = self.run_cli('rs485_panel_id MN253')
+        self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+        self.assertIn('MN253 panel ID: 253',result.stdout)
+        self.bus.read_panel_id.assert_called_once_with(253)
+        self.bus.control.assert_not_called()
+        self.bus.read_scalar.assert_not_called()
+        for path in ('/panel-id?address=512','/panel-id?address=-1',
+                     '/panel-id?address=253&address=254','/panel-id?address=253&name=ID'):
+            with self.assertRaises(HTTPError) as caught:
+                urlopen(f'http://127.0.0.1:{self.server.server_port}'+path)
+            self.assertEqual(caught.exception.code,400)
+            caught.exception.close()
+        self.bus.read_panel_id.assert_called_once_with(253)
+
+    def test_user_initiated_recovery_and_status(self):
+        self.bus.control.return_value = 0
+        self.client.get_health()
+        self.client.get_parameters()
+        self.client.read(253, 'DBG')
+        self.bus.control.assert_not_called()  # never activated by telemetry
+        result = self.client.recovery('MN253', activate=True)
+        self.assertTrue(result['accepted'])
+        self.assertFalse(result['boot_verified'])
+        self.assertEqual(result['image_index'], 0)
+        self.bus.control.assert_called_once_with(253, activate=True)
+        self.bus.control.reset_mock()
+        self.bus.control.return_value = 0x150E
+        self.assertTrue(self.client.recovery('MN253')['failed'])
+        self.bus.control.assert_called_once_with(253, activate=False)
+        self.bus.control.return_value = 0
+        self.bus.control.reset_mock()
+        cli_result = self.run_cli('rs485_recover_golden MN253')
+        self.assertEqual(cli_result.returncode, 0, cli_result.stderr + cli_result.stdout)
+        self.assertIn('boot_verified', cli_result.stdout)
+        self.bus.control.assert_called_once_with(253, activate=True)
+
+    def test_recovery_requires_explicit_post_and_valid_target(self):
+        base = f'http://127.0.0.1:{self.server.server_port}'
+        invalid = [base+'/recover-golden?address=253']
+        for body in ({'address': 253}, {'address': 253, 'action': 'read'},
+                     {'address': 253, 'action': 'activate-golden', 'index': 2},
+                     {'address': 0, 'action': 'activate-golden'},
+                     {'address': True, 'action': 'activate-golden'}):
+            invalid.append(Request(base+'/recover-golden', data=json.dumps(body).encode(), method='POST'))
+        for request in invalid:
+            with self.assertRaises(HTTPError) as caught:
+                urlopen(request)
+            self.assertIn(caught.exception.code, (400,404))
+            caught.exception.close()
+        self.bus.control.assert_not_called()
+        self.bus.control.side_effect = TimeoutError('Recovery outcome unknown; no automatic retry.')
+        with self.assertRaisesRegex(RuntimeError,'outcome unknown'):
+            self.client.recovery(253, activate=True)
+        self.bus.control.assert_called_once_with(253, activate=True)
+
     def run_cli(self, *commands):
         argv = [sys.executable, str(ROOT / 'Client/Client.py'), 'localhost',
                 '--rs485-remote-port', str(self.server.server_port),
@@ -148,6 +263,18 @@ class ServerTests(unittest.TestCase):
             namespace['connect_to_host'].assert_called_once_with('localhost')
             namespace['execute_command'].assert_called_once()
             self.assertIs(namespace['execute_command'].call_args.args[0], connection)
+
+    def test_client_address_only_reads_all_advertised_variables(self):
+        # An extra server-only variable proves discovery does not use a local
+        # hard-coded catalog. Include pasted nonbreaking whitespace in input.
+        self.telemetry.rules['SERVER_ONLY'] = {'cmdid': 17, 'expression': 'x'}
+        result = self.run_cli('rs485_read\u00a0MN253\u00a0')
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        names = [line.split()[1] for line in result.stdout.splitlines() if line.startswith('MN253 ')]
+        self.assertEqual(names, list(self.telemetry.rules))
+        self.assertEqual([call.args for call in self.bus.read_scalar.call_args_list],
+                         [(253, command) for rule in self.telemetry.rules.values()
+                          for command in com.command_ids(rule)])
 
 
 class BusLifecycleTests(unittest.TestCase):

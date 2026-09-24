@@ -30,6 +30,34 @@ def make_handler(telemetry):
             except (BrokenPipeError, ConnectionResetError):
                 pass  # hardware operation and cleanup have already finished
 
+        def do_POST(self):
+            # Mutating action has no GET route, arbitrary index, or retry loop.
+            try:
+                if self.path != '/recover-golden':
+                    self.send_json(404, {'error': 'unknown endpoint'})
+                    return
+                if self.headers.get_content_type() != 'application/json':
+                    raise ValueError('Content-Type must be application/json')
+                if self.headers.get('Transfer-Encoding'):
+                    raise ValueError('chunked requests are not supported')
+                length = int(self.headers.get('Content-Length', '0'))
+                if not 0 < length <= 128:
+                    raise ValueError('expected a short JSON request')
+                body = json.loads(self.rfile.read(length))
+                if not isinstance(body, dict) or set(body) != {'address', 'action'} or body['action'] != 'activate-golden':
+                    raise ValueError('expected address and action=activate-golden')
+                self.send_json(200, telemetry.recovery(body['address'], activate=True))
+            except BusyError as exc:
+                self.send_json(409, {'error': str(exc)})
+            except TimeoutError as exc:
+                self.send_json(504, {'error': str(exc)})
+            except ROCError as exc:
+                self.send_json(502, {'error': str(exc)})
+            except (ValueError, TypeError) as exc:
+                self.send_json(400, {'error': str(exc)})
+            except (OSError, RuntimeError, ImportError) as exc:
+                self.send_json(503, {'error': str(exc)})
+
         def do_GET(self):
             try:
                 url = urlsplit(self.path)
@@ -39,10 +67,28 @@ def make_handler(telemetry):
                               'busy': telemetry.lock.locked()}
                 elif url.path == '/parameters' and not params:
                     result = telemetry.parameters()
-                elif url.path == '/read':
+                elif url.path == '/panels' and not params:
+                    result = telemetry.panels()
+                elif url.path == '/discover':
+                    if not params:
+                        result = telemetry.discover()
+                    elif set(params) == {'start', 'end'} and all(len(v) == 1 for v in params.values()):
+                        result = telemetry.discover(int(params['start'][0]), int(params['end'][0]))
+                    else:
+                        raise ValueError('use /discover or /discover?start=0&end=300')
+                elif url.path == '/panel-id':
+                    if set(params) != {'address'} or len(params['address']) != 1:
+                        raise ValueError('use /panel-id?address=253')
+                    result = telemetry.panel_id(int(params['address'][0]))
+                elif url.path == '/recovery-status':
+                    if set(params) != {'address'} or len(params['address']) != 1:
+                        raise ValueError('use /recovery-status?address=253')
+                    result = telemetry.recovery(int(params['address'][0]))
+                elif url.path in ('/read', '/direct-read'):
                     if set(params) != {'address', 'name'} or any(len(v) != 1 for v in params.values()):
-                        raise ValueError('use /read?address=59&name=ROC_TEMP')
-                    result = telemetry.read(int(params['address'][0]), params['name'][0])
+                        raise ValueError('use ' + url.path + '?address=253&name=ROC_TEMP')
+                    read = telemetry.direct_read if url.path == '/direct-read' else telemetry.read
+                    result = read(int(params['address'][0]), params['name'][0])
                 else:
                     self.send_json(404, {'error': 'unknown endpoint'})
                     return
@@ -81,6 +127,8 @@ def main(argv=None):
     parser.add_argument('--rules', help='Transformation JSON (default: beside this script)')
     parser.add_argument('--calibrations', help='Flow CSV (default: beside this script)')
     parser.add_argument('--debug', action='store_true')
+    parser.add_argument('--no-discovery', action='store_true',
+                        help='Skip the default FPGA panel-ID startup scan of addresses 0..300')
     parser.add_argument('--check-config', action='store_true', help='Validate files without GPIO/UART or HTTP')
     args = parser.parse_args(argv)
     if not 0 <= args.port <= 65535:
@@ -98,6 +146,12 @@ def main(argv=None):
                 threading.Thread(target=server.shutdown, daemon=True).start()
             signal.signal(signal.SIGTERM, stop)
             signal.signal(signal.SIGINT, stop)
+            if not args.no_discovery:
+                try:
+                    inventory = telemetry.discover()
+                    print('Startup discovery: ' + json.dumps(inventory), flush=True)
+                except (OSError, RuntimeError):
+                    logging.exception('Startup discovery failed; server will remain available')
             print(f'rs485-server listening on {args.bind}:{server.server_port}', flush=True)
             server.serve_forever()
         return 0

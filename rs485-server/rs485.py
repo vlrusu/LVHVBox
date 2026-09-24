@@ -5,8 +5,16 @@ import struct
 
 FLAG, ESC = 0x7E, 0x7D
 VERSION, REQUEST, RESPONSE = 2, 1, 2
+CONTROL_REQUEST, CONTROL_RESPONSE = 3, 4
+GOLDEN_GUARD = b'GOLD'
 MAX_PAYLOAD = 32
 HEADER = struct.Struct('<BBHHBB')
+DISCOVERY_TIMEOUT = 0.050
+DISCOVERY_GUARD = 0.005
+
+
+class ResponseTimeout(TimeoutError):
+    """No matching reply; distinct from a UART write/drain timeout."""
 
 
 def fcs16(data: bytes) -> int:
@@ -39,7 +47,7 @@ class Packet:
     payload: bytes = b''
 
     def encode(self) -> bytes:
-        if self.kind not in (REQUEST, RESPONSE) or not 0 <= self.roc <= 511:
+        if self.kind not in (REQUEST, RESPONSE, CONTROL_REQUEST, CONTROL_RESPONSE) or not 0 <= self.roc <= 511:
             raise ValueError('invalid packet type or ROC address')
         if not 0 <= self.transaction <= 65535 or not 0 <= self.command <= 255:
             raise ValueError('invalid transaction or command')
@@ -72,7 +80,7 @@ class Packet:
         if escaped or len(body) < HEADER.size + 2:
             raise ValueError('incomplete frame')
         version, kind, roc, transaction, command, length = HEADER.unpack(body[:HEADER.size])
-        if version != VERSION or kind not in (REQUEST, RESPONSE) or roc > 511:
+        if version != VERSION or kind not in (REQUEST, RESPONSE, CONTROL_REQUEST, CONTROL_RESPONSE) or roc > 511:
             raise ValueError('invalid header')
         if length > MAX_PAYLOAD or len(body) != HEADER.size + length + 2:
             raise ValueError('invalid length')
@@ -112,6 +120,8 @@ STATUS_NAMES = {
     1: 'unsupported command', 2: 'bad request payload length',
     3: 'CPU completion missing ACK or fresh data',
     4: 'sensor setup/read failed', 5: 'panel-ID NVM read failed',
+    6: 'golden recovery unavailable, busy, or already requested',
+    7: 'FPGA TVS sample unavailable or stale',
 }
 MAX_WIRE = 2 + 2 * (HEADER.size + MAX_PAYLOAD + 2)
 
@@ -209,13 +219,55 @@ class BusSession:
         self.state['not_before'] = 0.0
         self.save()
 
+    def response_window(self, window):
+        # Only after a short FPGA request has fully left the UART. Until then,
+        # reserve()'s longer write/crash allowance remains persisted on disk.
+        self.state['not_before'] = time.time() + window
+        self.save()
+
     def __exit__(self, *exc):
         self.file.close()  # releases flock
 
 
+def drain_uart(serial_port):
+    """Release DE promptly after both the Linux queue and UART shifter empty.
+
+    tcdrain() on PSU0's Pi 5 can return several milliseconds late, colliding
+    with the FPGA's 1 ms reply. TIOCSERGETLSR includes physical transmitter
+    state; out_waiting alone does not. Polling still depends on OS scheduling.
+    """
+    import array
+    import errno
+    import fcntl
+    import warnings
+    deadline = time.monotonic() + 1.0
+    state = array.array('i', [0])
+    while True:
+        try:
+            # Linux asm-generic/ioctls.h: TIOCSERGETLSR, TIOCSER_TEMT.
+            fcntl.ioctl(serial_port.fileno(), 0x5459, state, True)
+        except OSError as exc:
+            # Preserve slow CPU transactions on other UART drivers. Fast
+            # direct FPGA replies need a driver exposing physical TX empty.
+            serial_port.flush()
+            if exc.errno not in (errno.ENOTTY, errno.EINVAL, errno.ENOSYS):
+                raise
+            warnings.warn('UART lacks transmitter-empty status; using tcdrain, '
+                          'which may miss fast FPGA replies', RuntimeWarning)
+            return
+        if state[0] & 0x01:
+            return
+        if time.monotonic() >= deadline:
+            # Do not release DE on an estimated transmit duration.
+            serial_port.flush()
+            raise TimeoutError('UART transmitter did not become empty within 1s')
+        time.sleep(0.00002)
+
+
 class PiBus:
-    def __init__(self, serial_port, direction, session, timeout=6.0, debug=False):
+    def __init__(self, serial_port, direction, session, timeout=6.0, debug=False, drain=None):
         self.serial = serial_port
+        self.drain = drain if drain is not None else serial_port.flush
         self.direction = direction
         self.session = session
         self.timeout = timeout
@@ -224,6 +276,44 @@ class PiBus:
     def read_scalar(self, address, command):
         # Allow up to 1s write timeout plus turnaround before the response window.
         request = Packet(REQUEST, address, self.session.reserve(self.timeout + 1.1), command)
+        return self._exchange(request, RESPONSE).scalar_result(request)
+
+    def control(self, address, *, activate=False):
+        request = Packet(CONTROL_REQUEST, address,
+                         self.session.reserve(self.timeout + 1.1),
+                         1 if activate else 0, GOLDEN_GUARD if activate else b'')
+        response = self._exchange(request, CONTROL_RESPONSE)
+        value = int.from_bytes(response.payload[1:], 'little')
+        if activate and value != 0:
+            raise ROCError('Unexpected recovery acknowledgment; outcome unknown. Do not retry automatically.')
+        return value
+
+    def read_direct(self, address, command):
+        if type(address) is not int or not 0 <= address <= 511:
+            raise ValueError('panel address must be 0..511')
+        if type(command) is not int or command not in (3, 4, 5, 6):
+            raise ValueError('direct TVS command must be 3..6')
+        request = Packet(CONTROL_REQUEST, address,
+                         self.session.reserve(self.timeout + 1.1), command)
+        response = self._exchange(request, CONTROL_RESPONSE)
+        return int.from_bytes(response.payload[1:], 'little')
+
+    def read_panel_id(self, address, *, discovery=False):
+        if type(address) is not int or not 0 <= address <= 511:
+            raise ValueError('panel address must be 0..511')
+        request = Packet(CONTROL_REQUEST, address,
+                         self.session.reserve(self.timeout + 1.1), 2)
+        response = self._exchange(request, CONTROL_RESPONSE, discovery=discovery)
+        value = int.from_bytes(response.payload[1:], 'little')
+        if value != address:
+            raise ROCError('FPGA panel ID does not match addressed panel')
+        return value
+
+    def _exchange(self, request, response_type, *, discovery=False):
+        if discovery and (request.kind != CONTROL_REQUEST or request.command != 2 or
+                          request.payload or response_type != CONTROL_RESPONSE):
+            raise ValueError('fast discovery is only valid for FPGA panel-ID requests')
+        timeout = DISCOVERY_TIMEOUT if discovery else self.timeout
         wire = request.encode()
         self.direction(False)
         self.serial.reset_input_buffer()
@@ -234,10 +324,12 @@ class PiBus:
             time.sleep(0.0001)  # DE setup; the FPGA still receives one continuous frame
             if self.serial.write(wire) != len(wire):
                 raise OSError('short UART write')
-            self.serial.flush()  # tcdrain: keep DE high until the UART has sent the frame
+            self.drain()  # keep DE high until the physical UART transmitter is empty
         finally:
             self.direction(False)  # release bus on every exit, including Ctrl-C
-        deadline = time.monotonic() + self.timeout
+        deadline = time.monotonic() + timeout
+        if discovery:
+            self.session.response_window(timeout + DISCOVERY_GUARD)
         stream = FrameStream()
         ignored = 0
         while time.monotonic() < deadline:
@@ -246,7 +338,7 @@ class PiBus:
             if self.debug and data:
                 print('RX: ' + data.hex(' '), file=sys.stderr)
             for response in stream.feed(data):
-                if (response.kind != RESPONSE or
+                if (response.kind != response_type or
                         (response.roc, response.transaction, response.command) !=
                         (request.roc, request.transaction, request.command)):
                     ignored += 1
@@ -260,11 +352,12 @@ class PiBus:
                 status = response.payload[0]
                 if status:
                     raise ROCError(f'ROC status {status}: {STATUS_NAMES.get(status, "CPU error")}')
-                return response.scalar_result(request)
-        raise TimeoutError(
-            f'No matching response within {self.timeout:g}s '
-            f'(invalid frames={stream.bad_frames}, other replies={ignored}). '
-            'No automatic retry; check CPU/FPGA readiness and RS485 address.')
+                return response
+        raise ResponseTimeout(
+            f'No matching response within {timeout:g}s '
+            f'(invalid frames={stream.bad_frames}, other replies={ignored}). ' +
+            ('Recovery outcome unknown; no automatic retry.' if request.kind == CONTROL_REQUEST and request.command == 1
+             else 'No automatic retry; check FPGA readiness and RS485 address.'))
 
 
 def default_lock_path(port):
@@ -339,7 +432,7 @@ def open_bus(port='/dev/ttyAMA0', gpiochip='/dev/gpiochip0', dir_pin=24,
             port=port, baudrate=38400, bytesize=serial.EIGHTBITS,
             parity=serial.PARITY_NONE, stopbits=serial.STOPBITS_ONE,
             timeout=0.05, write_timeout=1.0, exclusive=True))
-        yield PiBus(uart, direction, session, timeout, debug)
+        yield PiBus(uart, direction, session, timeout, debug, drain=lambda: drain_uart(uart))
 
 
 DATA_DIR = Path(__file__).resolve().parent
@@ -386,6 +479,7 @@ class RS485:
         self._bus = None
         self._stack = None
         self.lock = threading.Lock()
+        self._discovery = None
 
     def __enter__(self):
         with self.lock:
@@ -410,8 +504,51 @@ class RS485:
 
     def parameters(self):
         return {'parameters': [dict(name=name, commands=command_ids(rule),
-                                    format=rule.get('format', 'float'), unit=rule.get('unit'))
+                                    format=rule.get('format', 'float'), unit=rule.get('unit'),
+                                    direct_command=rule.get('direct_command'))
                                for name, rule in self.rules.items()]}
+
+    def panels(self):
+        """Last completed scan, without any RS485 traffic; not a live presence test."""
+        import copy
+        return copy.deepcopy(self._discovery) if self._discovery is not None else {
+            'scanned': False, 'panels': [], 'addresses': []}
+
+    def discover(self, start=0, end=300):
+        """Probe each inclusive address once with FPGA-only panel-ID requests."""
+        if (type(start) is not int or type(end) is not int or
+                not 0 <= start <= end <= 511):
+            raise ValueError('discovery range must satisfy 0 <= start <= end <= 511')
+        if not self.lock.acquire(blocking=False):
+            raise BusyError('RS485 bus is busy; discovery was not started')
+        try:
+            if self._bus is None:
+                raise RuntimeError('RS485 device is not open')
+            began = time.monotonic()
+            found, no_response, errors = [], [], []
+            for address in range(start, end + 1):
+                try:
+                    value = self._bus.read_panel_id(address, discovery=True)
+                    if value != address:
+                        raise ROCError('FPGA panel ID does not match addressed panel')
+                    found.append(address)
+                except ResponseTimeout:
+                    no_response.append(address)
+                except ROCError as exc:
+                    errors.append({'address': address, 'error': str(exc)})
+                # UART write/drain errors abort; never label these as absent
+                # panels or continue transmitting on an unhealthy transport.
+            result = dict(scanned=True, start=start, end=end, count=len(found),
+                          addresses=found, panels=[f'MN{a:03d}' for a in found],
+                          no_response=no_response, errors=errors,
+                          response_timeout_ms=DISCOVERY_TIMEOUT * 1000,
+                          guard_ms=DISCOVERY_GUARD * 1000,
+                          elapsed_s=round(time.monotonic() - began, 3),
+                          timestamp_utc=datetime.now(timezone.utc).isoformat())
+            self._discovery = result
+            return self.panels()
+        finally:
+            self.lock.release()
 
     def validate(self, address, name, panel=None, *, require_calibration=True):
         if type(address) is not int or not 0 <= address <= 511:
@@ -423,18 +560,29 @@ class RS485:
             raise ValueError('Flow: no calibration for A0,' + panel)
         return panel
 
-    def preview(self, address, names):
+    def direct_command(self, name):
+        command = self.rules.get(name, {}).get('direct_command')
+        if type(command) is not int or command not in (3, 4, 5, 6):
+            raise ValueError('parameter is not available through FPGA direct read: ' + name)
+        return command
+
+    def preview(self, address, names, *, direct=False):
         """Describe wire requests without acquiring GPIO/UART or reserving IDs."""
         requests = []
         for name in names:
             self.validate(address, name, require_calibration=False)
-            for command in command_ids(self.rules[name]):
-                packet = Packet(REQUEST, address, len(requests) & 0xFFFF, command)
+            commands = [self.direct_command(name)] if direct else command_ids(self.rules[name])
+            for command in commands:
+                packet = Packet(CONTROL_REQUEST if direct else REQUEST, address, len(requests) & 0xFFFF, command)
                 requests.append(dict(name=name, command=command, request=packet.encode().hex(' ')))
         return requests
 
-    def read(self, address, name, panel=None):
+    def direct_read(self, address, name):
+        return self.read(address, name, direct=True)
+
+    def read(self, address, name, panel=None, *, direct=False):
         panel = self.validate(address, name, panel)
+        commands = [self.direct_command(name)] if direct else command_ids(self.rules[name])
         if not self.lock.acquire(blocking=False):
             raise BusyError('RS485 bus is busy; request was not sent')
         try:
@@ -443,12 +591,46 @@ class RS485:
             rule = self.rules[name]
             # Keep both pressure words under one lock. BusSession.reserve()
             # honors pending holdoff after a timeout even without reopening.
-            raw = read_rule(self._bus, address, rule)
+            raw = self._bus.read_direct(address, commands[0]) if direct else read_rule(self._bus, address, rule)
             value = convert_value(name, raw, rule, self.calibrations, panel)
             return dict(address=address, panel=panel, name=name, raw=raw,
                         value=value, unit=rule.get('unit'),
                         formatted=format_value(name, raw, rule, self.calibrations, panel),
-                        commands=command_ids(rule), atomic=len(command_ids(rule)) == 1,
+                        commands=commands, atomic=len(commands) == 1,
+                        source='FPGA TVS' if direct else 'CPU',
                         timestamp_utc=datetime.now(timezone.utc).isoformat())
+        finally:
+            self.lock.release()
+
+    def recovery(self, address, *, activate=False):
+        """Hardware control; activation ACK is acceptance, never proof of boot."""
+        if type(address) is not int or not 1 <= address <= 511:
+            raise ValueError('recovery address must be 1..511 (one MN panel)')
+        if not self.lock.acquire(blocking=False):
+            raise BusyError('RS485 bus is busy; request was not sent')
+        try:
+            if self._bus is None:
+                raise RuntimeError('RS485 device is not open')
+            value = self._bus.control(address, activate=activate)
+            if activate:
+                return dict(address=address, image_index=0, accepted=True,
+                            boot_verified=False, message='Golden-image activation accepted; boot not verified. Do not retry automatically.')
+            return dict(address=address, raw=value, armed=bool(value & 1),
+                        committed=bool(value & 2), failed=bool(value & 4),
+                        owns_system_services=bool(value & 8), error_code=value >> 8)
+        finally:
+            self.lock.release()
+
+    def panel_id(self, address):
+        """Read cached, validated NVM identity entirely through FPGA logic."""
+        if type(address) is not int or not 0 <= address <= 511:
+            raise ValueError('panel address must be 0..511')
+        if not self.lock.acquire(blocking=False):
+            raise BusyError('RS485 bus is busy; request was not sent')
+        try:
+            if self._bus is None:
+                raise RuntimeError('RS485 device is not open')
+            value = self._bus.read_panel_id(address)
+            return dict(address=address, panel_id=value, panel=f'MN{value:03d}', source='FPGA cached NVM')
         finally:
             self.lock.release()
