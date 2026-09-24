@@ -8,11 +8,16 @@ import socket
 import threading
 import time
 
+from RS485Connection import RS485Connection
 from PiHealthConnection import PiHealthConnection
 from PowerSupplyServerConnection import PowerSupplyServerConnection
 
 
 stop_event = threading.Event()
+
+# Values/conversions are supplied by rs485-server, including the per-panel Flow
+# calibration. Dots in rail names are sanitized into one Graphite path component.
+RS485_DIRECT_PARAMETERS = ('ROC_TEMP', 'ROC_RAIL_1V', 'ROC_RAIL_1.8V', 'ROC_RAIL_2.5V')
 
 
 def handle_signal(_signum, _frame):
@@ -94,6 +99,44 @@ def collect_health_metrics(health, prefix, timestamp):
     return lines
 
 
+def collect_rs485_metrics(rs485, prefix):
+    # Cached discovery only: polling never initiates a new address scan.
+    inventory = rs485.get_panels()
+    if inventory.get('scanned') is not True:
+        raise ValueError('RS485 startup discovery has not completed')
+    addresses = inventory.get('addresses')
+    if (not isinstance(addresses, list) or
+            any(type(address) is not int or not 0 <= address <= 511 for address in addresses) or
+            len(set(addresses)) != len(addresses)):
+        raise ValueError('Invalid RS485 panel inventory')
+    lines = []
+    add_numeric_metric(lines, f'{prefix}.collector.rs485.panels', len(addresses), int(time.time()))
+    all_ok = bool(addresses)
+    for address in addresses:
+        if stop_event.is_set():
+            return lines, False
+        panel_prefix = f'{prefix}.panels.MN{address:03d}'
+        panel_ok = True
+        for name in (*RS485_DIRECT_PARAMETERS, 'Flow'):
+            if stop_event.is_set():
+                return lines, False
+            try:
+                read = rs485.read if name == 'Flow' else rs485.direct_read
+                value = read(address, name)['value']
+                if type(value) not in (int, float) or not math.isfinite(value):
+                    raise ValueError('RS485 result is not a finite numeric value')
+                add_numeric_metric(lines, f'{panel_prefix}.{sanitize_metric_component(name)}',
+                                   value, int(time.time()))
+            except Exception as exc:
+                # Keep successful FPGA values even if the CPU/Flow read fails.
+                # No fallback, no immediate retry and no fabricated zero sample.
+                panel_ok = False
+                print(f'graphite rs485 MN{address:03d} {name} failed: {exc}', flush=True)
+        add_numeric_metric(lines, f'{panel_prefix}.collector.success', int(panel_ok), int(time.time()))
+        all_ok = all_ok and panel_ok
+    return lines, all_ok
+
+
 def send_graphite(lines, host, port, timeout):
     if not lines:
         return
@@ -119,7 +162,7 @@ def positive_seconds(value):
 
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(
-        description="Push local LV/HV and Pi health metrics from a PSU node to Graphite."
+        description="Push local LV/HV, Pi health and RS485 panel metrics to Graphite."
     )
     parser.add_argument("--lvhv-host", default="127.0.0.1", help="Local LV/HV server host")
     parser.add_argument("--lvhv-port", type=int, default=12000, help="Local LV/HV server port")
@@ -161,6 +204,12 @@ def parse_args(argv=None):
     parser.add_argument("--hv-interval", type=positive_seconds, default=1.0,
                         help="HV voltage/current interval in seconds (default: 1)")
     parser.add_argument("--timeout", type=positive_seconds, default=5.0, help="Network timeout in seconds")
+    parser.add_argument("--rs485-host", default="127.0.0.1", help="RS485 HTTP server host")
+    parser.add_argument("--rs485-port", type=int, default=12004, help="RS485 HTTP server port")
+    parser.add_argument("--rs485-interval", type=positive_seconds, default=20.0,
+                        help="FPGA TVS and calibrated Flow interval in seconds (default: 20)")
+    parser.add_argument("--rs485-timeout", type=positive_seconds, default=30.0,
+                        help="RS485 HTTP timeout, allowing CPU replies and bus holdoff (default: 30)")
     parser.add_argument(
         "--dry-run",
         action="store_true",
@@ -184,23 +233,34 @@ def publish_metrics(args, lines):
 def collection_worker(args, metric_prefix, group):
     # A connection belongs exclusively to this worker. Never interleave two
     # request/reply streams on the same LVHV socket.
-    interval = args.hv_interval if group == "hv" else args.interval
-    success_path = f"{metric_prefix}.collector.hv.success" if group == "hv" else f"{metric_prefix}.collector.success"
+    interval = {"hv": args.hv_interval, "slow": args.interval, "rs485": args.rs485_interval}[group]
+    suffix = {"hv": "collector.hv.success", "slow": "collector.success",
+              "rs485": "collector.rs485.success"}[group]
+    success_path = f"{metric_prefix}.{suffix}"
     power_connection = None
     health_connection = PiHealthConnection(args.health_host, args.health_port, timeout=args.timeout) if group == "slow" else None
+    rs485_connection = None
     next_cycle = time.monotonic()
     try:
         while not stop_event.is_set():
             timestamp = int(time.time())
             try:
-                if power_connection is None:
-                    power_connection = PowerSupplyServerConnection(args.lvhv_host, args.lvhv_port, args.header)
-                if group == "hv":
-                    lines = collect_hv_metrics(power_connection, metric_prefix, timestamp)
+                if group == "rs485":
+                    if rs485_connection is None:
+                        rs485_connection = RS485Connection(args.rs485_host, args.rs485_port,
+                                                           timeout=args.rs485_timeout)
+                    lines, success = collect_rs485_metrics(rs485_connection, metric_prefix)
+                    timestamp = int(time.time())
                 else:
-                    lines = collect_lv_metrics(power_connection, metric_prefix, timestamp)
-                    lines.extend(collect_health_metrics(health_connection, metric_prefix, timestamp))
-                add_numeric_metric(lines, success_path, 1, timestamp)
+                    if power_connection is None:
+                        power_connection = PowerSupplyServerConnection(args.lvhv_host, args.lvhv_port, args.header)
+                    if group == "hv":
+                        lines = collect_hv_metrics(power_connection, metric_prefix, timestamp)
+                    else:
+                        lines = collect_lv_metrics(power_connection, metric_prefix, timestamp)
+                        lines.extend(collect_health_metrics(health_connection, metric_prefix, timestamp))
+                    success = True
+                add_numeric_metric(lines, success_path, int(success), timestamp)
                 publish_metrics(args, lines)
             except Exception as exc:
                 print(f"graphite {group} collection cycle failed: {exc}", flush=True)
@@ -238,7 +298,7 @@ def main():
     workers = [
         threading.Thread(target=collection_worker, args=(args, metric_prefix, group),
                          name=f"graphite-{group}", daemon=True)
-        for group in ("hv", "slow")
+        for group in ("hv", "slow", "rs485")
     ]
     for worker in workers:
         worker.start()

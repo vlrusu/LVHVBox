@@ -1,6 +1,6 @@
 [Unit]
 Description=Mu2e Tracker PSU Graphite metrics pusher
-After=network-online.target pi-health-server.service lvhv-server.service
+After=network-online.target pi-health-server.service lvhv-server.service rs485-server.service
 Wants=network-online.target
 
 [Service]
@@ -9,7 +9,7 @@ User=root
 Restart=always
 RestartSec=5
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/usr/local/bin/graphite-pusher --graphite-host mu2e-dcs-01.fnal.gov --graphite-port 2003 --hv-interval 1 --interval 20
+ExecStart=/usr/bin/python3 /usr/local/bin/graphite-pusher --graphite-host mu2e-dcs-01.fnal.gov --graphite-port 2003 --hv-interval 1 --interval 20 --rs485-interval 20
 StandardOutput=journal
 StandardError=journal
 
