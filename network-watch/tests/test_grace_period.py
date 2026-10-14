@@ -13,12 +13,18 @@ sys.modules[spec.name] = watch
 spec.loader.exec_module(watch)
 
 class GracePeriodTests(unittest.TestCase):
-    def run_scan(self, scans, dry_run=False):
+    def run_scan(self, scans, dry_run=False, gateways=False):
         cycle = 0
         sent = []
         endpoints = [watch.ProbeEndpoint('master1', 1), watch.ProbeEndpoint('master2', 2)]
+        if gateways:
+            endpoints = [watch.ProbeEndpoint('master1', 1),
+                         watch.ProbeEndpoint('gateway01', 2),
+                         watch.ProbeEndpoint('gateway02', 3)]
+        self.probe_calls = []
         client = types.SimpleNamespace(power_off=lambda reason: sent.append((scans[cycle][0], reason)))
         def probe(endpoint):
+            self.probe_calls.append((cycle, endpoint.host))
             reachable = scans[cycle][1][endpoints.index(endpoint)]
             return reachable, None if reachable else 'simulated timeout'
         def sleep(_):
@@ -28,10 +34,11 @@ class GracePeriodTests(unittest.TestCase):
                 watch.running = False
         with patch.object(watch, 'running', True), patch.object(watch, 'failure_streak', 0), \
              patch.object(watch, 'shutdown_latched', False), patch.object(watch, 'DEFAULT_GRACE_PERIOD_S', 1800), \
+             patch.object(watch, 'DEFAULT_GATEWAY_ENDPOINTS_RAW', 'gateway01:2,gateway02:3' if gateways else ''), \
              patch.object(watch, 'parse_args', return_value=types.SimpleNamespace(dry_run=dry_run)), \
              patch.object(watch, 'configure_logging'), patch.object(watch, 'logging'), \
              patch.object(watch, 'LocalPowerOffClient', return_value=client), \
-             patch.object(watch, 'build_master_endpoints', return_value=endpoints), \
+             patch.object(watch, 'build_master_endpoints', return_value=endpoints[:1] if gateways else endpoints), \
              patch.object(watch, 'probe_endpoint', side_effect=probe), \
              patch.object(watch.time, 'monotonic', side_effect=lambda: scans[cycle][0]), \
              patch.object(watch.time, 'sleep', side_effect=sleep):
@@ -58,6 +65,40 @@ class GracePeriodTests(unittest.TestCase):
 
     def test_dry_run_never_sends_power_command(self):
         self.assertEqual(self.run_scan([(0, (False, False)), (1800, (False, False))], True), [])
+
+    def test_healthy_primary_does_not_probe_backup(self):
+        sent = self.run_scan([(0, (True, True, False)),
+                              (4000, (True, True, False))], gateways=True)
+        self.assertEqual(sent, [])
+        self.assertEqual(self.probe_calls, [(0, 'master1'), (0, 'gateway01'),
+                                           (1, 'master1'), (1, 'gateway01')])
+
+    def test_primary_down_backup_healthy_does_not_start_shutdown(self):
+        sent = self.run_scan([(0, (True, False, True)),
+                              (4000, (True, False, True))], gateways=True)
+        self.assertEqual(sent, [])
+        self.assertEqual(self.probe_calls[:3], [(0, 'master1'), (0, 'gateway01'),
+                                              (0, 'gateway02')])
+
+    def test_both_gateways_down_observe_full_grace(self):
+        sent = self.run_scan([(0, (True, False, False)),
+                              (1799, (True, False, False)),
+                              (1800, (True, False, False))], gateways=True)
+        self.assertEqual([t for t, _ in sent], [1800])
+
+    def test_backup_recovery_resets_outage_timer(self):
+        sent = self.run_scan([(0, (True, False, False)),
+                              (1799, (True, False, False)),
+                              (1800, (True, False, True)),
+                              (1801, (True, False, False)),
+                              (3600, (True, False, False)),
+                              (3601, (True, False, False))], gateways=True)
+        self.assertEqual([t for t, _ in sent], [3601])
+
+    def test_master_failure_still_counts_when_gateway_is_healthy(self):
+        sent = self.run_scan([(0, (False, True, True)),
+                              (1800, (False, True, True))], gateways=True)
+        self.assertEqual([t for t, _ in sent], [1800])
 
     def test_invalid_grace_rejected(self):
         for value in [0, -1, float('inf'), float('nan')]:

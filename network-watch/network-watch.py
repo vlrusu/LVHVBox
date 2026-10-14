@@ -30,6 +30,7 @@ DEFAULT_MASTER_HOSTS = [
 ]
 DEFAULT_REMOTE_PORT = int(os.getenv("NETWORK_WATCH_REMOTE_PORT", "12000"))
 DEFAULT_MASTER_ENDPOINTS_RAW = os.getenv("NETWORK_WATCH_MASTER_ENDPOINTS", "").strip()
+DEFAULT_GATEWAY_ENDPOINTS_RAW = os.getenv("NETWORK_WATCH_GATEWAY_ENDPOINTS", "").strip()
 DEFAULT_CONNECT_TIMEOUT_S = float(os.getenv("NETWORK_WATCH_CONNECT_TIMEOUT_S", "3.0"))
 DEFAULT_GRACE_PERIOD_S = float(os.getenv("NETWORK_WATCH_GRACE_PERIOD_S", "1800.0"))
 DEFAULT_LVHV_HOST = os.getenv("NETWORK_WATCH_LVHV_HOST", "127.0.0.1")
@@ -226,6 +227,11 @@ def main() -> int:
     power_client = LocalPowerOffClient(DEFAULT_LVHV_COMMANDS_PATH)
     try:
         master_endpoints = build_master_endpoints()
+        gateway_endpoints = [
+            parse_endpoint(endpoint)
+            for endpoint in DEFAULT_GATEWAY_ENDPOINTS_RAW.split(",")
+            if endpoint.strip()
+        ]
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
     if not master_endpoints:
@@ -234,10 +240,14 @@ def main() -> int:
             "or NETWORK_WATCH_MASTER_HOSTS"
         )
 
+    probe_groups = [[endpoint] for endpoint in master_endpoints]
+    if gateway_endpoints:
+        probe_groups.append(gateway_endpoints)
+
     logging.info(
-        "starting network-watch local_host=%s endpoints=%s policy=all grace_period_s=%s dry_run=%s",
+        "starting network-watch local_host=%s endpoints=%s policy=all_groups_any_endpoint grace_period_s=%s dry_run=%s",
         DEFAULT_LOCAL_HOSTNAME,
-        ",".join(endpoint.label for endpoint in master_endpoints),
+        ",".join("|".join(endpoint.label for endpoint in group) for group in probe_groups),
         DEFAULT_GRACE_PERIOD_S,
         runtime_args.dry_run,
     )
@@ -245,14 +255,24 @@ def main() -> int:
     while running:
         reachable = []
         failed = []
-        for endpoint in master_endpoints:
-            ok, error = probe_endpoint(endpoint)
-            if ok:
-                reachable.append(endpoint)
+        for group in probe_groups:
+            group_failures = []
+            for endpoint in group:
+                ok, error = probe_endpoint(endpoint)
+                if ok:
+                    reachable.append(endpoint)
+                    if group_failures:
+                        logging.info(
+                            "master endpoint fallback reachable=%s failed=%s",
+                            endpoint.label,
+                            ", ".join(f"{ep.label}: {err}" for ep, err in group_failures),
+                        )
+                    break
+                group_failures.append((endpoint, error or "unknown"))
             else:
-                failed.append((endpoint, error or "unknown"))
+                failed.extend(group_failures)
 
-        if len(reachable) == len(master_endpoints):
+        if len(reachable) == len(probe_groups):
             if shutdown_latched:
                 logging.info(
                     "master connectivity restored reachable=%s failed=%s; clearing network shutdown latch",
@@ -274,13 +294,13 @@ def main() -> int:
                 outage_elapsed,
                 DEFAULT_GRACE_PERIOD_S,
                 len(reachable),
-                len(master_endpoints),
+                len(probe_groups),
                 ", ".join(f"{endpoint.label}: {error}" for endpoint, error in failed),
             )
             if outage_elapsed >= DEFAULT_GRACE_PERIOD_S:
                 reason = (
                     f"master isolation reachable={len(reachable)} "
-                    f"required={len(master_endpoints)} streak={failure_streak} "
+                    f"required={len(probe_groups)} streak={failure_streak} "
                     f"outage_elapsed_s={outage_elapsed:.1f} grace_period_s={DEFAULT_GRACE_PERIOD_S}"
                 )
                 if runtime_args.dry_run:
