@@ -31,7 +31,7 @@ DEFAULT_MASTER_HOSTS = [
 DEFAULT_REMOTE_PORT = int(os.getenv("NETWORK_WATCH_REMOTE_PORT", "12000"))
 DEFAULT_MASTER_ENDPOINTS_RAW = os.getenv("NETWORK_WATCH_MASTER_ENDPOINTS", "").strip()
 DEFAULT_CONNECT_TIMEOUT_S = float(os.getenv("NETWORK_WATCH_CONNECT_TIMEOUT_S", "3.0"))
-DEFAULT_FAILURE_STREAK_TRIGGER = int(os.getenv("NETWORK_WATCH_FAILURE_STREAK_TRIGGER", "3"))
+DEFAULT_GRACE_PERIOD_S = float(os.getenv("NETWORK_WATCH_GRACE_PERIOD_S", "1800.0"))
 DEFAULT_LVHV_HOST = os.getenv("NETWORK_WATCH_LVHV_HOST", "127.0.0.1")
 DEFAULT_LVHV_PORT = int(os.getenv("NETWORK_WATCH_LVHV_PORT", "12000"))
 DEFAULT_LVHV_COMMANDS_PATH = Path(
@@ -215,6 +215,10 @@ def main() -> int:
 
     runtime_args = parse_args()
 
+    if not 0 < DEFAULT_GRACE_PERIOD_S < float("inf"):
+        raise SystemExit("NETWORK_WATCH_GRACE_PERIOD_S must be positive and finite")
+    outage_started = None
+
     configure_logging(DEFAULT_LOG_PATH)
     signal.signal(signal.SIGINT, handle_signal)
     signal.signal(signal.SIGTERM, handle_signal)
@@ -231,10 +235,10 @@ def main() -> int:
         )
 
     logging.info(
-        "starting network-watch local_host=%s endpoints=%s policy=all trigger_streak=%s dry_run=%s",
+        "starting network-watch local_host=%s endpoints=%s policy=all grace_period_s=%s dry_run=%s",
         DEFAULT_LOCAL_HOSTNAME,
         ",".join(endpoint.label for endpoint in master_endpoints),
-        DEFAULT_FAILURE_STREAK_TRIGGER,
+        DEFAULT_GRACE_PERIOD_S,
         runtime_args.dry_run,
     )
 
@@ -257,20 +261,27 @@ def main() -> int:
                 )
             failure_streak = 0
             shutdown_latched = False
+            outage_started = None
         else:
             failure_streak += 1
+            now = time.monotonic()
+            if outage_started is None:
+                outage_started = now
+            outage_elapsed = now - outage_started
             logging.error(
-                "master connectivity degraded streak=%s/%s reachable=%s required=%s failed=%s",
+                "master connectivity degraded streak=%s outage_elapsed_s=%.1f grace_period_s=%s reachable=%s required=%s failed=%s",
                 failure_streak,
-                DEFAULT_FAILURE_STREAK_TRIGGER,
+                outage_elapsed,
+                DEFAULT_GRACE_PERIOD_S,
                 len(reachable),
                 len(master_endpoints),
                 ", ".join(f"{endpoint.label}: {error}" for endpoint, error in failed),
             )
-            if failure_streak >= DEFAULT_FAILURE_STREAK_TRIGGER:
+            if outage_elapsed >= DEFAULT_GRACE_PERIOD_S:
                 reason = (
                     f"master isolation reachable={len(reachable)} "
-                    f"required={len(master_endpoints)} streak={failure_streak}"
+                    f"required={len(master_endpoints)} streak={failure_streak} "
+                    f"outage_elapsed_s={outage_elapsed:.1f} grace_period_s={DEFAULT_GRACE_PERIOD_S}"
                 )
                 if runtime_args.dry_run:
                     logging.warning("dry-run: would issue local powerOff reason=%s", reason)
