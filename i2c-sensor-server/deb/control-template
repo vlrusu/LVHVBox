@@ -4,6 +4,6 @@ Architecture: arm64
 Section: mu2e
 Essential: no
 Priority: optional
-Depends:
+Depends: python3, python3-smbus2, python3-psycopg2
 Maintainer: vrusu@fnal.gov
 Description: Generic I2C sensor daemon with pluggable sensor drivers and HTTP status API.

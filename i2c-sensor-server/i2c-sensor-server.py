@@ -7,6 +7,7 @@ import json
 import logging
 import math
 import os
+import queue
 import signal
 import socket
 import sys
@@ -26,16 +27,6 @@ except ImportError as exc:  # pragma: no cover - import failure is runtime-speci
     raise SystemExit(
         "smbus2 is required. Install it with: sudo apt-get install -y python3-smbus"
     ) from exc
-
-try:
-    from influxdb_client import InfluxDBClient, Point, WritePrecision
-    from influxdb_client.client.write_api import SYNCHRONOUS
-except ImportError:  # pragma: no cover - import failure is runtime-specific
-    InfluxDBClient = None
-    Point = None
-    WritePrecision = None
-    SYNCHRONOUS = None
-
 
 SERVICE_NAME = "i2c-sensor-server"
 DEFAULT_SENSOR_TYPE = os.getenv("I2C_SENSOR_SERVER_SENSOR_TYPE", "bme680").strip().lower()
@@ -58,11 +49,13 @@ DEFAULT_I2C_REOPEN_BACKOFF_S = float(
     os.getenv("I2C_SENSOR_SERVER_I2C_REOPEN_BACKOFF_S", "1.0")
 )
 DEFAULT_I2C_READ_RETRIES = int(os.getenv("I2C_SENSOR_SERVER_I2C_READ_RETRIES", "2"))
-DEFAULT_MEASUREMENT = os.getenv("I2C_SENSOR_SERVER_MEASUREMENT", "env_sensor")
-DEFAULT_INFLUX_URL = os.getenv("I2C_SENSOR_SERVER_INFLUX_URL", "http://localhost:8086")
-DEFAULT_INFLUX_ORG = os.getenv("I2C_SENSOR_SERVER_INFLUX_ORG", "mu2e")
-DEFAULT_INFLUX_BUCKET = os.getenv("I2C_SENSOR_SERVER_INFLUX_BUCKET", "tracker-env")
-DEFAULT_INFLUX_TOKEN = os.getenv("I2C_SENSOR_SERVER_INFLUX_TOKEN", "")
+DEFAULT_POSTGRES_ENABLED = os.getenv("I2C_SENSOR_SERVER_POSTGRES_ENABLED", "1") == "1"
+DEFAULT_POSTGRES_REGISTER_CHANNELS = os.getenv(
+    "I2C_SENSOR_SERVER_POSTGRES_REGISTER_CHANNELS", "1"
+) == "1"
+DEFAULT_POSTGRES_QUEUE_SIZE = int(os.getenv("I2C_SENSOR_SERVER_POSTGRES_QUEUE_SIZE", "120"))
+if DEFAULT_POSTGRES_QUEUE_SIZE <= 0:
+    raise SystemExit("I2C_SENSOR_SERVER_POSTGRES_QUEUE_SIZE must be positive")
 DEFAULT_NO_DATA_STREAK_TRIGGER = int(
     os.getenv("I2C_SENSOR_SERVER_NO_DATA_STREAK_TRIGGER", "5")
 )
@@ -80,8 +73,12 @@ state: dict[str, object] = {
     "i2c_bus": DEFAULT_I2C_BUS,
     "i2c_address": f"0x{DEFAULT_I2C_ADDR:02x}",
     "period_s": DEFAULT_PERIOD_S,
-    "measurement": DEFAULT_MEASUREMENT,
-    "influx_enabled": bool(DEFAULT_INFLUX_TOKEN),
+    "postgres_enabled": DEFAULT_POSTGRES_ENABLED,
+    "postgres_last_success_utc": None,
+    "postgres_last_error": None,
+    "postgres_batches_written": 0,
+    "postgres_batches_dropped": 0,
+    "postgres_fields_skipped": 0,
     "sensor_repo": str(DEFAULT_SENSOR_REPO),
     "supported_sensor_types": ["bme680"],
     "last_sample": None,
@@ -168,22 +165,6 @@ class BME680Driver(SensorDriver):
             source=self.source,
         )
 
-    def influx_fields(self, reading: SensorReading) -> dict[str, float]:
-        fields = {}
-        mapping = {
-            "temperature_c": "temperature_C",
-            "pressure_hpa": "pressure_hPa",
-            "humidity_rh": "humidity_RH",
-            "dew_point_c": "dew_point",
-            "gas_resistance_ohms": "gas_resistance_ohms",
-        }
-        for key, field_name in mapping.items():
-            value = reading.values.get(key)
-            if value is not None:
-                fields[field_name] = float(value)
-        return fields
-
-
 def get_driver() -> SensorDriver:
     if DEFAULT_SENSOR_TYPE == "bme680":
         return BME680Driver()
@@ -235,50 +216,170 @@ def dew_point_c(temp_c: float, rh: float) -> float | None:
     return (b * gamma) / (a - gamma)
 
 
-class InfluxWriter:
-    def __init__(self, driver: BME680Driver) -> None:
-        self.driver = driver
-        self.client = None
-        self.write_api = None
-        if not DEFAULT_INFLUX_TOKEN:
-            logging.info("influx disabled: no token configured")
-            return
-        if InfluxDBClient is None:
-            logging.warning("influx disabled: influxdb-client not installed")
-            return
-        self.client = InfluxDBClient(
-            url=DEFAULT_INFLUX_URL,
-            token=DEFAULT_INFLUX_TOKEN,
-            org=DEFAULT_INFLUX_ORG,
-        )
-        self.write_api = self.client.write_api(write_options=SYNCHRONOUS)
+POSTGRES_UNITS = {
+    "temperature_c": "C",
+    "pressure_hpa": "hPa",
+    "humidity_rh": "%RH",
+    "dew_point_c": "C",
+    "gas_resistance_ohms": "ohm",
+    "heat_stable": "bool",
+}
 
-    @property
-    def enabled(self) -> bool:
-        return self.write_api is not None
 
-    def write(self, reading: SensorReading) -> None:
-        if self.write_api is None:
+def postgres_samples(reading: SensorReading) -> tuple:
+    """Keep environmental identities separate from physical HV channels."""
+    timestamp = datetime.fromisoformat(reading.timestamp_utc.replace("Z", "+00:00"))
+    if timestamp.tzinfo is None:
+        raise ValueError("Sensor timestamp must include a timezone")
+    timestamp = timestamp.astimezone(timezone.utc)
+    host = str(state["hostname"])
+    prefix = (f"mu2etrk.environment.{host}.i2c{DEFAULT_I2C_BUS}."
+              f"addr{DEFAULT_I2C_ADDR:02x}.{reading.sensor_type}")
+    samples = []
+    for quantity, unit in POSTGRES_UNITS.items():
+        value = reading.values.get(quantity)
+        if value is None:
+            continue
+        valid_type = isinstance(value, bool) if quantity == "heat_stable" else (
+            isinstance(value, (int, float)) and not isinstance(value, bool))
+        if not valid_type or not math.isfinite(float(value)):
+            with state_lock:
+                state["postgres_fields_skipped"] += 1
+            logging.warning("postgres skipped invalid field %s", quantity)
+            continue
+        samples.append((f"{prefix}.{quantity}", host, DEFAULT_I2C_ADDR, unit,
+                        quantity, timestamp, float(value)))
+    return tuple(samples)
+
+
+class PostgresWriter:
+    """One DB-owning worker; database failures never block sensor/protection reads."""
+
+    def __init__(self, connect=None) -> None:
+        self.enabled = DEFAULT_POSTGRES_ENABLED
+        self.connection = None
+        self.channel_ids = {}
+        self.pending = queue.Queue(maxsize=DEFAULT_POSTGRES_QUEUE_SIZE)
+        self.finished = threading.Event()
+        self.thread = threading.Thread(target=self.run, name="postgres-writer", daemon=True)
+        if self.enabled and connect is None:
+            try:
+                import psycopg2
+            except ImportError as exc:
+                raise SystemExit("PostgreSQL logging requires python3-psycopg2") from exc
+            connect = psycopg2.connect
+        self.connect = connect
+
+    def start(self) -> None:
+        if self.enabled:
+            self.thread.start()
+
+    def submit(self, reading: SensorReading) -> None:
+        if not self.enabled:
             return
-        timestamp = datetime.fromisoformat(reading.timestamp_utc.replace("Z", "+00:00"))
-        point = (
-            Point(DEFAULT_MEASUREMENT)
-            .tag("host", state["hostname"])
-            .tag("sensor_type", reading.sensor_type)
-            .tag("source", reading.source)
-            .time(timestamp, WritePrecision.NS)
-        )
-        for field_name, value in self.driver.influx_fields(reading).items():
-            point = point.field(field_name, value)
-        self.write_api.write(
-            bucket=DEFAULT_INFLUX_BUCKET,
-            org=DEFAULT_INFLUX_ORG,
-            record=point,
-        )
+        try:
+            samples = postgres_samples(reading)
+            if samples:
+                self.pending.put_nowait(samples)
+        except Exception as exc:
+            self.record_drop(type(exc).__name__)
+
+    def record_drop(self, reason: str) -> None:
+        # Driver exceptions can contain connection secrets: log only their class.
+        with state_lock:
+            state["postgres_batches_dropped"] += 1
+            state["postgres_last_error"] = reason
+        logging.error("postgres batch dropped (%s)", reason)
+
+    def write_batch(self, samples: tuple) -> None:
+        if self.connection is None:
+            self.connection = self.connect(
+                host=os.getenv("PGHOST", "mu2e-dcs-01.fnal.gov"),
+                port=os.getenv("PGPORT", "5434"),
+                dbname=os.getenv("PGDATABASE", "dcs_archive"),
+                user=os.getenv("PGUSER", "dcs_writer"),
+                passfile=os.getenv("PGPASSFILE", "/etc/mu2e-tracker-lvhv-tools/postgres.pgpass"),
+                connect_timeout=5, application_name="mu2e-i2c-sensor-server",
+                options="-c statement_timeout=5000 -c lock_timeout=5000")
+            self.connection.set_session(isolation_level="READ COMMITTED")
+        new_ids = {}
+        with self.connection:
+            with self.connection.cursor() as cursor:
+                if DEFAULT_POSTGRES_REGISTER_CHANNELS and any(
+                    sample[0] not in self.channel_ids for sample in samples
+                ):
+                    # Same registration lock as the HV archive writer.
+                    cursor.execute("SELECT pg_advisory_xact_lock(73482901)")
+                values = []
+                for name, host, address, unit, quantity, timestamp, value in samples:
+                    channel_id = self.channel_ids.get(name, new_ids.get(name))
+                    if channel_id is None:
+                        cursor.execute(
+                            "SELECT id, unit, quantity FROM public.trk_channel "
+                            "WHERE name = %s AND psu = %s AND channel = %s",
+                            (name, host, address))
+                        rows = cursor.fetchall()
+                        if len(rows) > 1:
+                            raise ValueError("Ambiguous environmental channel")
+                        if rows:
+                            channel_id, stored_unit, stored_quantity = rows[0]
+                            if (stored_unit, stored_quantity) != (unit, quantity):
+                                raise ValueError("Environmental metadata mismatch")
+                        elif DEFAULT_POSTGRES_REGISTER_CHANNELS:
+                            cursor.execute(
+                                "INSERT INTO public.trk_channel (name, psu, channel, unit, quantity) "
+                                "VALUES (%s, %s, %s, %s, %s) RETURNING id",
+                                (name, host, address, unit, quantity))
+                            channel_id = cursor.fetchone()[0]
+                        else:
+                            raise ValueError("Missing environmental channel")
+                        new_ids[name] = channel_id
+                    values.append((timestamp, channel_id, value))
+                cursor.executemany(
+                    "INSERT INTO public.trk_value (time, channel_id, value) VALUES (%s, %s, %s)",
+                    values)
+        # Registration may roll back; cache and success status only after commit.
+        self.channel_ids.update(new_ids)
+        with state_lock:
+            state["postgres_last_success_utc"] = samples[0][5].isoformat()
+            state["postgres_last_error"] = None
+            state["postgres_batches_written"] += 1
+
+    def disconnect(self) -> None:
+        if self.connection is not None:
+            try:
+                self.connection.close()
+            except Exception:
+                logging.warning("postgres connection close failed")
+        self.connection = None
+        self.channel_ids.clear()
+
+    def run(self) -> None:
+        try:
+            while not self.finished.is_set() or not self.pending.empty():
+                try:
+                    samples = self.pending.get(timeout=0.2)
+                except queue.Empty:
+                    continue
+                try:
+                    self.write_batch(samples)
+                except Exception as exc:
+                    self.record_drop(type(exc).__name__)
+                    self.disconnect()
+                    # Do not retry an ambiguous commit; match the HV writer policy.
+                    self.finished.wait(5)
+                finally:
+                    self.pending.task_done()
+        finally:
+            self.disconnect()
 
     def close(self) -> None:
-        if self.client is not None:
-            self.client.close()
+        if not self.enabled:
+            return
+        self.finished.set()
+        self.thread.join(timeout=10)
+        if self.thread.is_alive():
+            logging.warning("postgres shutdown deadline reached; pending samples may be lost")
 
 
 class SensorLoop:
@@ -286,9 +387,7 @@ class SensorLoop:
         self.driver = driver
         self.bus = None
         self.sensor = None
-        self.influx = InfluxWriter(driver)
-        with state_lock:
-            state["influx_enabled"] = self.influx.enabled
+        self.postgres = PostgresWriter()
 
     def open_sensor(self) -> None:
         self.bus = SMBus(DEFAULT_I2C_BUS)
@@ -348,6 +447,7 @@ class SensorLoop:
                 state["no_data_streak"] = DEFAULT_NO_DATA_STREAK_TRIGGER
 
     def run(self) -> None:
+        self.postgres.start()
         try:
             self.open_sensor()
         except Exception as exc:
@@ -388,10 +488,7 @@ class SensorLoop:
                 continue
 
             self._record_success(reading)
-            try:
-                self.influx.write(reading)
-            except Exception as exc:
-                logging.error("influx write error err=%r", exc)
+            self.postgres.submit(reading)
 
             logging.info(
                 "sample utc=%s type=%s values=%s",
@@ -402,7 +499,7 @@ class SensorLoop:
             time.sleep(DEFAULT_PERIOD_S)
 
         self.close_bus()
-        self.influx.close()
+        self.postgres.close()
 
 
 class I2CSensorHandler(BaseHTTPRequestHandler):

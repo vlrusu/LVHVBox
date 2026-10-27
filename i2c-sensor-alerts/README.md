@@ -22,7 +22,7 @@ The sensor server remains responsible for:
 - I2C polling
 - sample history
 - HTTP API
-- InfluxDB writes
+- PostgreSQL archive writes
 
 By default the alert service targets:
 
