@@ -134,14 +134,6 @@ class App(QtWidgets.QMainWindow):
         self.viewBox.setMouseMode(self.viewBox.RectMode)
 
 
-        # Set default pen color
-        self.defaultPen = pg.mkPen(color='b')
-        self.alertPen = pg.mkPen(color='r')
-
-        # Check for trigger every second
-        self.timer = QtCore.QTimer(self)
-        self.timer.timeout.connect(self.check_file_for_trigger)
-        self.timer.start(1000)  # Every 1000 ms or 1 second
 
 
 
@@ -159,22 +151,6 @@ class App(QtWidgets.QMainWindow):
 
         
 
-    def check_file_for_trigger(self):
-        # Define the path of the file that contains the number.
-        # Modify this path as needed.
-        trigger_file_path = "../CServer/live_status.txt"
-        
-        
-        with open(trigger_file_path, 'r') as f:
-            content = f.readline().split()
-        if len(content) == 12:
-            if content[self.channel] == "1":
-                self.plotWidget.getViewBox().setBackgroundColor('r')
-    #                self.curve.setPen(self.alertPen)  # Set curve color to red
-            else:
-                self.plotWidget.getViewBox().setBackgroundColor('k')                
-    #                self.curve.setPen(self.defaultPen)  # Reset curve color to default
-        
 
     def toggle_pause(self):
         """Toggle between paused and running state."""
