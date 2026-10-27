@@ -438,8 +438,7 @@ def open_bus(port='/dev/ttyAMA0', gpiochip='/dev/gpiochip0', dir_pin=24,
 DATA_DIR = Path(__file__).resolve().parent
 
 
-class BusyError(RuntimeError):
-    pass
+from fair_queue import BusyError, FairQueue
 
 
 class RS485:
@@ -479,6 +478,9 @@ class RS485:
         self._bus = None
         self._stack = None
         self.lock = threading.Lock()
+        self.queue = FairQueue()
+        self.transaction_budget = timeout + 3.5
+        self._scan_lock = threading.Lock()
         self._discovery = None
 
     def __enter__(self):
@@ -514,13 +516,21 @@ class RS485:
         return copy.deepcopy(self._discovery) if self._discovery is not None else {
             'scanned': False, 'panels': [], 'addresses': []}
 
+    def transaction_allowance(self, words=1, *, discovery=False):
+        # Leave room for a whole exchange and an existing persisted holdoff.
+        # The queue reevaluates this while waiting; a previous owner's successful
+        # reply may clear that holdoff before this request's turn arrives.
+        session = getattr(self._bus, 'session', None)
+        holdoff = max(0, session.state['not_before'] - time.time()) if isinstance(session, BusSession) else 0
+        return holdoff + (3.5 if discovery else self.transaction_budget * words)
+
     def discover(self, start=0, end=300):
-        """Probe each inclusive address once with FPGA-only panel-ID requests."""
+        """Probe each address once, yielding the UART between discovery probes."""
         if (type(start) is not int or type(end) is not int or
                 not 0 <= start <= end <= 511):
             raise ValueError('discovery range must satisfy 0 <= start <= end <= 511')
-        if not self.lock.acquire(blocking=False):
-            raise BusyError('RS485 bus is busy; discovery was not started')
+        if not self._scan_lock.acquire(blocking=False):
+            raise BusyError('RS485 discovery is already running; scan was not started')
         try:
             if self._bus is None:
                 raise RuntimeError('RS485 device is not open')
@@ -528,7 +538,9 @@ class RS485:
             found, no_response, errors = [], [], []
             for address in range(start, end + 1):
                 try:
-                    value = self._bus.read_panel_id(address, discovery=True)
+                    with self.queue.as_client('discovery'), self.queue.turn(
+                            self.lock, reserve=lambda: self.transaction_allowance(discovery=True)):
+                        value = self._bus.read_panel_id(address, discovery=True)
                     if value != address:
                         raise ROCError('FPGA panel ID does not match addressed panel')
                     found.append(address)
@@ -548,7 +560,7 @@ class RS485:
             self._discovery = result
             return self.panels()
         finally:
-            self.lock.release()
+            self._scan_lock.release()
 
     def validate(self, address, name, panel=None, *, require_calibration=True):
         if type(address) is not int or not 0 <= address <= 511:
@@ -583,9 +595,7 @@ class RS485:
     def read(self, address, name, panel=None, *, direct=False):
         panel = self.validate(address, name, panel)
         commands = [self.direct_command(name)] if direct else command_ids(self.rules[name])
-        if not self.lock.acquire(blocking=False):
-            raise BusyError('RS485 bus is busy; request was not sent')
-        try:
+        with self.queue.turn(self.lock, reserve=lambda: self.transaction_allowance(len(commands))):
             if self._bus is None:
                 raise RuntimeError('RS485 device is not open; use it as a context manager')
             rule = self.rules[name]
@@ -599,16 +609,12 @@ class RS485:
                         commands=commands, atomic=len(commands) == 1,
                         source='FPGA TVS' if direct else 'CPU',
                         timestamp_utc=datetime.now(timezone.utc).isoformat())
-        finally:
-            self.lock.release()
 
     def recovery(self, address, *, activate=False):
         """Hardware control; activation ACK is acceptance, never proof of boot."""
         if type(address) is not int or not 1 <= address <= 511:
             raise ValueError('recovery address must be 1..511 (one MN panel)')
-        if not self.lock.acquire(blocking=False):
-            raise BusyError('RS485 bus is busy; request was not sent')
-        try:
+        with self.queue.turn(self.lock, reserve=self.transaction_allowance):
             if self._bus is None:
                 raise RuntimeError('RS485 device is not open')
             value = self._bus.control(address, activate=activate)
@@ -618,19 +624,13 @@ class RS485:
             return dict(address=address, raw=value, armed=bool(value & 1),
                         committed=bool(value & 2), failed=bool(value & 4),
                         owns_system_services=bool(value & 8), error_code=value >> 8)
-        finally:
-            self.lock.release()
 
     def panel_id(self, address):
         """Read cached, validated NVM identity entirely through FPGA logic."""
         if type(address) is not int or not 0 <= address <= 511:
             raise ValueError('panel address must be 0..511')
-        if not self.lock.acquire(blocking=False):
-            raise BusyError('RS485 bus is busy; request was not sent')
-        try:
+        with self.queue.turn(self.lock, reserve=self.transaction_allowance):
             if self._bus is None:
                 raise RuntimeError('RS485 device is not open')
             value = self._bus.read_panel_id(address)
             return dict(address=address, panel_id=value, panel=f'MN{value:03d}', source='FPGA cached NVM')
-        finally:
-            self.lock.release()

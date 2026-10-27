@@ -1,0 +1,176 @@
+---
+- name: Deploy per-PSU ROC monitoring and LV protection
+  hosts: "{{ target_hosts | default('psu_boxes') }}"
+  gather_facts: false
+  serial: 1
+  any_errors_fatal: true
+  vars:
+    # This playbook also works when copied into RPiFermilab/ansible-lvhv.
+    lvhvbox_source: "{{ playbook_dir }}/../../LVHVBox"
+    monitor_source: "{{ lvhvbox_source }}/roc-temperature-monitor"
+    monitor_pushover_source_host: psu13
+    monitor_pushover_source_file: /etc/mu2e-tracker-i2c-sensor-alerts/i2c-sensor-alerts.env
+    monitor_service: roc-temperature-monitor.service
+    # Fleet live shutdown authorized on 2026-09-27. Set false for alert-only mode.
+    monitor_power_off_enabled: true
+    # User authorized both existing PSU13 destinations on 2026-09-25.
+    # Zero-based indexes; override explicitly if the recipient list changes.
+    monitor_pushover_recipient_indexes: [0, 1]
+
+  tasks:
+    - name: Require explicit Pushover recipient selection
+      ansible.builtin.assert:
+        that:
+          - monitor_pushover_recipient_indexes | length > 0
+        fail_msg: Set monitor_pushover_recipient_indexes explicitly before sending real alerts
+
+    - name: Verify the target identity
+      ansible.builtin.command: hostname -s
+      register: monitor_hostname
+      changed_when: false
+      check_mode: false
+
+    - name: Verify required existing services without restarting them
+      ansible.builtin.command:
+        argv: [systemctl, is-active, lvhv-server.service, rs485-server.service]
+      changed_when: false
+      check_mode: false
+
+    - name: Obtain only Pushover settings from PSU13 (no secrets in output/logs)
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/python3
+          - -c
+          - |
+            import json, pathlib, shlex
+            wanted = {'I2C_SENSOR_ALERTS_PUSHOVER_API_TOKEN', 'I2C_SENSOR_ALERTS_PUSHOVER_USER_KEY'}
+            values = {}
+            for line in pathlib.Path('{{ monitor_pushover_source_file }}').read_text().splitlines():
+                if '=' not in line or line.lstrip().startswith('#'):
+                    continue
+                key, raw = line.split('=', 1)
+                if key.strip() in wanted:
+                    fields = shlex.split(raw, comments=True)
+                    if len(fields) != 1 or not fields[0]:
+                        raise SystemExit('Invalid Pushover setting')
+                    value = fields[0]
+                    if any(c not in 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789,' for c in value):
+                        raise SystemExit('Unexpected Pushover credential characters')
+                    values[key.strip()] = value
+            if set(values) != wanted:
+                raise SystemExit('Pushover credentials missing')
+            indexes = json.loads('{{ monitor_pushover_recipient_indexes | to_json }}')
+            users = values['I2C_SENSOR_ALERTS_PUSHOVER_USER_KEY'].split(',')
+            if any(type(i) is not int or not 0 <= i < len(users) for i in indexes):
+                raise SystemExit('Invalid recipient selection')
+            values['I2C_SENSOR_ALERTS_PUSHOVER_USER_KEY'] = ','.join(users[i] for i in sorted(set(indexes)))
+            for key, value in sorted(values.items()):
+                print(key + '=' + value)
+      delegate_to: "{{ monitor_pushover_source_host }}"
+      become: true
+      changed_when: false
+      check_mode: false
+      register: monitor_pushover
+      no_log: true
+      diff: false
+
+    - name: Create dedicated application and configuration directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+      loop:
+        - /usr/local/lib/roc-temperature-monitor
+        - /etc/roc-temperature-monitor
+      become: true
+
+    - name: Install monitor without changing existing LVHVBox checkout or services
+      ansible.builtin.copy:
+        src: "{{ monitor_source }}/roc_temperature_monitor.py"
+        dest: /usr/local/lib/roc-temperature-monitor/roc_temperature_monitor.py
+        owner: root
+        group: root
+        mode: '0644'
+        backup: true
+        validate: /usr/bin/python3 -c "import ast,sys; ast.parse(open(sys.argv[1]).read())" %s
+      become: true
+      register: monitor_script
+
+    - name: Archive obsolete roster for rollback only
+      ansible.builtin.command:
+        argv: [mv, /etc/roc-temperature-monitor/panels.json, /etc/roc-temperature-monitor/panels.json.pre-discovery]
+        removes: /etc/roc-temperature-monitor/panels.json
+        creates: /etc/roc-temperature-monitor/panels.json.pre-discovery
+      become: true
+
+    - name: Install protected notification credentials
+      ansible.builtin.copy:
+        content: "{{ monitor_pushover.stdout }}\n"
+        dest: /etc/roc-temperature-monitor/pushover.env
+        owner: root
+        group: root
+        mode: '0600'
+      become: true
+      no_log: true
+      diff: false
+      register: monitor_credentials
+
+    - name: Install systemd unit with explicit power-off mode
+      ansible.builtin.copy:
+        content: "{{ lookup('file', lvhvbox_source + '/systemd/roc-temperature-monitor.service') | replace('--enable-power-off', '--enable-power-off' if monitor_power_off_enabled | bool else '--dry-run') }}\n"
+        dest: /etc/systemd/system/roc-temperature-monitor.service
+        owner: root
+        group: root
+        mode: '0644'
+        backup: true
+      become: true
+      register: monitor_unit
+
+    - name: Validate configuration without queries, messages or power commands
+      ansible.builtin.shell: |
+        set -a
+        . /etc/roc-temperature-monitor/pushover.env
+        exec /usr/bin/python3 /usr/local/lib/roc-temperature-monitor/roc_temperature_monitor.py {{ '--enable-power-off' if monitor_power_off_enabled | bool else '--dry-run' }} --check-config
+      args:
+        executable: /bin/sh
+      become: true
+      changed_when: false
+      when: not ansible_check_mode
+
+    - name: Reload the unit before checking its effective command
+      ansible.builtin.systemd_service:
+        daemon_reload: true
+      become: true
+      when: not ansible_check_mode
+
+    - name: Inspect effective command including any local overrides
+      ansible.builtin.command:
+        argv: [systemctl, show, roc-temperature-monitor.service, --property=ExecStart, --value]
+      changed_when: false
+      register: monitor_effective_command
+      when: not ansible_check_mode
+
+    - name: Require effective unit mode to match the requested mode
+      ansible.builtin.assert:
+        that:
+          - "('--enable-power-off' in monitor_effective_command.stdout) == (monitor_power_off_enabled | bool)"
+          - "('--dry-run' in monitor_effective_command.stdout) != (monitor_power_off_enabled | bool)"
+        fail_msg: Local systemd override conflicts with the requested power-off mode
+      when: not ansible_check_mode
+
+    - name: Enable monitor and restart only on monitor changes
+      ansible.builtin.systemd_service:
+        name: "{{ monitor_service }}"
+        daemon_reload: true
+        enabled: true
+        state: "{{ 'restarted' if monitor_script.changed or monitor_credentials.changed or monitor_unit.changed else 'started' }}"
+      become: true
+      when: not ansible_check_mode
+
+    - name: Verify the monitor is running
+      ansible.builtin.command:
+        argv: [systemctl, is-active, roc-temperature-monitor.service]
+      changed_when: false
+      when: not ansible_check_mode

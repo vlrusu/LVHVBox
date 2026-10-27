@@ -179,6 +179,7 @@ class StartupTests(unittest.TestCase):
         for args, count in [([], 1), (['--no-discovery'], 0), (['--check-config'], 0)]:
             with self.subTest(args=args), patch.object(rs485_server, 'RS485') as cls, \
                     patch.object(rs485_server, 'Server'), patch.object(rs485_server.signal, 'signal'), \
+                    patch.object(rs485_server, 'PowerOnDiscovery'), \
                     patch('builtins.print'):
                 cls.return_value.discover.return_value = {'panels': []}
                 cls.return_value.parameters.return_value = {'parameters': []}

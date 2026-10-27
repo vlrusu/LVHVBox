@@ -47,6 +47,7 @@ class PowerSupplyServerConnection():
         self.types = {
                       'powerOn'      : 'lv',
                       'powerOff'     : 'lv',
+                      'station_reset': 'lv',
                       'readMonV48'   : 'lv',
                       'readMonI48'   : 'lv',
                       'readMonV6'    : 'lv',
@@ -117,6 +118,9 @@ class PowerSupplyServerConnection():
     def EnableLowVoltage(self, channel):
         rvs = self.WriteRead('powerOn', channel)
         return rvs
+
+    def ResetStation(self):
+        return self.WriteRead('station_reset')
 
     def QueryPowerVoltage(self, channel):
         rvs = self.WriteRead('readMonV48', channel)

@@ -1,0 +1,3 @@
+# Requires PostgreSQL enabled via the existing postgres.conf drop-in.
+[Service]
+Environment=MU2E_GRAPHITE_HV_ENABLED=0

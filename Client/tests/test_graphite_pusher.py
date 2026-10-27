@@ -7,7 +7,7 @@ import sys
 import threading
 import types
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 # No installed hardware client packages or running PSU are needed for these tests.
 modules = {}
@@ -55,7 +55,7 @@ class FakeHealth:
 class FakeRS485:
     instances = []
     values = {'ROC_TEMP': 26.85, 'ROC_RAIL_1V': 1000.0, 'ROC_RAIL_1.8V': 1800.0,
-              'ROC_RAIL_2.5V': 2500.0, 'Flow': 1.234}
+              'ROC_RAIL_2.5V': 2500.0, 'Flow': 1.234, 'V5KEY': 5.01, 'V2.5KEY': 2.49, 'DCDCTEMP': 32.5}
 
     def __init__(self, *args, **kwargs):
         self.calls = []
@@ -110,8 +110,8 @@ class GraphiteSchedulesTest(unittest.TestCase):
              patch.object(pusher, 'send_graphite') as send:
             self.assertEqual(pusher.main(), 0)
         send.assert_not_called()
-        self.assertEqual(sorted(map(len, batches)), [14, 25, 30])
-        self.assertEqual(len(FakePower.instances), 2)
+        self.assertEqual(sorted(map(len, batches)), [21, 25, 30])
+        self.assertEqual(len(FakePower.instances), 3)
         self.assertTrue(all(psu.closed for psu in FakePower.instances))
         paths = [line.split()[0] for lines in batches for line in lines]
         self.assertTrue(any(path.endswith('.collector.hv.success') for path in paths))
@@ -205,12 +205,12 @@ class GraphiteSchedulesTest(unittest.TestCase):
     def test_rs485_uses_cached_inventory_direct_tvs_and_calibrated_flow(self):
         conn = FakeRS485()
         with patch.object(pusher.time, 'time', return_value=123):
-            lines, success = pusher.collect_rs485_metrics(conn, 'test.psu')
+            lines, success = pusher.collect_rs485_metrics(conn, 'test.psu', lambda **kw: True)
         self.assertTrue(success)
         expected = [('inventory',)]
         for address in (253,101):
             expected += [('direct', address, name) for name in pusher.RS485_DIRECT_PARAMETERS]
-            expected += [('cpu', address, 'Flow')]
+            expected += [('cpu', address, name) for name in pusher.RS485_CPU_PARAMETERS]
         self.assertEqual(conn.calls, expected)
         self.assertIn('test.psu.panels.MN253.ROC_TEMP 26.85 123',lines)
         self.assertIn('test.psu.panels.MN253.ROC_RAIL_1_8V 1800.0 123',lines)
@@ -221,15 +221,15 @@ class GraphiteSchedulesTest(unittest.TestCase):
     def test_flow_failure_preserves_fpga_values_and_continues_other_panels(self):
         conn = FakeRS485()
         def flow(address, name):
-            if address==253:
+            if address==253 and name=='Flow':
                 raise RuntimeError('ROC CPU timed out')
             return {'value':1.234}
         with patch.object(conn,'read',side_effect=flow) as read, \
              patch.object(pusher.time,'time',return_value=123), \
              contextlib.redirect_stdout(io.StringIO()):
-            lines, success = pusher.collect_rs485_metrics(conn,'test.psu')
+            lines, success = pusher.collect_rs485_metrics(conn,'test.psu',lambda **kw: True)
         self.assertFalse(success)
-        self.assertEqual(read.call_count,2)  # no retry
+        self.assertEqual(read.call_count,8)  # no retry; four CPU parameters per panel
         self.assertFalse(any('.MN253.Flow ' in line for line in lines))
         self.assertIn('test.psu.panels.MN253.ROC_TEMP 26.85 123',lines)
         self.assertIn('test.psu.panels.MN253.collector.success 0 123',lines)
@@ -241,11 +241,31 @@ class GraphiteSchedulesTest(unittest.TestCase):
             with patch.object(conn,'direct_read',return_value={'value':value}), \
                  patch.object(conn,'read',wraps=conn.read) as cpu, \
                  contextlib.redirect_stdout(io.StringIO()):
-                lines, success = pusher.collect_rs485_metrics(conn,'test.psu')
+                lines, success = pusher.collect_rs485_metrics(conn,'test.psu',lambda **kw: True)
             self.assertFalse(success)
             self.assertFalse(any('.ROC_' in line for line in lines))
-            self.assertEqual([c.args for c in cpu.call_args_list],[(253,'Flow'),(101,'Flow')])
+            self.assertEqual([c.args for c in cpu.call_args_list],[(address,name) for address in (253,101) for name in pusher.RS485_CPU_PARAMETERS])
             self.assertTrue(any('.MN253.Flow ' in line for line in lines))
+
+    def test_key_metrics_use_cpu_reads_and_existing_server_conversions(self):
+        conn = FakeRS485()
+        with patch.object(pusher.time, 'time', return_value=123):
+            lines, success = pusher.collect_rs485_metrics(conn, 'test.psu', lambda **kw: True)
+        self.assertTrue(success)
+        for name,value in [('V5KEY',5.01),('V2.5KEY',2.49),('DCDCTEMP',32.5)]:
+            self.assertIn(f'test.psu.panels.MN253.{pusher.sanitize_metric_component(name)} {value} 123',lines)
+            self.assertIn(('cpu',253,name),conn.calls)
+            self.assertNotIn(('direct',253,name),conn.calls)
+        def read(address,name):
+            if address==253 and name=='V5KEY':
+                raise RuntimeError('failed key read')
+            return {'value':conn.values[name]}
+        with patch.object(conn,'read',side_effect=read), contextlib.redirect_stdout(io.StringIO()):
+            lines,success = pusher.collect_rs485_metrics(conn,'test.psu',lambda **kw: True)
+        self.assertFalse(success)
+        self.assertFalse(any('.MN253.V5KEY ' in line for line in lines))
+        self.assertTrue(any('.MN253.V2_5KEY ' in line for line in lines))
+        self.assertTrue(any('.MN101.V5KEY ' in line for line in lines))
 
     def test_inventory_validation_and_empty_inventory_send_no_panel_requests(self):
         for inventory in ({'scanned':False}, {'scanned':True,'addresses':[253,253]},
@@ -254,16 +274,16 @@ class GraphiteSchedulesTest(unittest.TestCase):
                           {'scanned':True,'addresses':[512]}):
             conn = FakeRS485()
             with patch.object(conn,'get_panels',return_value=inventory), self.assertRaises(ValueError):
-                pusher.collect_rs485_metrics(conn,'test.psu')
+                pusher.collect_rs485_metrics(conn,'test.psu',lambda **kw: True)
             self.assertEqual(conn.calls,[])
         conn = FakeRS485()
         with patch.object(conn,'get_panels',return_value={'scanned':True,'addresses':[]}):
-            lines, success = pusher.collect_rs485_metrics(conn,'test.psu')
+            lines, success = pusher.collect_rs485_metrics(conn,'test.psu',lambda **kw: True)
         self.assertFalse(success)
         self.assertEqual(conn.calls,[])
         self.assertEqual(len(lines),1)  # only discovered count; no fabricated sensor points
 
-    def test_unavailable_rs485_worker_does_not_open_power_connection(self):
+    def test_unavailable_rs485_worker_closes_its_own_power_connection(self):
         self.args.once=True
         batches=[]
         with patch.object(FakeRS485,'get_panels',side_effect=RuntimeError('HTTP unavailable')), \
@@ -272,7 +292,8 @@ class GraphiteSchedulesTest(unittest.TestCase):
             pusher.collection_worker(self.args,'test.psu','rs485')
         self.assertEqual(len(batches),1)
         self.assertIn('.collector.rs485.success 0 ',batches[0][0])
-        self.assertEqual(FakePower.instances,[])
+        self.assertEqual(len(FakePower.instances), 1)
+        self.assertTrue(FakePower.instances[0].closed)
 
     def test_hv_and_slow_continue_while_rs485_is_blocked(self):
         self.args.hv_interval=self.args.interval=0.01
@@ -299,6 +320,77 @@ class GraphiteSchedulesTest(unittest.TestCase):
                 for thread in threads: thread.join(2)
             self.assertFalse(any(thread.is_alive() for thread in threads))
 
+    def test_rs485_worker_identifies_as_graphite_for_fair_queue(self):
+        self.args.once = True
+        with patch.object(pusher, 'RS485Connection', wraps=FakeRS485) as connection, \
+             patch.object(pusher, 'collect_rs485_metrics', return_value=([], True)), \
+             patch.object(pusher, 'publish_metrics'):
+            pusher.collection_worker(self.args, 'test.psu', 'rs485')
+        self.assertEqual(connection.call_args.kwargs['client_id'], 'graphite')
+        self.assertEqual(connection.call_args.kwargs['timeout'], 30)
+
+    def test_off_worker_emits_disabled_without_inventory_or_panel_reads(self):
+        self.args.once = True
+        batches = []
+        with patch.object(FakePower, 'QuerySwitchingVoltages', create=True,
+                          return_value=[0, 1.999, -0.12, 0.8, 1.1, 0]), \
+             patch.object(pusher, 'publish_metrics', side_effect=lambda a, lines: batches.append(lines)), \
+             contextlib.redirect_stdout(io.StringIO()):
+            pusher.collection_worker(self.args, 'test.psu', 'rs485')
+        self.assertEqual(FakeRS485.instances[0].calls, [])
+        self.assertEqual(len(batches[0]), 1)
+        self.assertIn('.collector.rs485.enabled 0 ', batches[0][0])
+
+    def test_any_single_v6_at_two_enables_whole_inventory(self):
+        for channel in range(6):
+            psu, conn = FakePower(), FakeRS485()
+            values = [0] * 6
+            values[channel] = 2.0
+            with patch.object(psu, 'QuerySwitchingVoltages', return_value=values), \
+                 contextlib.redirect_stdout(io.StringIO()):
+                lines, success = pusher.collect_rs485_metrics(conn, 'test', pusher.RS485PowerGate(psu))
+            self.assertTrue(success)
+            self.assertEqual(len(conn.calls), 17)
+
+    def test_invalid_power_never_sends_rs485_requests(self):
+        for values in ([0]*5, [0]*5+[-1], [0]*5+[float('nan')], [True]*6, None):
+            psu, conn = FakePower(), FakeRS485()
+            with patch.object(psu, 'QuerySwitchingVoltages', return_value=values), \
+                 self.assertRaises(ValueError):
+                pusher.collect_rs485_metrics(conn, 'test', pusher.RS485PowerGate(psu))
+            self.assertEqual(conn.calls, [])
+
+    def test_off_mid_scan_stops_remaining_reads_and_preserves_good_sample(self):
+        psu, conn = FakePower(), FakeRS485()
+        now = [0.0]
+        original = conn.direct_read
+        def read(address, name):
+            result = original(address, name)
+            now[0] += 6
+            return result
+        with patch.object(psu, 'QuerySwitchingVoltages', side_effect=[[6]*6, [0]*6]), \
+             patch.object(conn, 'direct_read', side_effect=read), \
+             patch.object(pusher.time, 'monotonic', side_effect=lambda: now[0]), \
+             contextlib.redirect_stdout(io.StringIO()):
+            lines, success = pusher.collect_rs485_metrics(conn, 'test', pusher.RS485PowerGate(psu))
+        self.assertIsNone(success)
+        self.assertEqual(conn.calls, [('inventory',), ('direct',253,'ROC_TEMP')])
+        self.assertTrue(any('.ROC_TEMP ' in line for line in lines))
+
+    def test_off_logs_only_transition_and_power_on_resumes(self):
+        psu, conn = FakePower(), FakeRS485()
+        gate = pusher.RS485PowerGate(psu)
+        output = io.StringIO()
+        with patch.object(psu, 'QuerySwitchingVoltages', return_value=[0]*6), \
+             contextlib.redirect_stdout(output):
+            for _ in range(3):
+                self.assertEqual(pusher.collect_rs485_metrics(conn, 'test', gate), ([], None))
+        self.assertEqual(output.getvalue().count('OFF:'), 1)
+        with patch.object(psu, 'QuerySwitchingVoltages', return_value=[0,0,0,0,0,6]), \
+             contextlib.redirect_stdout(output):
+            self.assertTrue(pusher.collect_rs485_metrics(conn, 'test', gate)[1])
+        self.assertEqual(output.getvalue().count('ON:'), 1)
+
     def test_defaults_and_invalid_intervals(self):
         self.assertEqual(self.args.hv_interval, 1)
         self.assertEqual(self.args.interval, 20)
@@ -309,6 +401,143 @@ class GraphiteSchedulesTest(unittest.TestCase):
                 with self.subTest(option=option, value=value), contextlib.redirect_stderr(io.StringIO()):
                     with self.assertRaises(SystemExit):
                         pusher.parse_args([option, value])
+
+
+
+class PostgresOutputTest(unittest.TestCase):
+    def setUp(self):
+        self.args = pusher.parse_args(['--postgres', '--metric-node', 'psu1'])
+        self.connection = MagicMock()
+        self.cursor = self.connection.cursor.return_value.__enter__.return_value
+        self.connect = MagicMock(return_value=self.connection)
+        self.writer = pusher.PostgresWriter(self.args, self.connect)
+        self.addCleanup(setattr, pusher, 'postgres_writer', None)
+
+    def test_metadata_units_and_utc_sample_time(self):
+        name, psu, channel, unit, timestamp, value = pusher.postgres_sample(
+            'mu2etrk.lvhv.psu1.channels.ch11.ihv_ua 1.25 123', 'mu2etrk.lvhv', 'psu1')
+        self.assertEqual((psu, channel, unit, value), ('psu1', 11, 'uA', 1.25))
+        self.assertEqual(timestamp.timestamp(), 123)
+        self.assertIsNotNone(timestamp.tzinfo)
+        for line in ('other.psu1.channels.ch0.vhv_v 1 123',
+                     'mu2etrk.lvhv.psu1.panels.MN253.Flow 1.2 124',
+                     'mu2etrk.lvhv.psu1.channels.ch0.vhv_v nan 123'):
+            with self.assertRaises(ValueError):
+                pusher.postgres_sample(line, 'mu2etrk.lvhv', 'psu1')
+
+    def test_only_hv_samples_enter_database_queue(self):
+        lines = ['mu2etrk.lvhv.psu1.channels.ch0.vhv_v 1500 123',
+                 'mu2etrk.lvhv.psu1.channels.ch0.ihv_ua 0.1 123',
+                 'mu2etrk.lvhv.psu1.channels.ch0.v6_v 6 123',
+                 'mu2etrk.lvhv.psu1.pcb_temp_c 25 123',
+                 'mu2etrk.lvhv.psu1.panels.MN253.ROC_TEMP 26 123',
+                 'mu2etrk.lvhv.psu1.collector.hv.success 1 123']
+        self.writer.submit(lines)
+        self.assertEqual(self.writer.pending.get_nowait(), tuple(lines[:2]))
+        self.writer.submit(lines[2:])
+        self.assertTrue(self.writer.pending.empty())
+
+    def test_existing_metadata_reused_and_values_parameterized(self):
+        self.cursor.fetchall.return_value = [(42,)]
+        line = 'mu2etrk.lvhv.psu1.channels.ch0.vhv_v 6.2 123'
+        self.writer.write_batch([line])
+        self.cursor.execute.assert_called_once_with(
+            'SELECT id FROM trk_channel WHERE name = %s AND psu = %s AND channel = %s',
+            ('mu2etrk.lvhv.psu1.channels.ch0.vhv_v', 'psu1', 0))
+        values = self.cursor.executemany.call_args.args[1]
+        self.assertEqual(values[0][1:], (42, 6.2))
+        self.assertEqual(values[0][0].timestamp(), 123)
+        self.writer.write_batch([line])
+        self.assertEqual(self.cursor.execute.call_count, 1)
+        self.assertEqual(self.connect.call_count, 1)
+
+    def test_missing_or_ambiguous_metadata_rolls_back_batch(self):
+        for rows in ([], [(1,), (2,)]):
+            self.cursor.fetchall.return_value = rows
+            with self.assertRaises(ValueError):
+                self.writer.write_batch(['mu2etrk.lvhv.psu1.channels.ch0.vhv_v 25 123'])
+            self.assertFalse(self.writer.channel_ids)
+        self.cursor.executemany.assert_not_called()
+        self.assertIs(self.connection.__exit__.call_args.args[0], ValueError)
+
+    def test_registration_cache_updated_only_after_commit(self):
+        self.args.postgres_register_channels = True
+        self.cursor.fetchall.return_value = []
+        self.cursor.fetchone.return_value = (87,)
+        self.cursor.executemany.side_effect = RuntimeError('insert failed')
+        line = 'mu2etrk.lvhv.psu1.channels.ch0.vhv_v 6 123'
+        with self.assertRaises(RuntimeError):
+            self.writer.write_batch([line])
+        self.assertFalse(self.writer.channel_ids)
+        self.cursor.executemany.side_effect = None
+        self.writer.write_batch([line])
+        self.assertEqual(self.writer.channel_ids[line.split()[0]], 87)
+        self.assertIn(unittest.mock.call('SELECT pg_advisory_xact_lock(73482901)'),
+                      self.cursor.execute.call_args_list)
+        self.assertIn(unittest.mock.call(
+            'INSERT INTO trk_channel (name, psu, channel, unit) VALUES (%s, %s, %s, %s) RETURNING id',
+            (line.split()[0], 'psu1', 0, 'V')), self.cursor.execute.call_args_list)
+
+    def test_graphite_failure_still_queues_postgres_without_false_sensor_failure(self):
+        pusher.postgres_writer = self.writer
+        with patch.object(pusher, 'send_graphite', side_effect=OSError('unavailable')), \
+             contextlib.redirect_stdout(io.StringIO()):
+            pusher.publish_metrics(self.args, ['mu2etrk.lvhv.psu1.channels.ch0.vhv_v 1 123'])
+        self.assertEqual(self.writer.pending.get_nowait(), ('mu2etrk.lvhv.psu1.channels.ch0.vhv_v 1 123',))
+
+    def test_dry_run_sends_neither_sink_and_queue_is_bounded(self):
+        pusher.postgres_writer = self.writer
+        self.args.dry_run = True
+        with patch.object(pusher, 'send_graphite') as send, \
+             contextlib.redirect_stdout(io.StringIO()):
+            pusher.publish_metrics(self.args, ['mu2etrk.lvhv.psu1.channels.ch0.vhv_v 1 123'])
+        send.assert_not_called()
+        self.assertTrue(self.writer.pending.empty())
+        self.args.postgres_queue_size = 1
+        writer = pusher.PostgresWriter(self.args, self.connect)
+        writer.submit(['mu2etrk.lvhv.psu1.channels.ch0.vhv_v 1 123'])
+        with contextlib.redirect_stdout(io.StringIO()):
+            writer.submit(['mu2etrk.lvhv.psu1.channels.ch0.vhv_v 2 124'])
+        self.assertEqual(writer.pending.qsize(), 1)
+        self.assertEqual(writer.pending.get_nowait(), ('mu2etrk.lvhv.psu1.channels.ch0.vhv_v 1 123',))
+
+    def test_hv_filter_preserves_graphite_status_lv_health_and_rs485(self):
+        self.args.no_graphite_hv = True
+        pusher.postgres_writer = self.writer
+        prefix = 'mu2etrk.lvhv.psu1'
+        hv = [f'{prefix}.channels.ch0.vhv_v 1 123', f'{prefix}.channels.ch0.ihv_ua 2 123']
+        other = [f'{prefix}.{leaf} 1 123' for leaf in
+                 ('collector.hv.success', 'channels.ch0.v48_v', 'health.battery_voltage_v', 'panels.mn101.Flow')]
+        with patch.object(pusher, 'send_graphite') as send:
+            pusher.publish_metrics(self.args, hv + other)
+        send.assert_called_once_with(other, self.args.graphite_host, self.args.graphite_port, self.args.timeout)
+        self.assertEqual(self.writer.pending.get_nowait(), tuple(hv))
+        with patch.object(pusher, 'send_graphite') as send:
+            pusher.publish_metrics(self.args, hv)
+        send.assert_not_called()
+
+    def test_disabled_graphite_hv_env_and_postgres_guard(self):
+        with patch.dict(pusher.os.environ, {'MU2E_GRAPHITE_HV_ENABLED': '0', 'MU2E_POSTGRES_ENABLED': '1'}):
+            args = pusher.parse_args([])
+        self.assertTrue(args.no_graphite_hv)
+        self.assertTrue(args.postgres)
+        with patch.dict(pusher.os.environ, {}, clear=True), contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit):
+                pusher.parse_args(['--no-graphite-hv'])
+            args = pusher.parse_args(['--dry-run', '--no-graphite-hv'])
+        self.assertTrue(args.no_graphite_hv)
+
+    def test_database_failure_closes_connection_and_redacts_error(self):
+        self.writer.submit(['mu2etrk.lvhv.psu1.channels.ch0.vhv_v 25 123'])
+        self.cursor.fetchall.side_effect = RuntimeError('secret-password')
+        self.writer.finished.set()
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            self.writer.run()
+        self.assertNotIn('secret-password', output.getvalue())
+        self.connection.close.assert_called_once()
+        self.assertIsNone(self.writer.connection)
+        self.assertFalse(self.writer.channel_ids)
 
 
 if __name__ == '__main__':

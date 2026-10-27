@@ -31,6 +31,7 @@ const char* command_name(uint32_t name){
     case COMMAND_set_hv_by_dac: return "set_hv_by_dac";
     case COMMAND_down_hv: return "down_hv";
     case COMMAND_powerOn: return "powerOn";
+    case COMMAND_station_reset: return "station_reset";
     case COMMAND_powerOff: return "powerOff";
     case COMMAND_readMonV48: return "readMonV48";
     case COMMAND_readMonI48: return "readMonI48";

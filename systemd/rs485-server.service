@@ -5,6 +5,11 @@ After=network.target
 [Service]
 Type=exec
 User=mu2e
+RuntimeDirectory=rs485-server
+RuntimeDirectoryMode=0750
+StateDirectory=rs485-server
+StateDirectoryMode=0750
+EnvironmentFile=-/etc/roc-temperature-monitor/pushover.env
 WorkingDirectory=/home/mu2e/LVHVBox
 ExecStart=/usr/bin/python3 /home/mu2e/LVHVBox/rs485-server/rs485_server.py
 Restart=on-failure

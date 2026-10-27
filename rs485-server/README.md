@@ -151,14 +151,47 @@ Bind defaults to `127.0.0.1:12004`. The unauthenticated endpoint is intended
 for loopback access through the client's SSH tunnel. Rules are trusted local
 configuration loaded at startup; callers cannot submit expressions/command IDs.
 
-Reads are serialized by the class; concurrent attempts return HTTP 409 without
-sending or queuing. The process retains UART ownership through success and
+HTTP reads use a bounded fair queue (see below). The direct in-process class API
+without a queue request context still reports busy immediately. The process retains UART ownership through success and
 failure. Each subsequent transaction honors any pending response holdoff.
 Flow requires the panel's A0 calibration. Pressure holds the lock across both
 words and returns no value if either fails; firmware acquisitions are separate,
 so it has `atomic: false`. ROC errors return502, timeouts504, unavailable I/O503,
 and bad requests400. Errors have an `error` string and no measurement.
 Responses use `Cache-Control: no-store`.
+
+### Fair request queue
+
+The server takes round-robin turns among `temperature-monitor`, `graphite`,
+`interactive`, and `discovery`. A turn is one variable read or control exchange;
+both words of a pressure measurement stay together. Discovery takes one address
+probe per turn. A lone client runs continuously without waiting for absent clients.
+The active transaction always finishes; the queue does not shorten the existing
+six-second response timeout or bypass the late-response holdoff.
+
+At most two requests per client class and eight total can wait, in addition to
+one active transaction. Client classes are cooperative scheduling labels, not
+authentication. Requests within a class are FIFO. Updated Graphite and monitor
+clients send `X-RS485-Client`; ordinary/older clients default to `interactive`.
+Deploy the updated `RS485Connection.py` and both collectors along with the server
+so they receive separate turns. `fair_queue.py` is required by the shared RS485
+class, including direct CLI use.
+
+`X-RS485-Timeout` supplies the remaining server budget (0–120 seconds, default30).
+Updated clients leave 0.5 seconds before their HTTP timeout. The server reserves
+time for a complete exchange, paired words when needed, and persisted holdoff.
+Requests expire before starting another queued turn, or are cancelled if
+their waiting HTTP connection closes. Once transmission starts, the exchange
+finishes safely, including when its client disconnects; recovery activation is
+never automatically retried. Shutdown cancels waiting work and drains the active
+transaction before releasing the UART. No new reads accumulate after expiry.
+
+HTTP429 means queue full, HTTP408 means deadline/cancellation before the next
+transaction, HTTP503 means stopping, and HTTP409 covers a concurrent discovery
+or access outside the queue. `GET /health` bypasses the UART queue and exposes
+`queue.active_client`, pending counts/limits, completed turns, expired/cancelled
+requests, and rejected admissions. Cached inventory and parameter reads also
+bypass the UART queue.
 
 ## Optional systemd service
 
@@ -290,8 +323,8 @@ rs485_discover 250 300
 `rs485_panels` displays the most recent completed scan without bus traffic.
 `rs485_discover` rescans 0..300, or an inclusive range supplied as integers or
 MN identifiers (maximum address 511). The completed scan replaces the in-memory
-inventory; a partial-range scan describes only that range. No inventory is
-persisted across service restarts. No power or recovery action is triggered.
+inventory; a partial-range scan describes only that range. The current inventory
+is separate from persistent discovery history described below. No power or recovery action is triggered.
 
 Discovery waits 50 ms after transmitting each request. A missing reply retains
 a 5 ms guard before another transaction can start. The longer write/crash
@@ -302,16 +335,85 @@ existing timeout/holdoff. There is no CPU fallback and no automatic retry.
 
 A mostly empty 0..300 range should take roughly 17–20 seconds on PSU0, including
 transmission and guard time; OS scheduling and any prior pending request add
-latency. This full-scan estimate has not yet been tested on live panels.
-The scanner owns the bus for the whole scan; competing hardware requests get
-HTTP 409, while health and cached inventory remain available during a manual
-scan. A UART write/drain failure aborts instead of treating remaining panels
+latency; approximately17s was observed during the September26 deployments.
+Discovery yields the bus between addresses, so competing reads can lengthen it.
+Only one discovery runs at a time. Cached inventory is replaced only when every
+probe completes; deadline/cancellation or a UART write/drain failure aborts instead of treating remaining panels
 as absent; the previous completed inventory remains available with its timestamp.
 
 HTTP GET `/discover` (or `/discover?start=0&end=300`) returns found addresses,
 panel names, no-response addresses, protocol errors, elapsed time and timestamp.
 GET `/panels` returns that cached snapshot, or `scanned:false` before a scan.
-The Client allows at least 60 seconds for the scan HTTP request. No-response
+The updated Client allows120 seconds plus0.5 seconds transport margin for discovery. No-response
 does **not** prove a panel is absent: old firmware, invalid cached NVM ID, or
 communication problems also prevent discovery. Address 0 is probed as requested,
 but the current NVM reader only validates IDs 1..511.
+
+## Persistent discovery history and startup notifications
+
+The server stores `/var/lib/rs485-server/discovery-history.json`, containing
+the last powered completed discovery and pending startup notifications. The
+HTTP `/panels` result includes `discovery_history`; its ordinary `addresses`
+and `panels` still describe the current completed scan, not a fixed roster.
+On startup, newly missing addresses within the scanned range are compared with
+the previous saved list. A completed scan updates that list; a partial address
+scan preserves previously known addresses outside its range. Manual discovery
+updates the saved list without generating a startup notification.
+
+V6 is checked before and after the scan. Both checks must indicate ON (any of
+the six readings >=2V) before updating the baseline or generating a warning.
+OFF/unknown scans preserve the previous list and suppress warnings. Aborted
+scans do not update history. This avoids treating powered-off panels as newly
+missing. A new scan after power restoration is still required to discover them.
+
+Startup missing-panel warnings are **notification only**, independent of the
+temperature monitor's two-panel coverage protection. This component has no
+power-off operation. It uses the two existing Pushover recipients from the
+optional systemd EnvironmentFile `/etc/roc-temperature-monitor/pushover.env`.
+Credentials are read by systemd before dropping privileges to mu2e. Pending
+messages and recipient hashes survive restart; failures retry independently
+every 30 seconds. Delivery requires a fresh ON power reading; queued warnings
+wait while power is OFF or unknown. Credentials are never stored in history or
+included in log errors.
+As with any network notification, a crash after delivery but before saving its
+receipt can cause a duplicate on retry.
+
+Deploy `discovery_history.py`, the updated server and systemd unit together.
+The unit creates its writable StateDirectory and loads notification settings.
+For an existing running installation, seed history only from its cached
+`/panels` discovery before the first upgraded restart; never from MIDAS or an
+expected-panel roster. `--discovery-history` changes the history path;
+`--commands` selects the existing LVHV opcode header for read-only V6 checks.
+
+## Rediscovery after all-channel LV power-on
+
+The LVHV server sends a nonblocking local datagram after its all-channel
+`powerOn` (channel 6) operation returns success. Individual `powerOn 0` through
+`powerOn 5`, power-off, and failed all-channel power-on do not send this event.
+The event is `lv-all-on-v1` at `/run/rs485-server/power-on.sock`; systemd creates
+the runtime directory and the RS485 service owns a mode-0600 socket. Root LVHV
+can send to it. An unavailable receiver or full queue is logged by LVHV and
+does not change the power command's result. Events are best-effort, not durable.
+
+RS485 waits `--power-on-delay` seconds (default 5, configurable boot allowance,
+not a measured guarantee for every panel) and verifies V6 indicates ON. A
+background worker scans addresses 0..300, preserving the normal HTTP interface
+and UART ownership. Pending events coalesce and restart the boot delay. Busy
+transactions and transient errors are retried within a 60-second window after
+the delay; expiry is logged. OFF cancels the request; unknown power waits/retries.
+Requests arriving during a scan schedule another pass after it finishes.
+
+The completed result becomes the current discovery used by Graphite and the
+temperature monitor on their next polling cycles. Saved history is updated
+under the existing power checks. This is a rescan, not a server startup, so it
+does not generate startup missing-panel notifications. Discovery takes turns
+with sensor reads and publishes the new list only after a complete scan.
+Neither service restarts in response to the event, and discovery sends no power,
+reset, or firmware commands. For manual server launches outside systemd, provide
+an existing writable parent directory with `--power-on-socket`.
+
+Deploy the new `power_on_discovery.py`, updated server/unit, and rebuilt LVHV
+binary together. **Activating a new LVHV binary requires a maintenance window:**
+the existing LVHV startup initializes GPIO/I2C and drives global LV enable low.
+Do not restart LVHV on powered detector hardware merely to enable this feature.
+Installing the source or compiling in a temporary directory does not activate it.

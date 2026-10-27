@@ -3,14 +3,22 @@
 # January 2025
 
 import ctypes
-import select
+import math
 import socket
 import struct
+import time
 
 class MessagingConnection:
-    def __init__(self, host, port):
+    # Defensive client framing bounds, not detector/hardware limits.
+    MAX_BLOCKS = 1024
+    MAX_MESSAGE_BYTES = 64 * 1024 * 1024
+
+    def __init__(self, host, port, timeout=10.0):
         self.host = host
         self.port = port
+        self.timeout = float(timeout)
+        if not math.isfinite(self.timeout) or self.timeout <= 0:
+            raise ValueError('LVHV connection timeout must be finite and positive')
         self.reestablish()
 
         self.header = [ctypes.c_char(c) for c in 'LVHV'.encode()]
@@ -44,12 +52,19 @@ class MessagingConnection:
         }
 
     def reestablish(self):
+        if getattr(self, 'client', None) is not None:
+            self.close()
         self.client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.client.connect((self.host, self.port))
-        self.client.settimeout(0.5)
+        try:
+            self.client.settimeout(self.timeout)
+            self.client.connect((self.host, self.port))
+        except Exception:
+            self.close()
+            raise
 
     def close(self):
-        self.client.close()
+        if getattr(self, 'client', None) is not None:
+            self.client.close()
 
     def encode_block(self, *items):
         _type = type(items[0])
@@ -83,18 +98,28 @@ class MessagingConnection:
         return rvs
 
     def decode_message(self, buff):
+        if not 4 <= len(buff) <= self.MAX_MESSAGE_BYTES:
+            raise ValueError('Invalid LVHV reply length')
         lo = 0
         hi = 4
-        nblocks = struct.unpack('i', buff[lo:hi])[0]
+        nblocks = struct.unpack('I', buff[lo:hi])[0]
+        if not 1 <= nblocks <= self.MAX_BLOCKS:
+            raise ValueError('Invalid LVHV reply block count: %d' % nblocks)
         lo = hi
 
         rvs = []
         for i in range(nblocks):
-            typecode = buff[lo:lo+1].decode()
+            if lo + 5 > len(buff):
+                raise ValueError('Truncated LVHV block header')
+            typecode = chr(buff[lo])
+            if typecode not in self.inverse_typecodes:
+                raise ValueError('Unknown LVHV type code: %r' % typecode)
             key = self.formats[typecode]
             lo += 1
             hi = lo + 4
-            count = struct.unpack('i', buff[lo:hi])[0]
+            count = struct.unpack('I', buff[lo:hi])[0]
+            if count * ctypes.sizeof(self.inverse_typecodes[typecode]) > len(buff) - hi:
+                raise ValueError('Truncated or excessive LVHV block payload')
             fmt = '%d%s' % (count, key)
             size = struct.calcsize(fmt)
             lo = hi
@@ -103,60 +128,89 @@ class MessagingConnection:
             rvs.append(unpacked)
             lo = hi
 
-        assert(lo == hi == len(buff))
+        if hi != len(buff):
+            raise ValueError('Trailing bytes in LVHV reply')
 
         return rvs
 
     def send_message(self, *items):
         encoded = self.encode_message(self.header, *items)
-        self.client.send(encoded)
+        try:
+            self.client.settimeout(self.timeout)
+            self.client.sendall(encoded)
+        except TimeoutError as error:
+            self.close()
+            raise TimeoutError('Timed out sending LVHV command to %s:%d; '
+                               'delivery uncertain, command not retried' %
+                               (self.host, self.port)) from error
+        except OSError as error:
+            self.close()
+            raise ConnectionError('Failed sending LVHV command to %s:%d; '
+                                  'delivery uncertain, command not retried: %s' %
+                                  (self.host, self.port, error)) from error
 
-    def safe_recv(self, chunk):
-        rv = None
-        self.client.setblocking(False)
-        while rv is None:
-            ready = select.select([self.client], [], [], 10.0)
-            if ready[0]:
-                rv = self.client.recv(chunk)
-            else:
-                rv = b''
-        return rv
+    def safe_recv(self, chunk, deadline=None, context='reply data'):
+        """Read exactly chunk bytes, with EOF failure and one overall deadline."""
+        if deadline is None:
+            deadline = time.monotonic() + self.timeout
+        received = bytearray()
+        while len(received) < chunk:
+            detail = '%s from %s:%d (%d/%d bytes)' % (
+                context, self.host, self.port, len(received), chunk)
+            try:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError('LVHV reply deadline expired')
+                self.client.settimeout(remaining)
+                data = self.client.recv(min(65536, chunk - len(received)))
+            except TimeoutError as error:
+                self.close()
+                raise TimeoutError('Timed out receiving LVHV %s' % detail) from error
+            except OSError as error:
+                self.close()
+                raise ConnectionError('Failed receiving LVHV %s: %s' % (detail, error)) from error
+            if not data:
+                self.close()
+                raise EOFError('Connection closed receiving LVHV %s' % detail)
+            received.extend(data)
+        return bytes(received)
 
-    def recv_block(self):
-        pfx = b''
-        recv = self.safe_recv(1)
-        pfx += recv
-        typecode = recv
-        recv = self.safe_recv(ctypes.sizeof(ctypes.c_uint))
-        pfx += recv
-        count = recv
-        count = struct.unpack('I', count)[0]
-        _type = self.inverse_typecodes[typecode.decode()]
+    def recv_block(self, deadline=None, max_bytes=None):
+        if deadline is None:
+            deadline = time.monotonic() + self.timeout
+        if max_bytes is None:
+            max_bytes = self.MAX_MESSAGE_BYTES
+        typecode = self.safe_recv(1, deadline, 'block type')
+        count_bytes = self.safe_recv(4, deadline, 'block element count')
+        key = chr(typecode[0])
+        if key not in self.inverse_typecodes:
+            raise ValueError('Unknown LVHV type code: %r' % key)
+        count = struct.unpack('I', count_bytes)[0]
+        _type = self.inverse_typecodes[key]
         size = count * ctypes.sizeof(_type)
-
-        chunk = 1024
-        remaining = size
-        rv = b''
-        tbr = min(chunk, remaining)
-        while 0 < tbr:
-            recv = self.safe_recv(tbr)
-            rv += recv
-            remaining -= len(recv)
-            tbr = min(chunk, remaining)
-
-        assert(len(rv) == size)
-        rv = pfx + rv
-        return rv
+        if size + 5 > max_bytes:
+            raise ValueError('LVHV block exceeds reply size limit')
+        return typecode + count_bytes + self.safe_recv(size, deadline, 'block payload')
 
     def recv_message(self):
-        # recv number of blocks to read
-        rv = self.safe_recv(ctypes.sizeof(ctypes.c_uint))
-        nblocks = struct.unpack('I', rv)[0]
-
-        for i in range(nblocks):
-            rv += self.recv_block()
-
-        rv = self.decode_message(rv)
-        assert(rv[0] == self.check)
-        rv = rv[1:]
-        return rv
+        try:
+            deadline = time.monotonic() + self.timeout
+            prefix = self.safe_recv(4, deadline, 'block count')
+            nblocks = struct.unpack('I', prefix)[0]
+            if not 1 <= nblocks <= self.MAX_BLOCKS:
+                raise ValueError('Invalid LVHV reply block count: %d' % nblocks)
+            blocks = [prefix]
+            total = len(prefix)
+            for i in range(nblocks):
+                block = self.recv_block(deadline, self.MAX_MESSAGE_BYTES - total)
+                blocks.append(block)
+                total += len(block)
+            reply = self.decode_message(b''.join(blocks))
+            if reply[0] != self.check:
+                raise ValueError('Invalid LVHV reply magic header')
+            return reply[1:]
+        except Exception:
+            # A partial frame cannot safely be reused for the next command.
+            # Never reconnect/replay automatically: a write may have executed.
+            self.close()
+            raise

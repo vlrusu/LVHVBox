@@ -1,0 +1,4 @@
+# Install for the chosen PSU as:
+# /etc/systemd/system/graphite-pusher.service.d/postgres.conf
+[Service]
+EnvironmentFile=/etc/mu2e-tracker-lvhv-tools/graphite-pusher-postgres.env

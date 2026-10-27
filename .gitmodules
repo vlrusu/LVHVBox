@@ -1,0 +1,3 @@
+[submodule "x728-script"]
+	path = x728-script
+	url = https://github.com/geekworm-com/x728-script

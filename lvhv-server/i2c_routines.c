@@ -3,6 +3,7 @@
 // September 2024
 
 #include "i2c_routines.h"
+#include "rs485_notify.h"
 
 // globals -.-
 // lv
@@ -17,28 +18,27 @@ DAC8164 hv_dacs[3];
 
 #define STATION_RESET_PIN 25
 
-static int lv_all_power_on_reset(){
+static int station_reset_pulse(void){
   if (setup_gpio(STATION_RESET_PIN) == -1) {
-    error_log("lv all power on reset failed configuring station reset pin");
+    error_log("station reset failed configuring GPIO25");
     return -1;
   }
 
   if (write_gpio_value(STATION_RESET_PIN, LOW) == -1) {
-    error_log("lv all power on reset failed driving station reset pin low");
+    error_log("station reset failed driving GPIO25 low");
     return -1;
   }
 
-  if (msleep(500) != 0) {
-    error_log("lv all power on reset failed waiting 500 ms");
-    return -1;
-  }
+  int wait_failed = msleep(500) != 0;
+  // Attempt to release reset even if the wait failed.
+  int release_failed = write_gpio_value(STATION_RESET_PIN, HIGH) == -1;
+  if (wait_failed) error_log("station reset failed waiting 500 ms");
+  if (release_failed) error_log("station reset failed driving GPIO25 high");
+  return (wait_failed || release_failed) ? -1 : 0;
+}
 
-  if (write_gpio_value(STATION_RESET_PIN, HIGH) == -1) {
-    error_log("lv all power on reset failed driving station reset pin high");
-    return -1;
-  }
-
-  return 0;
+Message_t* i2c_station_reset(void){
+  return message_wrap_int(station_reset_pulse());
 }
 
 int initialize_i2c_lv(uint8_t channel_map[6]){
@@ -405,7 +405,7 @@ int i2c_lv_power_control(uint8_t channel, uint8_t pin_map[6], int value){
   }
 
   if ((channel == 6) && (value == HIGH)) {
-    if (lv_all_power_on_reset() != 0) {
+    if (station_reset_pulse() != 0) {
       return -1;
     }
   }
@@ -442,6 +442,9 @@ int i2c_lv_power_control(uint8_t channel, uint8_t pin_map[6], int value){
 
 Message_t* i2c_lv_power_on(uint8_t channel, uint8_t pin_map[6]){
   int irv = i2c_lv_power_control(channel, pin_map, HIGH);
+  if (rs485_notify_power_on(channel, irv) != 0) {
+    error_log("RS485 discovery notification unavailable; LV powerOn result unchanged");
+  }
   Message_t* rv = message_wrap_int(irv);
   return rv;
 }
@@ -632,6 +635,9 @@ void* i2c_loop(void* args){
     else if (task->command.name == COMMAND_powerOff){
       uint8_t channel = task->command.char_parameter;
       rv = i2c_lv_power_off(channel, channel_map);
+    }
+    else if (task->command.name == COMMAND_station_reset){
+      rv = i2c_station_reset();
     }
     else if (task->command.name == COMMAND_readMonV6){
       rv = i2c_read_6V_voltage(task->command.char_parameter);

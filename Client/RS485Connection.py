@@ -1,22 +1,32 @@
 """Remote on-demand telemetry client; no Pi dependencies or LV/HV connection."""
 import json
+import math
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 
 class RS485Connection:
-    def __init__(self, host='127.0.0.1', port=12004, timeout=30.0):
+    def __init__(self, host='127.0.0.1', port=12004, timeout=30.0, client_id='interactive'):
         self.host, self.port, self.timeout = host, port, timeout
+        if client_id not in ('interactive', 'graphite', 'temperature-monitor'):
+            raise ValueError('unknown RS485 client')
+        if not math.isfinite(timeout) or timeout <= 0.5:
+            raise ValueError('RS485 HTTP timeout must exceed 0.5 seconds')
+        self.client_id = client_id
 
     def _get(self, path, params=None, body=None, *, timeout=None):
         url = f'http://{self.host}:{self.port}{path}'
         if params:
             url += '?' + urlencode(params)
-        request = url if body is None else Request(url, data=json.dumps(body).encode(),
-                                                   headers={'Content-Type': 'application/json'}, method='POST')
+        timeout = self.timeout if timeout is None else timeout
+        headers = {'X-RS485-Client': self.client_id,
+                   'X-RS485-Timeout': str(min(120, timeout - 0.5))}
+        if body is not None:
+            headers['Content-Type'] = 'application/json'
+        request = Request(url, data=None if body is None else json.dumps(body).encode(), headers=headers)
         try:
-            with urlopen(request, timeout=self.timeout if timeout is None else timeout) as response:
+            with urlopen(request, timeout=timeout) as response:
                 return json.load(response)
         except HTTPError as exc:
             try:
@@ -45,9 +55,9 @@ class RS485Connection:
         start, end = address(start), address(end)
         if not 0 <= start <= end <= 511:
             raise ValueError('discovery range must satisfy 0 <= start <= end <= 511')
-        # A full 512-address scan plus an outstanding legacy reply window can
-        # exceed the normal per-variable HTTP timeout. No HTTP retries.
-        return self._get('/discover', {'start': start, 'end': end}, timeout=max(60, self.timeout))
+        # Discovery yields between probes, so competing reads can extend the
+        # scan beyond its idle-bus duration. No automatic HTTP retries.
+        return self._get('/discover', {'start': start, 'end': end}, timeout=max(120.5, self.timeout))
 
     def direct_read(self, address, name):
         return self.read(address, name, direct=True)

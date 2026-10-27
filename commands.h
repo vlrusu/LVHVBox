@@ -28,6 +28,7 @@
 #define COMMAND_set_hv_by_dac 344631823 // COMMAND_ramp_hv + 1
 #define COMMAND_down_hv 1236373670
 #define COMMAND_powerOn 1346615123
+#define COMMAND_station_reset 1346615124
 #define COMMAND_powerOff 78047085
 #define COMMAND_readMonV48 825765056
 #define COMMAND_readMonI48 776173886

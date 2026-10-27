@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from unittest.mock import Mock, patch
 from urllib.error import HTTPError
@@ -93,7 +94,7 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(self.opened, 1)
         self.bus.read_scalar.assert_not_called()
 
-    def test_overlapping_clients_rejected_without_interleaving_pressure(self):
+    def test_overlapping_clients_queue_without_interleaving_pressure(self):
         entered, release = threading.Event(), threading.Event()
         results = []
         def read(address, command):
@@ -108,13 +109,22 @@ class ServerTests(unittest.TestCase):
         try:
             self.assertTrue(entered.wait(5))
             self.assertTrue(self.client.get_health()['busy'])
-            with self.assertRaisesRegex(RuntimeError, 'busy'):
-                self.client.read(101, 'DBG')
+            second = threading.Thread(target=lambda: results.append(self.client.read(101, 'DBG')))
+            second.start()
+            deadline = time.monotonic() + 2
+            while self.telemetry.queue.status()['pending'] != 1 and time.monotonic() < deadline:
+                time.sleep(.01)
+            self.assertEqual(self.telemetry.queue.status()['pending'], 1)
+            self.assertEqual(self.bus.read_scalar.call_count, 1)
             self.assertEqual(self.opened, 1)
         finally:
             release.set()
             worker.join(5)
-        self.assertEqual(results[0]['raw'], 0x1F179400)
+            if 'second' in locals():
+                second.join(5)
+        pressure = next(r for r in results if r['name'] == 'ILP_PRESSURE')
+        self.assertEqual(pressure['raw'], 0x1F179400)
+        self.assertEqual([c.args[1] for c in self.bus.read_scalar.call_args_list[:2]], [41, 42])
 
     def test_direct_tvs_http_conversions_and_client_commands(self):
         names = ['ROC_RAIL_1V','ROC_RAIL_1.8V','ROC_RAIL_2.5V','ROC_TEMP']

@@ -1,0 +1,28 @@
+[Unit]
+Description=ROC temperature and missing-readout protection
+After=network-online.target lvhv-server.service rs485-server.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=mu2e
+Group=mu2e
+ExecStart=/usr/bin/python3 /usr/local/lib/roc-temperature-monitor/roc_temperature_monitor.py --enable-power-off
+EnvironmentFile=/etc/roc-temperature-monitor/pushover.env
+StateDirectory=roc-temperature-monitor
+StateDirectoryMode=0700
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+UMask=0077
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
