@@ -15,6 +15,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from power_on_discovery import EVENT, PowerOnDiscovery
 from rs485 import BusyError
+from discovery_history import DiscoveryHistory
+from rs485_server import run_discovery
 
 
 class SchedulingTests(unittest.TestCase):
@@ -30,7 +32,7 @@ class SchedulingTests(unittest.TestCase):
         self.scan.assert_not_called()
         self.worker.step(5)
         self.worker.step(100)
-        self.scan.assert_called_once_with()
+        self.scan.assert_called_once_with(power_on=True)
 
     def test_pending_events_coalesce_and_restart_boot_delay(self):
         for now in [0, 1, 2]:
@@ -38,7 +40,7 @@ class SchedulingTests(unittest.TestCase):
         self.worker.step(5)
         self.scan.assert_not_called()
         self.worker.step(7)
-        self.scan.assert_called_once_with()
+        self.scan.assert_called_once_with(power_on=True)
 
     def test_busy_scan_retried_without_losing_request(self):
         self.scan.side_effect = [BusyError('busy'), {'count': 2}]
@@ -152,7 +154,7 @@ class TransportTests(unittest.TestCase):
     def test_c_event_drives_background_scan(self):
         scanned = threading.Event()
         power = Mock(); power.voltages.return_value = [6] * 6
-        def scan():
+        def scan(*, power_on=False):
             scanned.set()
             return {'count': 12}
         with PowerOnDiscovery(self.path, scan, power, delay=0.01) as worker:
@@ -161,10 +163,42 @@ class TransportTests(unittest.TestCase):
             self.assertTrue(scanned.wait(2))
         self.assertFalse(worker.thread.is_alive())
 
+    def test_c_power_on_event_queues_delivers_and_preserves_expected_inventory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            history = DiscoveryHistory(Path(tmp) / 'history.json', 'test-psu')
+            def inventory(addresses):
+                return {'scanned': True, 'start': 0, 'end': 300,
+                        'addresses': addresses, 'count': len(addresses)}
+            history.record(inventory([1,2]), True)
+            power = Mock(); power.voltages.return_value = [6] * 6
+            telemetry = Mock(); telemetry.discover.return_value = inventory([1])
+            scanned = threading.Event()
+            def discover(**kwargs):
+                result = run_discovery(telemetry, history, power, **kwargs)
+                scanned.set()
+                return result
+            with PowerOnDiscovery(self.path, discover, power, delay=0) as worker:
+                worker.start()
+                self.assertEqual(self.lib.rs485_notify_power_on(6, 0), 0)
+                self.assertTrue(scanned.wait(2))
+            restored = DiscoveryHistory(history.path, 'test-psu')
+            self.assertEqual(restored.status()['last_discovered'], [1,2])
+            self.assertEqual(restored.status()['last_scan']['missing'], [2])
+            self.assertEqual(restored.status()['pending_notifications'], 1)
+            notifier = Mock(); notifier.users = ['test-recipient']
+            restored.deliver(notifier, power)
+            notifier.send.assert_called_once()
+            recipient, title, body = notifier.send.call_args.args
+            self.assertEqual(recipient, 'test-recipient')
+            self.assertIn('power-on discovery', title)
+            self.assertIn('MN002', body)
+            self.assertIn('never requests power-off', body)
+            self.assertEqual(restored.status()['pending_notifications'], 0)
+
     def test_shutdown_waits_for_active_scan_before_releasing_socket(self):
         started = threading.Event(); release = threading.Event(); exited = threading.Event()
         power = Mock(); power.voltages.return_value = [6] * 6
-        def scan():
+        def scan(*, power_on=False):
             started.set(); release.wait(2)
             return {'count': 1}
         worker = PowerOnDiscovery(self.path, scan, power, delay=0)

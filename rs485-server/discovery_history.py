@@ -1,4 +1,4 @@
-"""Persist completed RS485 discovery and deliver notification-only startup changes."""
+"""Persist completed RS485 discovery and deliver notification-only startup and power-on changes."""
 import copy
 from datetime import datetime, timezone
 import hashlib
@@ -127,7 +127,7 @@ class DiscoveryHistory:
         temporary.write_text(json.dumps(self.data))
         temporary.replace(self.path)
 
-    def record(self, inventory, powered, *, startup=False):
+    def record(self, inventory, powered, *, startup=False, power_on=False):
         if inventory.get('scanned') is not True:
             raise ValueError('Cannot persist an incomplete discovery')
         found = self.addresses(inventory['addresses'])
@@ -140,15 +140,16 @@ class DiscoveryHistory:
             missing = sorted(a for a in previous if start <= a <= end and a not in found)
             stamp = inventory.get('timestamp_utc') or datetime.now(timezone.utc).isoformat()
             # OFF/unknown scans must not erase a known list or generate nuisance
-            # startup warnings. A later powered scan can update the baseline.
+            # warnings. Powered scans only add to the expected inventory.
             if powered is True:
-                self.data['last_discovered'] = sorted(set(found) | {a for a in previous if not start <= a <= end})
-                if startup:
+                self.data['last_discovered'] = sorted(set(previous) | set(found))
+                if startup or power_on:
                     for offset in range(0, len(missing), 100):
                         self.data['pending'].append({'id': uuid4().hex, 'timestamp_utc': stamp,
-                                                     'missing': missing[offset:offset+100], 'delivered': []})
+                                                     'missing': missing[offset:offset+100], 'delivered': [],
+                                                     'reason': 'power-on' if power_on else 'startup'})
             self.data['last_scan'] = {'timestamp_utc': stamp, 'startup': startup,
-                                      'powered': powered, 'addresses': found, 'missing': missing}
+                                      'power_on': power_on, 'powered': powered, 'addresses': found, 'missing': missing}
             self._save()
             return self.status()
 
@@ -162,6 +163,7 @@ class DiscoveryHistory:
         with self.lock:
             pending = copy.deepcopy(self.data['pending'])
         for event in pending:
+            reason = 'power-on' if event.get('reason') == 'power-on' else 'startup'
             panels = ', '.join(f'MN{a:03d}' for a in event['missing'])
             for user in notifier.users:
                 rid = hashlib.sha256(user.encode()).hexdigest()
@@ -170,19 +172,19 @@ class DiscoveryHistory:
                 if power_reader is not None and not any(v >= 2 for v in power_reader.voltages()):
                     return  # retain pending warning until PSU power is verified ON
                 try:
-                    notifier.send(user, f'{self.hostname}: RS485 startup discovery',
-                                  f'Previously discovered panels missing at startup: {panels}.\n'
+                    notifier.send(user, f'{self.hostname}: RS485 {reason} discovery',
+                                  f'Expected panels missing at {reason}: {panels}.\n'
                                   f"Scan: {event['timestamp_utc']}\n"
                                   'Notification only: this discovery warning never requests power-off.')
                 except Exception:
-                    LOG.error('Startup discovery notification failed; retry pending recipient')
+                    LOG.error('Discovery notification failed; retry pending recipient')
                     continue
                 with self.lock:
                     current = next((x for x in self.data['pending'] if x['id'] == event['id']), None)
                     if current is not None and rid not in current['delivered']:
                         current['delivered'].append(rid)
                         self._save()
-                LOG.warning('Startup discovery notification delivered: %s (notification only)', panels)
+                LOG.warning('Discovery notification delivered: %s (notification only)', panels)
             wanted = {hashlib.sha256(user.encode()).hexdigest() for user in notifier.users}
             with self.lock:
                 self.data['pending'] = [x for x in self.data['pending']
@@ -195,5 +197,5 @@ class DiscoveryHistory:
                 if power_reader is not None and self.status()['pending_notifications']:
                     self.deliver(notifier, power_reader)
             except Exception:
-                LOG.error('Startup discovery notification failed; will retry (credential details suppressed)')
+                LOG.error('Discovery notification failed; will retry (credential details suppressed)')
             stop.wait(30)

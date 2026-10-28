@@ -75,7 +75,7 @@ class PowerOnDiscovery:
                 return
             if self.stop.is_set():
                 return
-            result = self.discover()
+            result = self.discover(power_on=True)
         except BusyError:
             self.due = now + 0.25
             return

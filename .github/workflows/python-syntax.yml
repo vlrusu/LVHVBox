@@ -20,3 +20,5 @@ jobs:
         run: python -m unittest discover -s Client/tests -p test_python_syntax.py -v
       - name: Validate shared alarm policy and monitor configuration
         run: python -m unittest discover -s Client/tests -p test_alarm_policy.py -v
+      - name: Test RS485 discovery and notification behavior with simulated hardware
+        run: python -m unittest discover -s rs485-server/tests -v

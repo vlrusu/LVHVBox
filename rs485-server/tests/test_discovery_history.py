@@ -1,4 +1,4 @@
-"""Offline discovery persistence and notification-only startup changes."""
+"""Offline expected inventory and notification-only startup/power-on changes."""
 import importlib.util
 import json
 from pathlib import Path
@@ -43,13 +43,13 @@ class HistoryTests(unittest.TestCase):
         self.assertEqual(self.history.status()['last_discovered'], [153,280])
         self.assertEqual(self.history.status()['pending_notifications'], 0)
 
-    def test_next_startup_detects_only_newly_missing_and_survives_restart(self):
+    def test_startup_detects_missing_preserves_expectations_and_survives_restart(self):
         self.history.record(scan([138,153,272]), True, startup=True)
         self.history = DiscoveryHistory(self.path, 'test-psu')
         self.history.record(scan([153]), True, startup=True)
         restored = DiscoveryHistory(self.path)
         self.assertEqual(restored.status()['last_scan']['missing'], [138,272])
-        self.assertEqual(restored.status()['last_discovered'], [153])
+        self.assertEqual(restored.status()['last_discovered'], [138,153,272])
         notifier = Notifications()
         restored.deliver(notifier)
         self.assertEqual(len(notifier.calls), 2)
@@ -93,14 +93,54 @@ class HistoryTests(unittest.TestCase):
     def test_partial_scan_preserves_unprobed_addresses(self):
         self.history.record(scan([1,2,100]), True)
         self.history.record(scan([2],0,10), True, startup=True)
-        self.assertEqual(self.history.status()['last_discovered'], [2,100])
+        self.assertEqual(self.history.status()['last_discovered'], [1,2,100])
         self.assertEqual(self.history.status()['last_scan']['missing'], [1])
 
-    def test_manual_scan_updates_baseline_without_startup_notification(self):
+    def test_manual_scan_preserves_expectations_without_notification(self):
         self.history.record(scan([1,2]), True)
         self.history.record(scan([1]), True)
-        self.assertEqual(self.history.status()['last_discovered'], [1])
+        self.assertEqual(self.history.status()['last_discovered'], [1,2])
         self.assertEqual(self.history.status()['pending_notifications'], 0)
+
+    def test_repeated_power_ons_keep_missing_panels_expected_after_delivery(self):
+        self.history.record(scan([1,2]), True)
+        notifier = Notifications()
+        for _ in range(2):
+            self.history = DiscoveryHistory(self.path, 'test-psu')
+            self.history.record(scan([1,3]), True, power_on=True)
+            self.assertEqual(self.history.status()['last_discovered'], [1,2,3])
+            self.assertEqual(self.history.status()['last_scan']['addresses'], [1,3])
+            self.assertEqual(self.history.status()['last_scan']['missing'], [2])
+            self.assertTrue(self.history.status()['last_scan']['power_on'])
+            self.history.deliver(notifier)
+        self.assertEqual(len(notifier.calls), 4)
+        self.assertIn('power-on discovery', notifier.calls[0][1])
+        self.assertIn('MN002', notifier.calls[0][2])
+        self.history.record(scan([1,2,3]), True, power_on=True)
+        self.assertEqual(self.history.status()['pending_notifications'], 0)
+        self.assertEqual(self.history.status()['last_discovered'], [1,2,3])
+
+    def test_power_on_off_unknown_or_incomplete_scan_does_not_queue(self):
+        self.history.record(scan([1,2]), True)
+        for powered in (False, None):
+            self.history.record(scan([]), powered, power_on=True)
+            self.assertEqual(self.history.status()['pending_notifications'], 0)
+            self.assertEqual(self.history.status()['last_discovered'], [1,2])
+        with self.assertRaises(ValueError):
+            self.history.record({'scanned': False}, True, power_on=True)
+        self.assertEqual(self.history.status()['pending_notifications'], 0)
+
+    def test_legacy_history_and_pending_notification_remain_compatible(self):
+        self.path.write_text(json.dumps({'version': 1, 'last_discovered': [1,2],
+            'last_scan': None, 'pending': [{'id': 'old', 'timestamp_utc': 'old',
+                                          'missing': [2], 'delivered': []}]}))
+        restored = DiscoveryHistory(self.path, 'test-psu')
+        notifier = Notifications()
+        restored.deliver(notifier)
+        self.assertIn('startup discovery', notifier.calls[0][1])
+        restored.record(scan([1]), True, power_on=True)
+        self.assertEqual(restored.status()['last_discovered'], [1,2])
+        self.assertEqual(restored.status()['pending_notifications'], 1)
 
     def test_full_loss_while_on_warns_without_any_power_write_interface(self):
         self.history.record(scan([1,2]), True)

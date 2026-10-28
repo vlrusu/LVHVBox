@@ -361,16 +361,22 @@ does **not** prove a panel is absent: old firmware, invalid cached NVM ID, or
 communication problems also prevent discovery. Address 0 is probed as requested,
 but the current NVM reader only validates IDs 1..511.
 
-## Persistent discovery history and startup notifications
+## Expected inventory and discovery notifications
 
 The server stores `/var/lib/rs485-server/discovery-history.json`, containing
-the last powered completed discovery and pending startup notifications. The
-HTTP `/panels` result includes `discovery_history`; its ordinary `addresses`
-and `panels` still describe the current completed scan, not a fixed roster.
-On startup, newly missing addresses within the scanned range are compared with
-the previous saved list. A completed scan updates that list; a partial address
-scan preserves previously known addresses outside its range. Manual discovery
-updates the saved list without generating a startup notification.
+the expected inventory and pending discovery notifications. For compatibility,
+`last_discovered` is the persisted expected address list: the union of addresses
+seen in completed, verified-powered scans. No discovery removes an expected
+address, including manual and partial-range scans. Newly found addresses are
+added automatically. The HTTP `/panels` result includes `discovery_history`;
+its ordinary `addresses` and `panels` still describe the current completed scan.
+
+Service startup and successful all-channel power-on discovery compare the
+current result against expected addresses within the scanned range and queue
+Pushover warnings for missing panels. Each later power-on can warn again if
+those panels are still absent, even after the prior warning was delivered.
+Manual discovery updates the current result and adds newly seen addresses but
+does not queue warnings or forget missing panels.
 
 V6 is checked before and after the scan. Both checks must indicate ON (any of
 the six readings >=2V) before updating the baseline or generating a warning.
@@ -378,9 +384,9 @@ OFF/unknown scans preserve the previous list and suppress warnings. Aborted
 scans do not update history. This avoids treating powered-off panels as newly
 missing. A new scan after power restoration is still required to discover them.
 
-Startup missing-panel warnings are **notification only**, independent of the
+Startup and power-on missing-panel warnings are **notification only**, independent of the
 temperature monitor's two-panel coverage protection. This component has no
-power-off operation. It uses the two existing Pushover recipients from the
+power-off operation. It uses the configured Pushover recipients from the
 optional systemd EnvironmentFile `/etc/roc-temperature-monitor/pushover.env`.
 Credentials are read by systemd before dropping privileges to mu2e. Pending
 messages and recipient hashes survive restart; failures retry independently
@@ -392,10 +398,15 @@ receipt can cause a duplicate on retry.
 
 Deploy `discovery_history.py`, the updated server and systemd unit together.
 The unit creates its writable StateDirectory and loads notification settings.
-For an existing running installation, seed history only from its cached
-`/panels` discovery before the first upgraded restart; never from MIDAS or an
-expected-panel roster. `--discovery-history` changes the history path;
-`--commands` selects the existing LVHV opcode header for read-only V6 checks.
+Existing version-1 history and pending messages load without migration. This
+fix preserves the saved baseline going forward; it cannot reconstruct addresses
+already erased by older software. Restore such addresses only from verified
+historical discoveries or an operator-confirmed roster. To retire or replace an
+expected address intentionally, edit `last_discovered` in the history file while
+`rs485-server` is stopped (back up the file and preserve its other fields).
+There is no automatic pruning or live HTTP operation to remove expectations.
+`--discovery-history` changes the history path; `--commands` selects the existing
+LVHV opcode header for read-only V6 checks.
 
 ## Rediscovery after all-channel LV power-on
 
@@ -420,8 +431,8 @@ Requests arriving during a scan schedule another pass after it finishes.
 
 The completed result becomes the current discovery used by Graphite and the
 temperature monitor on their next polling cycles. Saved history is updated
-under the existing power checks. This is a rescan, not a server startup, so it
-does not generate startup missing-panel notifications. Discovery takes turns
+under the existing power checks, preserving expected addresses and queuing
+Pushover warnings for any missing panels. Discovery takes turns
 with sensor reads and publishes the new list only after a complete scan.
 Neither service restarts in response to the event, and discovery sends no power,
 reset, or firmware commands. For manual server launches outside systemd, provide

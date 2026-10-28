@@ -18,7 +18,7 @@ from power_on_discovery import PowerOnDiscovery
 from fair_queue import QueueFull, QueueExpired, QueueCancelled, QueueClosed
 
 
-def run_discovery(telemetry, history=None, power_reader=None, start=0, end=300, *, startup=False):
+def run_discovery(telemetry, history=None, power_reader=None, start=0, end=300, *, startup=False, power_on=False):
     def powered():
         if power_reader is None:
             return None
@@ -33,7 +33,7 @@ def run_discovery(telemetry, history=None, power_reader=None, start=0, end=300, 
         after = powered()
         state = True if before is True and after is True else False if before is False or after is False else None
         try:
-            history.record(inventory, state, startup=startup)
+            history.record(inventory, state, startup=startup, power_on=power_on)
         except (OSError, ValueError, KeyError):
             logging.exception('Cannot persist discovery history; telemetry remains available')
     return inventory
@@ -231,9 +231,9 @@ def main(argv=None):
         except ValueError:
             logging.error('Discovery notification credentials unavailable; events will remain queued')
         notification_stop = threading.Event()
-        def background_discovery(*, startup=False):
+        def background_discovery(*, startup=False, power_on=False):
             with telemetry.queue.request('discovery', 120, notification_stop.is_set):
-                return run_discovery(telemetry, history, power_reader, startup=startup)
+                return run_discovery(telemetry, history, power_reader, startup=startup, power_on=power_on)
         # Exit order matters: drain HTTP handlers before releasing UART/GPIO.
         with telemetry, Server((args.bind, args.port), make_handler(telemetry, history, power_reader)) as server, \
                 PowerOnDiscovery(args.power_on_socket,
