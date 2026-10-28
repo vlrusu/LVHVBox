@@ -75,6 +75,17 @@ class HandlerBoundaryTests(unittest.TestCase):
                 codes[words[1]] = int(words[2], 0)
         self.session(protocol.encode_request(codes['COMMAND_powerOff'], codes['TYPE_lv'], 6), valid=True)
 
+    def test_lv_startup_selectors_are_specific_to_power_on(self):
+        codes = {}
+        for line in (ROOT / 'commands.h').read_text().splitlines():
+            words = line.split('//')[0].split()
+            if len(words) >= 3 and words[0] == '#define':
+                codes[words[1]] = int(words[2], 0)
+        for channel in (0, 5, 6, 7):
+            self.session(protocol.encode_request(codes['COMMAND_powerOn'], codes['TYPE_lv'], channel), valid=True)
+        for name, channel in (('powerOn', 8), ('powerOff', 7), ('readMonV6', 7)):
+            self.session(protocol.encode_request(codes['COMMAND_' + name], codes['TYPE_lv'], channel), error=True)
+
     def test_unknown_subsystem_is_rejected_without_dispatch(self):
         self.session(protocol.encode_request(1, 0xffffffff, 6), error=True)
 

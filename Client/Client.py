@@ -349,7 +349,8 @@ def execute_command(sock, command, channel, val):
         if command.type_key != "lv":
             assert -1 <= channel < n_channels[command.type_key]
         else:
-            assert -1 <= channel < n_channels[command.type_key] + 1
+            maximum = 7 if command.name == "powerOn" else 6
+            assert -1 <= channel <= maximum
     send_command(sock, command, channel, val)
     cmd_output = sock.recv_message()
     if command.cmd_output_str_format:
@@ -895,7 +896,7 @@ def process_command(line):
             except IndexError:
                 in_val = 0.0
         if channel == -1:  # Handle all channels
-            if command.name == "powerOff":
+            if command.name in ("powerOn", "powerOff"):
                 execute_command(connection, command, 6, in_val)
                 return
             if command.name in ("readMonV48", "readMonI48", "readMonV6", "readMonI6"):

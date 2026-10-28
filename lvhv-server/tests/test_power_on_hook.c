@@ -39,6 +39,10 @@ int main(int argc, char** argv) {
     assert(reset_calls == 1);
     assert(recv(fd, event, sizeof event, 0) == 12);
     assert(memcmp(event, "lv-all-on-v1", 12) == 0);
+    i2c_lv_power_on(7, map);
+    assert(wrapped == 0 && reset_calls == 2);
+    assert(recv(fd, event, sizeof event, 0) == 12);
+    assert(memcmp(event, "lv-all-on-v1", 12) == 0);
     i2c_lv_power_off(6, map);
     assert(wrapped == 0);
     assert(recv(fd, event, sizeof event, 0) == -1 && errno == EAGAIN);
@@ -48,7 +52,7 @@ int main(int argc, char** argv) {
     assert(recv(fd, event, sizeof event, 0) == -1 && errno == EAGAIN);
     fail_reset = 0;
     i2c_station_reset();
-    assert(wrapped == 0 && reset_calls == 3);
+    assert(wrapped == 0 && reset_calls == 4);
     assert(recv(fd, event, sizeof event, 0) == -1 && errno == EAGAIN);
     close(fd); unlink(argv[1]);
     int previous = logged;

@@ -38,6 +38,7 @@ class StationResetTests(unittest.TestCase):
 #include <stdio.h>
 #include <string.h>
 #include "Command.h"
+#include "lv_power_policy.h"
 #include "../commands.h"
 #define HIGH 1
 #define LOW 0
@@ -62,6 +63,10 @@ int write_gpio_value(uint32_t pin, int value) {
     return 0;
 }
 int msleep(long ms) {
+    if (ms == LV_POWER_ON_STAGGER_MS) {
+        assert(high_count == 1 && mcp_count >= 1 && mcp_count < 6);
+        return 0;
+    }
     assert(ms == 500 && low_count == 1 && high_count == 0);
     waited = (int)ms; return fail_wait ? -1 : 0;
 }
@@ -72,7 +77,7 @@ int error_log(const char* message) { (void)message; return 0; }
 Message_t* message_wrap_int(int value) { response.result = value; return &response; }
 Message_t* message_wrap_error(int value) { return message_wrap_int(value); }
 int rs485_notify_power_on(unsigned int channel, int result) {
-    if (channel == 6 && result == 0) ++notice_count;
+    if ((channel == 6 || channel == 7) && result == 0) ++notice_count;
     return 0;
 }
 '''

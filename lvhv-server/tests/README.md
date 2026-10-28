@@ -32,3 +32,11 @@ real application headers and stubbed device, network and thread entry points.
 It checks default startup without a configuration file, the remaining `-p`/`-b`/
 `-l` options, and rejection of retired `-c`/missing arguments before initialization.
 It never starts the production daemon, worker threads or a listening socket.
+
+`test_lv_startup.py` compiles the real control functions with hardware and time
+stubs, checking channel6 output/reset/global-enable ordering and five delays,
+channel7 without inter-output delays, partial-failure behavior, immediate
+shutdown, and a build-time delay override. `test_handler_protocol.py` checks
+that only powerOn accepts selector7. `Client/tests/test_cli_lv_startup.py` loads
+the real CLI parsing/sending functions with a fake connection and verifies
+bare/all/explicit selectors. No test starts the actual server.

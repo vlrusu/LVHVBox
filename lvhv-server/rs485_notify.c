@@ -11,7 +11,7 @@
 #endif
 
 int rs485_notify_power_on(unsigned int channel, int power_result) {
-    if (channel != 6 || power_result != 0) return 0;
+    if ((channel != 6 && channel != 7) || power_result != 0) return 0;
     const char event[] = "lv-all-on-v1";
     struct sockaddr_un address = {0};
     address.sun_family = AF_UNIX;

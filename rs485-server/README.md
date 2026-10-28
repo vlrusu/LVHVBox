@@ -400,7 +400,10 @@ expected-panel roster. `--discovery-history` changes the history path;
 ## Rediscovery after all-channel LV power-on
 
 The LVHV server sends a nonblocking local datagram after its all-channel
-`powerOn` (channel 6) operation returns success. Individual `powerOn 0` through
+`powerOn` operation returns success: channel6 staggers outputs by50ms, while
+channel7 retains the prior sequence without deliberate spacing. Both send one
+event only after completion. Bare `Client.py` `powerOn` and `powerOn all` now use
+channel6. Individual `powerOn 0` through
 `powerOn 5`, power-off, and failed all-channel power-on do not send this event.
 The event is `lv-all-on-v1` at `/run/rs485-server/power-on.sock`; systemd creates
 the runtime directory and the RS485 service owns a mode-0600 socket. Root LVHV

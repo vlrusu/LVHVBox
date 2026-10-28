@@ -28,6 +28,7 @@ class ControlSafetyTests(unittest.TestCase):
 #include <stdio.h>
 #include <string.h>
 #include "Command.h"
+#include "lv_power_policy.h"
 #include "Messages.h"
 #include "dac8164.h"
 #include "../commands.h"
@@ -54,7 +55,7 @@ int MCP_pinWrite(MCP* m, uint8_t pin, uint8_t value) {
     return 0;
 }
 int rs485_notify_power_on(unsigned int channel, int result) {
-    if (channel == 6 && result == 0) ++notices;
+    if ((channel == 6 || channel == 7) && result == 0) ++notices;
     return 0;
 }
 static void clear(void) {

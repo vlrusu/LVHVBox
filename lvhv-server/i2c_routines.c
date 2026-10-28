@@ -4,6 +4,7 @@
 
 #include "i2c_routines.h"
 #include "rs485_notify.h"
+#include "lv_power_policy.h"
 
 // globals -.-
 // lv
@@ -400,27 +401,36 @@ Message_t* i2c_read_48V_current(unsigned int channel_number){
 }
 
 int i2c_lv_power_control(uint8_t channel, uint8_t pin_map[6], int value){
-  if (channel > 6 || !pin_map || (value != HIGH && value != LOW)) return -1;
+  if (!pin_map || (value != HIGH && value != LOW) ||
+      (channel > 6 && !(channel == 7 && value == HIGH))) return -1;
 
-  if (channel == 6 && value == HIGH && station_reset_pulse() != 0) return -1;
+  int all_channels = channel >= 6;
+  int stagger = channel == 6 && value == HIGH;
+  if (all_channels && value == HIGH && station_reset_pulse() != 0) return -1;
 
   int failed = 0;
   if (value == HIGH || channel == 6){
     if (write_gpio_value(lv_global_enable, value) < 0){
       error_log("LV power control failed writing global enable");
+      if (stagger) return -1;
       failed = 1;
     }
   }
 
   // Complete all requested writes, especially every channel during shutdown.
-  unsigned int begin = channel == 6 ? 0 : channel;
-  unsigned int end = channel == 6 ? 6 : channel + 1;
+  unsigned int begin = all_channels ? 0 : channel;
+  unsigned int end = all_channels ? 6 : channel + 1;
   for (unsigned int i = begin; i < end; ++i){
     if (MCP_pinWrite(lvpgoodMCP, pin_map[i], value) < 0){
       char error_msg[80];
       snprintf(error_msg, sizeof error_msg, "LV power control failed writing channel %u", i);
       error_log(error_msg);
+      if (stagger) return -1; // Leave already-enabled channels as they are.
       failed = 1;
+    }
+    if (stagger && i + 1 < end && msleep(LV_POWER_ON_STAGGER_MS) != 0) {
+      error_log("LV power-on stagger wait failed; remaining channels not enabled");
+      return -1;
     }
   }
   return failed ? -1 : 0;

@@ -13,6 +13,7 @@ int command_is_valid(const command_t* command){
     case COMMAND_query_hv_dac_cache:
       return command->type == TYPE_hv && command->char_parameter < LVHV_HV_CHANNELS;
     case COMMAND_powerOn:
+      return command->type == TYPE_lv && command->char_parameter <= 7;
     case COMMAND_powerOff:
     case COMMAND_readMonV48:
     case COMMAND_readMonI48:

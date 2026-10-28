@@ -29,6 +29,39 @@ or lowering HV. Retired command IDs `344631822` and `1236373670` remain reserved
 and must not be reused. Old requests receive the server's unknown-command
 error reply and perform no hardware operation. Other command IDs are unchanged.
 
+## LV power-on modes
+
+[AFFECTS LV/HV OR DETECTOR HARDWARE] `powerOn 6` resets the station once,
+enables the shared LV supply, then enables outputs0–5 with 50ms between
+successful output writes (five waits, 250ms total). A successful sequence sends
+one RS485 discovery event; the existing RS485 worker waits its default5s boot
+delay before scanning. `powerOn 7` retains the previous all-channel behavior:
+the same reset and shared enable, followed by all six writes without deliberate
+spacing, then one discovery event on success. Writes are sequential bus
+operations; "simultaneous" does not mean an electrically atomic transition.
+Individual outputs0–5 retain their existing behavior without discovery.
+
+`Client.py` now sends channel6 for bare `powerOn`, `powerOn all` and
+`powerOn -1`, instead of issuing six individual commands. Explicit `powerOn 7`
+selects startup without spacing. Channel7 is valid only for `powerOn`;
+`powerOff 7` and LV measurement selectors7 are rejected. Old server binaries
+reject the new selector, so the server must be rebuilt/deployed to support it.
+No wire opcode or shared protocol layout changes are required.
+
+The default50ms spacing preserves the previous CLI pacing; it is not a measured
+inrush limit. `lv_power_policy.h` permits a build-time override using
+`-DLV_POWER_ON_STAGGER_MS=<nonnegative milliseconds>`. Larger delays extend the
+blocking I2C command and must be assessed against client timeouts and protection
+response requirements.
+
+Staggered startup stops on reset, shared-enable, output-write or wait failure,
+returns failure and skips the success/discovery event. The output index is logged
+for a failed output write. Already-enabled outputs stay enabled; the command
+does not automatically roll them back or claim verified output voltage.
+Channel7 preserves the previous best-effort write behavior on errors, returning
+failure after attempting all six output writes, without a success event.
+Shutdown remains immediate, without startup waits or reset pulses.
+
 LV control attempts every requested shutdown write and returns failure if any
 GPIO/SPI write fails. Raw HV DAC writes return failure on a transfer error and
 update the DAC cache only after a successful transfer; Python ramping stops on a

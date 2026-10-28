@@ -118,12 +118,19 @@ class TransportTests(unittest.TestCase):
         with PowerOnDiscovery(self.path, Mock(), Mock()) as worker:
             for channel in range(6):
                 self.assertEqual(self.lib.rs485_notify_power_on(channel, 0), 0)
-            self.assertEqual(self.lib.rs485_notify_power_on(7, 0), 0)
+            self.assertEqual(self.lib.rs485_notify_power_on(8, 0), 0)
             self.assertEqual(self.lib.rs485_notify_power_on(6, -1), 0)
             with self.assertRaises(BlockingIOError):
                 worker.sock.recv(128)
             self.assertEqual(self.lib.rs485_notify_power_on(6, 0), 0)
             self.assertEqual(worker.sock.recv(128), EVENT)
+            self.assertEqual(self.lib.rs485_notify_power_on(7, -1), 0)
+            with self.assertRaises(BlockingIOError):
+                worker.sock.recv(128)
+            self.assertEqual(self.lib.rs485_notify_power_on(7, 0), 0)
+            self.assertEqual(worker.sock.recv(128), EVENT)
+            with self.assertRaises(BlockingIOError):
+                worker.sock.recv(128)
             self.assertEqual(os.stat(self.path).st_mode & 0o777, 0o600)
         self.assertFalse(self.path.exists())
 
