@@ -13,6 +13,21 @@ requirements step provisions those from the OS package sources. PSU13's BME680
 driver is also bundled under `i2c-sensor-server/bme680`; database and notification
 credentials remain site configuration and are never bundled.
 
+HV ramping runs in the Python `SetWireVoltage` client used by the control-center
+GUI and `Client/ramp-hv.py`. The server accepts individual `set_hv_by_dac` writes
+and `query_hv_dac_cache` reads. The legacy server-side ramp and CLI commands
+`ramp_hv` / `down_hv` have been removed; use the Python ramp workflow for raising
+or lowering HV. Retired command IDs `344631822` and `1236373670` remain reserved
+and must not be reused. Old requests receive the server's unknown-command
+error reply and perform no hardware operation. Other command IDs are unchanged.
+
+LV control attempts every requested shutdown write and returns failure if any
+GPIO/SPI write fails. Raw HV DAC writes return failure on a transfer error and
+update the DAC cache only after a successful transfer; Python ramping stops on a
+failed acknowledgement without retrying. The cache is the last acknowledged
+setting, not measured voltage. A failed transfer can leave the physical setting
+unknown; software must not report that the outputs were verified off.
+
 [READ-ONLY] Build on the supported ARM64 Linux target without executing it:
 
 ```sh

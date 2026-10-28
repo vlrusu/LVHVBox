@@ -6,7 +6,6 @@ void log_write(Logger_t *logger, char *text, unsigned int level) {
     (void)logger; (void)text; (void)level;
 }
 int pico_is_connected(size_t id) { (void)id; return 0; }
-const char *command_name(uint32_t command) { (void)command; return "test"; }
 void queue_push(PriorityQueue_t *queue, QueueItem_t *item) {
     (void)queue;
     ++dispatches;

@@ -12,7 +12,13 @@ import sys
 # Support both the installed flat modules and a direct source-file import.
 if str(Path(__file__).resolve().parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
-import lvhv_protocol as protocol
+try:
+    import lvhv_protocol as protocol
+except ModuleNotFoundError as error:
+    if error.name != 'lvhv_protocol':
+        raise
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'common'))
+    import lvhv_protocol as protocol
 
 class MessagingConnection:
     MAX_BLOCKS = protocol.MAX_BLOCKS

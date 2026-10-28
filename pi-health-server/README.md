@@ -46,6 +46,21 @@ in the systemd unit.
 - `pi-health-actions.ini`: action config for LV shutdown behavior
 - `../systemd/pi-health-server.service`: systemd unit
 
+The LV power-off client uses the shared `common/lvhv_protocol.py` codec and its
+generated definitions. Running from this checkout finds the sibling `common`
+directory; installed services need `lvhv_protocol.py` and
+`lvhv_protocol_generated.py` on their Python module path. The source deployment
+role installs both. The legacy Debian package script does not bundle them.
+
+GPIO6/GPIO21 trigger rules and the configured host, port and channel are retained.
+Each power-off attempt opens one connection and uses a five-second shared
+send/reply deadline. A valid LVHV header and signed-integer zero acknowledgement
+are required before logging success. Invalid/incomplete replies are logged by
+the GPIO handler as failures; the transport never reconnects or replays a command.
+
+Offline shutdown/codec tests (fake GPIO and sockets, no hardware actions):
+`python3 -m unittest discover -s Client/tests -p test_shared_protocol.py -v`
+
 ## Power-off action config
 
 The GPIO21 repeat-loss window is configured in `pi-health-actions.ini`:

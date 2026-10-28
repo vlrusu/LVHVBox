@@ -88,7 +88,7 @@
 
     - name: Install shared protocol modules
       ansible.builtin.copy:
-        src: "{{ lvhvbox_source }}/Client/{{ item }}.py"
+        src: "{{ lvhvbox_source }}/common/{{ item }}.py"
         dest: "/usr/local/lib/roc-temperature-monitor/{{ item }}.py"
         owner: root
         group: root

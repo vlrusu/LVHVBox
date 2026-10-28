@@ -3,12 +3,14 @@
 # October 2024
 
 import os.path
+import math
 import threading
 import time
 from MessagingConnection import MessagingConnection
 from WireAnalogDigitalConversion import WireAnalogDigitalConversion
+from lvhv_protocol_generated import HV_DAC_MAX
 
-MAXDACALLOWED = 15000
+MAXDACALLOWED = HV_DAC_MAX
 DAC_LOG_PATH = '/tmp/lvhv-dac-values.log'
 
 class SharedValue:
@@ -206,9 +208,9 @@ class PowerSupplyServerConnection():
         self.hv_lock[channel].Set(value)
 
     def _dac_allowed(self, channel, dac):
-        rv = dac <= MAXDACALLOWED
+        rv = math.isfinite(dac) and 0 <= dac <= MAXDACALLOWED and dac == int(dac)
         if not rv:
-            print('error: channel %d DAC target %.1f exceeds MAXDACALLOWED %d; stopping ramp' % (
+            print('error: channel %d DAC target %.1f must be an integer in 0..%d; stopping ramp' % (
                 channel, dac, MAXDACALLOWED
             ))
         return rv
@@ -230,6 +232,8 @@ class PowerSupplyServerConnection():
             return None
         self._log_dac_value(channel, dac)
         rvs = self.WriteRead('set_hv_by_dac', channel, dac)
+        if rvs != [(0,)]:
+            raise RuntimeError('HV DAC write failed; ramp stopped without retry')
         return rvs
 
     def _voltage_to_dac(self, channel, voltage):

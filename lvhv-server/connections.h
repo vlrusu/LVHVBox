@@ -8,7 +8,6 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <netinet/in.h>
-#include <netdb.h>
 #include <stddef.h>
 
 #include "utils.h"
@@ -17,7 +16,6 @@
 #include "handler.h"
 
 int open_server(unsigned int, int);
-int loopback_connect(unsigned int);
 
 typedef struct {
   int fd;

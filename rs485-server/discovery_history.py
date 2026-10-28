@@ -8,12 +8,20 @@ import math
 import os
 from pathlib import Path
 import socket
-import struct
+import sys
 import threading
 import time
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 from uuid import uuid4
+
+try:
+    import lvhv_protocol as protocol
+except ModuleNotFoundError as error:
+    if error.name != 'lvhv_protocol':
+        raise
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'common'))
+    import lvhv_protocol as protocol
 
 LOG = logging.getLogger('rs485-discovery')
 
@@ -33,47 +41,26 @@ class PowerReader:
             if key not in self.codes:
                 raise ValueError('Missing command: ' + key)
 
-    @staticmethod
-    def block(kind, values):
-        fmt = {'C': 'c', 'U': 'I', 'I': 'i', 'F': 'f', 'D': 'd'}[kind]
-        return (struct.pack('=cI', kind.encode(), len(values))
-                + struct.pack('=' + str(len(values)) + fmt, *values))
-
     def request(self):
         # Channel 6 means all six LV outputs in the existing protocol.
-        blocks = [self.block('C', [bytes([b]) for b in b'LVHV']),
-                  self.block('U', [self.codes['COMMAND_readMonV6']]),
-                  self.block('U', [self.codes['TYPE_lv']]),
-                  self.block('C', [b'\x06']), self.block('F', [0.0])]
         deadline = time.monotonic() + self.timeout
         with socket.create_connection((self.host, self.port), self.timeout) as sock:
-            def receive(count):
-                result = b''
-                while len(result) < count:
-                    left = deadline - time.monotonic()
-                    if left <= 0:
-                        raise TimeoutError('LVHV response deadline exceeded')
-                    sock.settimeout(left)
-                    part = sock.recv(count - len(result))
-                    if not part:
-                        raise ConnectionError('LVHV closed connection')
-                    result += part
-                return result
-            sock.sendall(struct.pack('=I', len(blocks)) + b''.join(blocks))
-            count = struct.unpack('=I', receive(4))[0]
-            if not 1 <= count <= 8:
-                raise ValueError('Invalid LVHV block count')
-            result = []
-            for _ in range(count):
-                kind, size = struct.unpack('=cI', receive(5))
-                fmt = {b'C': 'c', b'U': 'I', b'I': 'i', b'F': 'f', b'D': 'd'}.get(kind)
-                if fmt is None or not 1 <= size <= 64:
-                    raise ValueError('Invalid LVHV reply block')
-                result.append((kind, struct.unpack('=' + str(size) + fmt,
-                                                   receive(size * struct.calcsize(fmt)))))
-            if len(result) != 2 or result[0] != (b'C', (b'L', b'V', b'H', b'V')):
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError('LVHV response deadline exceeded')
+            try:
+                result = protocol.request_reply(
+                    sock, self.codes['COMMAND_readMonV6'], self.codes['TYPE_lv'], 6,
+                    timeout=remaining, max_blocks=8, max_elements=64,
+                )
+            except EOFError as exc:
+                # Existing discovery callers treat OSError/ConnectionError as
+                # unknown power and preserve their last successful inventory.
+                raise ConnectionError('LVHV closed connection') from exc
+            if len(result) != 1:
                 raise ValueError('Invalid LVHV reply header/payload')
-            return result[1]
+            kind, values = result[0]
+            return kind.encode('ascii'), values
 
     def voltages(self):
         kind, values = self.request()

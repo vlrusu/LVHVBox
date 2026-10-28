@@ -74,72 +74,47 @@ int DAC8164_setup(DAC8164 *self, MCP *MCP, uint8_t sync, int sclk, uint8_t sdi, 
 }
 
 
-void DAC8164_write(DAC8164 *self, uint32_t data)
+int DAC8164_write(DAC8164 *self, uint32_t data)
 {
-  char error_msg[50];
-
-
-  if (MCP_pinWrite(self->_MCP, self->_sclk_pin, 0) == -1) {
-    sprintf(error_msg, "dac8164_write _sclk_pin fail: %u", self->_sclk_pin);
-    error_log(error_msg);
-  }
-  
-  if (MCP_pinWrite(self->_MCP, self->_sync_pin, 0) == -1) {
-    sprintf(error_msg, "dac8164_write _sync_pin fail: %u", self->_sync_pin);
-    error_log(error_msg);
-  }
+  if (!self || !self->_MCP || data > 0xFFFFFFu) return -1;
+  if (MCP_pinWrite(self->_MCP, self->_sclk_pin, LOW) < 0) goto failed;
+  if (MCP_pinWrite(self->_MCP, self->_sync_pin, LOW) < 0) goto failed;
   usleep(DAC8164DELAY);
-
-  for (int i=23;i>=0;i--){
-    uint8_t thisbit;
-    if ((0x1<<i) & data)
-      thisbit = 1;
-    else
-      thisbit = 0;
-
-
-    if (MCP_pinWrite(self->_MCP, self->_sdi_pin, thisbit) == -1) {
-      sprintf(error_msg, "dac8164_write _sdi_pin fail: %u", self->_sdi_pin);
-      error_log(error_msg);
-    }
+  for (int i = 23; i >= 0; --i){
+    uint8_t bit = (data >> i) & 1u;
+    if (MCP_pinWrite(self->_MCP, self->_sdi_pin, bit) < 0) goto failed;
     usleep(DAC8164DELAY);
-
-    if (MCP_pinWrite(self->_MCP, self->_sclk_pin, 1) == -1) {
-      sprintf(error_msg, "dac8164_write _sclk_pin on fail: %u", self->_sclk_pin);
-      error_log(error_msg);
-    }
+    if (MCP_pinWrite(self->_MCP, self->_sclk_pin, HIGH) < 0) goto failed;
     usleep(DAC8164DELAY);
-
-    if (MCP_pinWrite(self->_MCP, self->_sclk_pin, 0) == -1) {
-      sprintf(error_msg, "dac8164_write _sclk_pin off fail: %u", self->_sclk_pin);
-      error_log(error_msg);
-    }
+    if (MCP_pinWrite(self->_MCP, self->_sclk_pin, LOW) < 0) goto failed;
     usleep(DAC8164DELAY);
-    
   }
-
-  if (MCP_pinWrite(self->_MCP, self->_sync_pin, 1) == -1) {
-    sprintf(error_msg, "dac8164_write _sync_pin on fail: %u", self->_sync_pin);
-    error_log(error_msg);
-  }
-  
+  if (MCP_pinWrite(self->_MCP, self->_sync_pin, HIGH) < 0) goto failed;
+  return 0;
+failed:
+  error_log("DAC8164 transfer failed; physical setting is unknown");
+  // Stop transmitting; best-effort idle restoration is not a command retry.
+  MCP_pinWrite(self->_MCP, self->_sclk_pin, LOW);
+  MCP_pinWrite(self->_MCP, self->_sync_pin, HIGH);
+  return -1;
 }
 
 
-void DAC8164_setReference(DAC8164 *self, uint16_t reference)
+int DAC8164_setReference(DAC8164 *self, uint16_t reference)
 {
   uint32_t data = DAC_MASK_PD0;
 
   // set reference mde
   data |= reference;
 
-  DAC8164_write(self, data);
+  return DAC8164_write(self, data);
 
 }
 
 
-void DAC8164_writeChannel(DAC8164 *self, uint8_t channel, uint16_t value)
+int DAC8164_writeChannel(DAC8164 *self, uint8_t channel, uint16_t value)
 {
+  if (!self || !self->_MCP || channel >= LVHV_HV_CHANNELS || value > LVHV_HV_DAC_MAX) return -1;
   uint32_t data ;
   uint32_t dac_mask;
 
@@ -173,13 +148,13 @@ void DAC8164_writeChannel(DAC8164 *self, uint8_t channel, uint16_t value)
     data = DAC_BROADCAST_UPDATE | DAC_MASK_DACSEL1 ;
   else
     // avoid writing bad data
-    return;
+    return -1;
 
   // value is 12 MSB bits (last LSB nibble to 0)
 
   data |= value << 2;
   // Send to chip
-  DAC8164_write (self, data);
+  return DAC8164_write(self, data);
 }
 
 /*

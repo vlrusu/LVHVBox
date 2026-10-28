@@ -12,9 +12,21 @@ All hardware-side RS485 code and data live in this directory:
 | `tests/` | Protocol, class, ownership, HTTP and client tests |
 
 The remote `Client/Client.py` uses `Client/RS485Connection.py` over HTTP/SSH. It
-has no serial/GPIO or transformation dependency. The server does not import
-anything from `Client`. The previous hardware scripts and data in `Client`
-have been replaced by this directory. Legacy serial protocol is not supported.
+has no serial/GPIO or transformation dependency. The server's LVHV power-state
+reader uses the shared `common/lvhv_protocol.py` codec; serial/GPIO code remains
+in this directory. The previous hardware scripts and data in `Client` have been
+replaced by this directory. Legacy serial protocol is not supported.
+
+The power-state reader finds the sibling `common` directory when run from source.
+For installation, put `lvhv_protocol.py` and `lvhv_protocol_generated.py` on the
+service interpreter's module path (the source deployment role already does this).
+Each request reads V6 for all six channels using a fresh connection, with the
+existing timeout including connection time, at most eight reply blocks and
+64 elements per block. Six finite floats greater than -1 are still required;
+small negative ADC offsets remain valid and any value at least 2 V means powered.
+Invalid/truncated replies remain unknown power, preserving the last discovery
+inventory and pending notifications. Requests are never replayed by the transport.
+The ROC RS485 serial packet codec remains separate from the LVHV TCP codec.
 
 ## Shared class
 

@@ -148,7 +148,6 @@ int main(int argc, char* argv[]){
   i2c_loop_args_t i2c_loop_args;
   i2c_loop_args.queue = &i2c_queue;
   i2c_loop_args.logger = &logger;
-  i2c_loop_args.port = port;
   memcpy(i2c_loop_args.channel_map, channel_map, sizeof(i2c_loop_args.channel_map));
   pthread_t i2c_thread;
 

@@ -9,7 +9,7 @@ import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / 'Client'))
+sys.path.insert(0, str(ROOT / 'common'))
 import lvhv_protocol as protocol
 
 
@@ -29,12 +29,12 @@ class HandlerBoundaryTests(unittest.TestCase):
         cls.probe = root / 'handler'
         result = subprocess.run([shutil.which('cc'), '-std=gnu11', '-g', '-fsanitize=address,undefined',
             '-fno-omit-frame-pointer', '-pthread', '-I', str(server), '-I', str(server / 'messaging'),
-            str(root / 'handler.c'), str(server / 'Task.c'), str(server / 'messaging/Messages.c'),
+            str(root / 'handler.c'), str(server / 'Task.c'), str(server / 'Command.c'), str(server / 'messaging/Messages.c'),
             str(server / 'tests/handler_probe.c'), '-o', str(cls.probe)], capture_output=True, text=True)
         if result.returncode:
             raise AssertionError(result.stdout + result.stderr)
 
-    def session(self, frame, valid=False):
+    def session(self, frame, valid=False, error=False):
         parent, child = socket.socketpair()
         parent.settimeout(3)
         with parent, child:
@@ -48,6 +48,8 @@ class HandlerBoundaryTests(unittest.TestCase):
                 parent.shutdown(socket.SHUT_WR)
                 if valid:
                     self.assertEqual(protocol.recv_reply(parent, timeout=2), [('I', (0,))])
+                elif error:
+                    self.assertEqual(protocol.recv_reply(parent, timeout=2), [('I', (-3,))])
                 else:
                     self.assertEqual(parent.recv(1), b'')
                 stdout, stderr = process.communicate(timeout=3)
@@ -73,5 +75,40 @@ class HandlerBoundaryTests(unittest.TestCase):
                 codes[words[1]] = int(words[2], 0)
         self.session(protocol.encode_request(codes['COMMAND_powerOff'], codes['TYPE_lv'], 6), valid=True)
 
-    def test_unknown_subsystem_disconnects_without_dispatch_or_crash(self):
-        self.session(protocol.encode_request(1, 0xffffffff, 6))
+    def test_unknown_subsystem_is_rejected_without_dispatch(self):
+        self.session(protocol.encode_request(1, 0xffffffff, 6), error=True)
+
+    def test_invalid_hv_commands_never_dispatch(self):
+        codes = {}
+        for line in (ROOT / 'commands.h').read_text().splitlines():
+            words = line.split('//')[0].split()
+            if len(words) >= 3 and words[0] == '#define':
+                codes[words[1]] = int(words[2], 0)
+        magic = ('C', tuple(bytes((b,)) for b in protocol.MAGIC))
+        cases = [(codes['COMMAND_set_hv_by_dac'], codes['TYPE_hv'], ch, 100.)
+                 for ch in (12, 127, 128, 255)]
+        cases += [(codes['COMMAND_query_hv_dac_cache'], codes['TYPE_hv'], ch, 0.)
+                  for ch in (12, 255)]
+        cases += [(codes['COMMAND_set_hv_by_dac'], codes['TYPE_hv'], 0, value)
+                  for value in (-1., 15001., 65536., 1e30, .5, float('nan'), float('inf'), -float('inf'))]
+        cases += [(codes['COMMAND_set_hv_by_dac'], codes['TYPE_lv'], 0, 100.),
+                  (codes['COMMAND_powerOn'], codes['TYPE_hv'], 0, 0.),
+                  (344631822, codes['TYPE_hv'], 0, 100.),
+                  (1236373670, codes['TYPE_hv'], 0, 0.)]
+        for command, subsystem, channel, numeric in cases:
+            with self.subTest(command=command, subsystem=subsystem, channel=channel, numeric=numeric):
+                # Build raw frames so NaN/Inf cannot be hidden by Python's request guard.
+                frame = protocol.encode_message([magic, ('U', (command,)), ('U', (subsystem,)),
+                    ('C', (bytes((channel,)),)), ('F', (numeric,))])
+                self.session(frame, error=True)
+
+    def test_boundary_hv_commands_still_dispatch(self):
+        codes = {}
+        for line in (ROOT / 'commands.h').read_text().splitlines():
+            words = line.split('//')[0].split()
+            if len(words) >= 3 and words[0] == '#define':
+                codes[words[1]] = int(words[2], 0)
+        for channel in (0, 11):
+            for value in (0, 15000):
+                self.session(protocol.encode_request(codes['COMMAND_set_hv_by_dac'],
+                    codes['TYPE_hv'], channel, value), valid=True)

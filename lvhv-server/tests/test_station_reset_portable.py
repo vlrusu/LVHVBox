@@ -9,7 +9,7 @@ SERVER = Path(__file__).resolve().parents[1]
 
 
 def function(source, name):
-    match = re.search(r'^(?:static )?(?:int|Message_t\*) ' + name + r'\([^\n]*\)\{',
+    match = re.search(r'^(?:static )?(?:int|Message_t\*) ' + name + r'\([^\n]*\)\s*\{',
                       source, re.MULTILINE)
     if match is None:
         raise AssertionError('Missing function: ' + name)
@@ -30,7 +30,7 @@ class StationResetTests(unittest.TestCase):
             'i2c_lv_power_on', 'i2c_lv_power_off'))
         pin_define = re.search(r'^#define STATION_RESET_PIN .*$', source, re.MULTILINE)[0]
         loop = source[source.index('void* i2c_loop'):]
-        dispatch = loop[loop.index('if (task->command.name == COMMAND_powerOn)'):
+        dispatch = loop[loop.index('if (!command_is_valid(&task->command))'):
                         loop.index('else if (task->command.name == COMMAND_readMonV6)')]
         harness = r'''
 #include <assert.h>
@@ -70,6 +70,7 @@ int MCP_pinWrite(MCP* mcp, uint8_t pin, uint8_t value) {
 }
 int error_log(const char* message) { (void)message; return 0; }
 Message_t* message_wrap_int(int value) { response.result = value; return &response; }
+Message_t* message_wrap_error(int value) { return message_wrap_int(value); }
 int rs485_notify_power_on(unsigned int channel, int result) {
     if (channel == 6 && result == 0) ++notice_count;
     return 0;

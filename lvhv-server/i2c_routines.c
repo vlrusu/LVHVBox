@@ -400,44 +400,30 @@ Message_t* i2c_read_48V_current(unsigned int channel_number){
 }
 
 int i2c_lv_power_control(uint8_t channel, uint8_t pin_map[6], int value){
-  if ((channel < 0 ) || (6 < channel)){
-    return 0;
-  }
+  if (channel > 6 || !pin_map || (value != HIGH && value != LOW)) return -1;
 
-  if ((channel == 6) && (value == HIGH)) {
-    if (station_reset_pulse() != 0) {
-      return -1;
+  if (channel == 6 && value == HIGH && station_reset_pulse() != 0) return -1;
+
+  int failed = 0;
+  if (value == HIGH || channel == 6){
+    if (write_gpio_value(lv_global_enable, value) < 0){
+      error_log("LV power control failed writing global enable");
+      failed = 1;
     }
   }
 
-  if ((value == HIGH) || (channel == 6)){
-    if (write_gpio_value(lv_global_enable, value) == -1){
-      //error_log("poweron error 0");
-      //return -1;
+  // Complete all requested writes, especially every channel during shutdown.
+  unsigned int begin = channel == 6 ? 0 : channel;
+  unsigned int end = channel == 6 ? 6 : channel + 1;
+  for (unsigned int i = begin; i < end; ++i){
+    if (MCP_pinWrite(lvpgoodMCP, pin_map[i], value) < 0){
+      char error_msg[80];
+      snprintf(error_msg, sizeof error_msg, "LV power control failed writing channel %u", i);
+      error_log(error_msg);
+      failed = 1;
     }
   }
-
-  if (channel == 6){
-    for (int i = 0; i < 6; i++){
-      if (MCP_pinWrite(lvpgoodMCP, pin_map[i], value) == -1){
-        char error_msg[50];
-        sprintf(error_msg, "mcp powerOn fail write channel %i", i);
-        //error_log(error_msg);
-        //return -1;
-      }
-
-    }
-  }
-  else{
-    if (MCP_pinWrite(lvpgoodMCP, pin_map[channel], value) == -1){
-      char error_msg[50];
-      sprintf(error_msg, "mcp powerOn fail write channel %u", channel);
-      //error_log(error_msg);
-      //return -1;
-    }
-  }
-
-  return 0;
+  return failed ? -1 : 0;
 }
 
 Message_t* i2c_lv_power_on(uint8_t channel, uint8_t pin_map[6]){
@@ -455,147 +441,25 @@ Message_t* i2c_lv_power_off(uint8_t channel, uint8_t pin_map[6]){
   return rv;
 }
 
-float i2c_deferred_hv_query(int fd, uint8_t channel){
-  // first, construct query of hv voltage
-  char xc;
-  unsigned int xu;
-  float xf;
-  MessageBlock_t* block;
-  Message_t* message = message_initialize();
-  block = block_construct('U', 1);
-  xu = COMMAND_get_vhv;
-  block_insert(block, &xu);
-  message_append(message, block);
-  block = block_construct('U', 1);
-  xu = TYPE_pico;
-  block_insert(block, &xu);
-  message_append(message, block);
-  block = block_construct('C', 1);
-  xc = (char) channel;
-  block_insert(block, &xc);
-  message_append(message, block);
-  block = block_construct('F', 1);
-  xf = 0.0;
-  block_insert(block, &xf);
-  message_append(message, block);
-
-  // perform query
-  message_send(message, fd);
-  message_destroy(message);
-
-  float queried = -9.9;
-  if (0 < message_recv(&message, fd)){
-    if (message->count == 2){
-      if (message->blocks[1]->type == 'F'){
-        queried = block_as_float(message->blocks[1]);
-      }
-    }
-    message_destroy(message);
-  }
-
-  return queried;
-}
-
-void i2c_dac_write(uint8_t channel, uint32_t value, i2c_state_t* state){
-  unsigned int idx = (unsigned int) (channel / 4);
-  DAC8164 dac = hv_dacs[idx];
-  DAC8164_writeChannel(&dac, channel, value);
+int i2c_dac_write(uint8_t channel, uint32_t value, i2c_state_t* state){
+  if (!state || channel >= LVHV_HV_CHANNELS || value > LVHV_HV_DAC_MAX) return -1;
+  unsigned int idx = channel / 4;
+  if (DAC8164_writeChannel(&hv_dacs[idx], channel, (uint16_t)value) < 0) return -1;
+  // A failed/ambiguous transfer must not become an acknowledged cached setting.
   state->hv_dac[channel] = value;
+  return 0;
 }
 
-// FIXME this conversion is bogus and biased high
-// the bias of 30 dac hacks against this at low voltage (< 50 V)
-uint32_t i2c_dac_cast(float value){
-//float converted = value * (16383.0 / 1631.3);
-  float converted = value * (16383.0 / 1812.0);
-  uint32_t rv = ((uint32_t) converted) & 0x3FFF;
-//rv -= 30;
-  return rv;
-}
-
-void i2c_set_hv(uint8_t channel, float value, i2c_state_t* state){
-  uint32_t dvalue = i2c_dac_cast(value);
-  i2c_dac_write(channel, dvalue, state);
-}
-
-float i2c_ramp_hv_fixed_rate(int fd, uint8_t channel, float target,
-                             float tolerance, float speed, long timestep,
-                             i2c_state_t* state, Logger_t* logger){
-  char pfx[64];
-  sprintf(pfx, "%s", "i2c_ramp_hv_fixed_rate");
-  char msg[128];
-  float current = i2c_deferred_hv_query(fd, channel);
-  float sign = (target < current) ? -1.0 : +1.0;
-  float analog_step = sign * speed * timestep;
-  float remaining = target - current;
-  unsigned int tried = 0;
-  int stop = 0;
-
-  // ramp down at full speed and return
-  if (target < current) {
-    uint32_t dvalue = i2c_dac_cast(target);
-    i2c_dac_write(channel, dvalue, state);
-    return i2c_deferred_hv_query(fd, channel);
-  }
-
-  while ((tolerance < fabs(remaining)) && (0 < sign*remaining) && (!stop)){
-    float next = current + analog_step;
-    sprintf(msg, "%s: ramping %f -> %f", pfx, current, next);
-    log_write(logger, msg, LOG_VERBOSE);
-    i2c_set_hv(channel, next, state);
-    msleep(timestep);
-    float updated = i2c_deferred_hv_query(fd, channel);
-    sprintf(msg, "%s: updated readback of %f", pfx, updated);
-    log_write(logger, msg, LOG_VERBOSE);
-    float change = updated - current;
-    current = updated;
-    tried += 1;
-    if (9 < tried){
-      stop = 1;
-      sprintf(msg, "%s: stalled after 10 attempts to bias. aborting.", pfx);
-      log_write(logger, msg, LOG_INFO);
-    }
-    if (((sign * change) < 0) && (tolerance < fabs(change))){
-      // TODO need better conditioning than this
-      stop = 1;
-      sprintf(msg, "%s: readback out of tolerance. aborting.", pfx);
-      log_write(logger, msg, LOG_INFO);
-    }
-    else{
-      remaining = target - current;
-      if (tolerance < fabs(change)){
-        tried = 0;
-      }
-    }
-  }
-
-  float rv = current;
-  return rv;
-}
-
-float i2c_ramp_hv_impl(int fd, uint8_t channel, float target, i2c_state_t* state, Logger_t* logger){
-  // TODO:
-  // - two-stage ramping, slow at ``beginning,'' and faster in bulk
-  // - ramping rates should be configurable via external reference
-  float tolerance = 1.0; // V
-  float speed = 0.002; // V / ms
-  long timestep = 2000; // ms
-  float rv = i2c_ramp_hv_fixed_rate(fd, channel, target,
-                                    tolerance, speed, timestep,
-                                    state, logger);
-  return rv;
+Message_t* i2c_set_hv_by_dac(uint8_t channel, float value, i2c_state_t* state){
+  command_t command = {.name = COMMAND_set_hv_by_dac, .type = TYPE_hv,
+                       .char_parameter = channel, .float_parameter = value};
+  if (!command_is_valid(&command)) return message_wrap_error(-3);
+  return message_wrap_int(i2c_dac_write(channel, (uint32_t)value, state));
 }
 
 Message_t* i2c_query_hv_dac_cache(uint8_t channel, i2c_state_t* state){
-  unsigned int irv = (unsigned int) state->hv_dac[channel];
-  Message_t* rv = message_wrap_unsigned_int(irv);
-  return rv;
-}
-
-Message_t* i2c_ramp_hv(int fd, uint8_t channel, float target, i2c_state_t* state, Logger_t* logger){
-  float frv = i2c_ramp_hv_impl(fd, channel, target, state, logger);
-  Message_t* rv = message_wrap_float(frv);
-  return rv;
+  if (!state || channel >= LVHV_HV_CHANNELS) return message_wrap_error(-3);
+  return message_wrap_unsigned_int(state->hv_dac[channel]);
 }
 
 void* i2c_loop(void* args){
@@ -609,9 +473,6 @@ void* i2c_loop(void* args){
   // initialize state cache
   i2c_state_t state;
   memset(&state.hv_dac, 0, sizeof(state.hv_dac));
-
-  // establish connection back through foyer to allow coupling to hv readings
-  int fd = loopback_connect(casted->port);
 
   while (1) {
     while (queue_size(queue) < 1){
@@ -628,7 +489,10 @@ void* i2c_loop(void* args){
     // execute i2c operation
     Message_t* rv;
     // lv commands
-    if (task->command.name == COMMAND_powerOn){
+    if (!command_is_valid(&task->command)){
+      rv = message_wrap_error(-3);
+    }
+    else if (task->command.name == COMMAND_powerOn){
       uint8_t channel = task->command.char_parameter;
       rv = i2c_lv_power_on(channel, channel_map);
     }
@@ -651,19 +515,10 @@ void* i2c_loop(void* args){
     else if (task->command.name == COMMAND_readMonI48){
       rv = i2c_read_48V_current(task->command.char_parameter);
     }
-    // hv commands these require pico-based hv polling
-    // to protect against biasing the hv too quickly
-    else if (task->command.name == COMMAND_ramp_hv){
-      rv = i2c_ramp_hv(fd, task->command.char_parameter, task->command.float_parameter, &state, logger);
-    }
-    else if (task->command.name == COMMAND_down_hv){
-      rv = i2c_ramp_hv(fd, task->command.char_parameter, 0.0, &state, logger);
-    }
+    // Direct DAC writes are stepped by the Python ramp client.
     else if (task->command.name == COMMAND_set_hv_by_dac){
       uint8_t channel = task->command.char_parameter;
-      uint32_t dac = (uint32_t) (task->command.float_parameter);
-      i2c_dac_write(channel, dac, &state);
-      rv = message_wrap_int(0);
+      rv = i2c_set_hv_by_dac(channel, task->command.float_parameter, &state);
     }
     else if (task->command.name == COMMAND_query_hv_dac_cache){
       uint8_t channel = task->command.char_parameter;

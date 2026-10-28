@@ -6,6 +6,7 @@
 #define COMMAND_H
 
 #include <inttypes.h>
+#include "messaging/Protocol.h"
 
 typedef struct {
   uint32_t name;
@@ -16,5 +17,7 @@ typedef struct {
 
 // Return the protocol command name, or "unknown" for an unrecognized ID.
 const char* command_name(uint32_t name);
+// Validate command/subsystem, physical channel and numeric arguments before IO.
+int command_is_valid(const command_t* command);
 
 #endif

@@ -55,7 +55,10 @@ void* client_handler(void* args){
     item->payload = &task;
     item->key = 0;
     // i2c commands
-    if ((task.command.type == TYPE_lv) || (task.command.type == TYPE_hv)){
+    if (!command_is_valid(&task.command)){
+      task.rv = message_wrap_error(-3);
+    }
+    else if ((task.command.type == TYPE_lv) || (task.command.type == TYPE_hv)){
       queue_push(i2c_queue, item);
       queued = 1;
     }

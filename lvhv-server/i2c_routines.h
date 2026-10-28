@@ -10,22 +10,18 @@
 #include <linux/i2c.h>
 #include <linux/i2c-dev.h>
 #include <linux/spi/spidev.h>
-#include <math.h>
 #include <stdio.h>
 #include "../commands.h"
 #include "dac8164.h"
 #include "gpio.h"
 #include "i2cbusses.h"
 #include "MCP23S08.h"
-#include "connections.h"
 #include "utils.h"
 #include "Logging.h"
 #include "Messages.h"
 #include "PriorityQueue.h"
 #include "Task.h"
 
-// new command for direct biasing with raw dac values -  be careful!
-#define COMMAND_set_hv_by_dac 344631823 // COMMAND_ramp_hv + 1
 
 /* for another day...
 typedef struct {
@@ -39,7 +35,7 @@ typedef struct {
 */
 
 typedef struct {
-  uint32_t hv_dac[12];
+  uint32_t hv_dac[LVHV_HV_CHANNELS];
 } i2c_state_t;
 
 int initialize_i2c_lv(uint8_t channel_map[6]);
@@ -56,20 +52,14 @@ int i2c_lv_power_control(uint8_t channel, uint8_t pin_map[6], int value);
 Message_t* i2c_lv_power_on(uint8_t, uint8_t[6]);
 Message_t* i2c_lv_power_off(uint8_t, uint8_t[6]);
 Message_t* i2c_station_reset(void);
-float i2c_deferred_hv_query(int, uint8_t);
-void i2c_dac_write(uint8_t, uint32_t, i2c_state_t*);
-uint32_t i2c_dac_cast(float);
-void i2c_set_hv(uint8_t, float, i2c_state_t*);
-float i2c_ramp_hv_fixed_rate(int, uint8_t, float, float, float, long, i2c_state_t*, Logger_t*);
-float i2c_ramp_hv_impl(int, uint8_t, float, i2c_state_t*, Logger_t*);
-Message_t* i2c_ramp_hv(int, uint8_t, float, i2c_state_t*, Logger_t*);
+int i2c_dac_write(uint8_t, uint32_t, i2c_state_t*);
+Message_t* i2c_set_hv_by_dac(uint8_t, float, i2c_state_t*);
 Message_t* i2c_query_hv_dac_cache(uint8_t, i2c_state_t*);
 
 typedef struct {
   PriorityQueue_t* queue;
   uint8_t channel_map[6];
   Logger_t* logger;
-  unsigned int port;
 } i2c_loop_args_t;
 
 void* i2c_loop(void*);

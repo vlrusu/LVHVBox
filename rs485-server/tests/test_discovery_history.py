@@ -11,6 +11,7 @@ from unittest.mock import Mock, patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from discovery_history import DiscoveryHistory, PowerReader
+import lvhv_protocol as protocol
 from rs485_server import run_discovery
 
 
@@ -159,22 +160,79 @@ class ReadOnlyPowerTests(unittest.TestCase):
             header=Path(tmp)/'commands.h'
             header.write_text('#define TYPE_lv 123\n#define COMMAND_readMonV6 456\n')
             reader=PowerReader(header)
-        reply=struct.pack('=I',2)+reader.block('C',[b'L',b'V',b'H',b'V'])+reader.block('F',[6,0,0,0,0,0])
+        reply=protocol.encode_message([('C',(b'L',b'V',b'H',b'V')),('F',(6,0,0,0,0,0))])
         sock=Mock();sock.__enter__=Mock(return_value=sock);sock.__exit__=Mock(return_value=False)
         data=bytearray(reply)
         def recv(size):
             b=bytes(data[:1]);del data[:1];return b
         sock.recv.side_effect=recv
-        with patch('discovery_history.socket.create_connection',return_value=sock):
+        with patch('discovery_history.socket.create_connection',return_value=sock) as connect:
             self.assertEqual(reader.voltages(), (6,0,0,0,0,0))
+        connect.assert_called_once_with(('127.0.0.1',12000),5)
         self.assertEqual(sock.sendall.call_count,1)
-        self.assertIn(reader.block('U',[456]),sock.sendall.call_args.args[0])
+        # Golden request keeps the command/header codes and all-channel selector.
+        self.assertEqual(sock.sendall.call_args.args[0],
+            bytes.fromhex('05000000 43040000004c564856 5501000000c8010000 '
+                          '55010000007b000000 430100000006 460100000000000000'))
 
     def test_bad_voltage_is_unknown(self):
         reader=PowerReader(ROOT.parent/'commands.h')
-        for values in ((0,)*5, (-1,)*6, (float('nan'),)*6):
+        for values in ((0,)*5, (-1,)*6, (-2,)*6, (float('nan'),)*6, (float('inf'),)*6):
             with patch.object(reader,'request',return_value=(b'F',values)), self.assertRaises(ValueError):
                 reader.voltages()
+
+    def test_signed_adc_noise_zero_and_powered_values_remain_valid(self):
+        reader=PowerReader(ROOT.parent/'commands.h')
+        values=(-.1,0.,1.,2.,5.9,6.)
+        with patch.object(reader,'request',return_value=(b'F',values)):
+            self.assertEqual(reader.voltages(),values)
+
+    def test_invalid_frames_are_unknown_power_without_retry(self):
+        magic=('C',(b'L',b'V',b'H',b'V'))
+        good=protocol.encode_message([magic,('F',(6.,)*6)])
+        frames=(good[:-1], struct.pack('<I',0), struct.pack('<I',9),
+                protocol.encode_message([('C',(b'N',)),('F',(6.,)*6)]),
+                protocol.encode_message([magic,('F',(6.,)*6),('I',(0,))]),
+                protocol.encode_message([magic,('I',(6,)*6)]),
+                protocol.encode_message([magic,('F',(6.,)*5)]),
+                protocol.encode_message([magic,('F',(-1.,)*6)]),
+                protocol.encode_message([magic,('F',(float('nan'),)*6)]),
+                struct.pack('<I',2)+protocol.encode_block(*magic)+b'F'+struct.pack('<I',65))
+        reader=PowerReader(ROOT.parent/'commands.h')
+        for frame in frames:
+            sock=Mock();sock.__enter__=Mock(return_value=sock);sock.__exit__=Mock(return_value=False)
+            data=bytearray(frame)
+            def recv(size):
+                result=bytes(data[:min(size,2)]);del data[:len(result)];return result
+            sock.recv.side_effect=recv
+            with self.subTest(frame=frame), patch('discovery_history.socket.create_connection',return_value=sock) as connect:
+                with self.assertRaises((ValueError,ConnectionError)):
+                    reader.voltages()
+            self.assertEqual(sock.sendall.call_count,1)
+            self.assertEqual(connect.call_count,1)
+            sock.__exit__.assert_called_once()
+
+    def test_closed_reply_preserves_inventory_in_real_discovery_path(self):
+        reader=PowerReader(ROOT.parent/'commands.h')
+        sock=Mock();sock.__enter__=Mock(return_value=sock);sock.__exit__=Mock(return_value=False)
+        sock.recv.return_value=b''
+        with tempfile.TemporaryDirectory() as tmp:
+            history=DiscoveryHistory(Path(tmp)/'history.json','test-psu')
+            history.record(scan([1,2]),True)
+            telemetry=Mock();telemetry.discover.return_value=scan([])
+            with patch('discovery_history.socket.create_connection',return_value=sock), self.assertLogs(level='ERROR'):
+                run_discovery(telemetry,history,reader,startup=True)
+            self.assertEqual(history.status()['last_discovered'],[1,2])
+            self.assertEqual(history.status()['pending_notifications'],0)
+
+    def test_connection_time_is_included_in_deadline(self):
+        reader=PowerReader(ROOT.parent/'commands.h',timeout=5.)
+        sock=Mock();sock.__enter__=Mock(return_value=sock);sock.__exit__=Mock(return_value=False)
+        with patch('discovery_history.socket.create_connection',return_value=sock), \
+                patch('discovery_history.time.monotonic',side_effect=[0.,6.]):
+            with self.assertRaises(TimeoutError):
+                reader.voltages()
+        sock.sendall.assert_not_called()
 
 
 if __name__=='__main__':unittest.main()

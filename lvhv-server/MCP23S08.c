@@ -77,7 +77,7 @@ int MCP_byteWrite(MCP *mcp, uint8_t reg, uint8_t value)
 
 
   // do the SPI transaction
-  if ((ioctl(spiFds, SPI_IOC_MESSAGE(1), &spi) < 0)) {
+  if (ioctl(spiFds, SPI_IOC_MESSAGE(1), &spi) != (int)sizeof tx_buf) {
     error_log("mcp23s08_write_reg: Error during SPI transaction.");
     printf("mcp23s08_write_reg: Error during SPI transaction.");
 

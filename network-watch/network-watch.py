@@ -18,7 +18,7 @@ try:
 except ModuleNotFoundError as error:
     if error.name != 'lvhv_protocol':
         raise
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'Client'))
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'common'))
     import lvhv_protocol as protocol
 
 

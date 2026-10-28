@@ -17,7 +17,7 @@ import time
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / 'Client'))
+sys.path.insert(0, str(ROOT / 'common'))
 import lvhv_protocol as protocol
 
 

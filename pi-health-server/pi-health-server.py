@@ -11,7 +11,6 @@ import logging
 import os
 import signal
 import socket
-import struct
 import subprocess
 import sys
 import threading
@@ -22,6 +21,14 @@ from datetime import datetime, timezone
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+
+try:
+    import lvhv_protocol as protocol
+except ModuleNotFoundError as error:
+    if error.name != 'lvhv_protocol':
+        raise
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'common'))
+    import lvhv_protocol as protocol
 
 try:
     import gpiod
@@ -167,64 +174,22 @@ class LvhvPowerOffClient:
             raise RuntimeError(f"missing required command codes in {commands_path}: {joined}")
         return command_codes
 
-    def _encode_block(self, typecode: str, payload: bytes, count: int) -> bytes:
-        return struct.pack("=cI", typecode.encode("ascii"), count) + payload
-
-    def _encode_message(self) -> bytes:
-        channel = self.config.lvhv_poweroff_channel
-        blocks = [
-            self._encode_block("C", b"LVHV", 4),
-            self._encode_block(
-                "U",
-                struct.pack("I", self._command_codes["COMMAND_powerOff"]),
-                1,
-            ),
-            self._encode_block(
-                "U",
-                struct.pack("I", self._command_codes["TYPE_lv"]),
-                1,
-            ),
-            self._encode_block("C", bytes((channel,)), 1),
-            self._encode_block("F", struct.pack("f", 0.0), 1),
-        ]
-        return struct.pack("I", len(blocks)) + b"".join(blocks)
-
-    def _recv_exact(self, connection: socket.socket, size: int) -> bytes:
-        chunks = []
-        remaining = size
-        while remaining > 0:
-            chunk = connection.recv(remaining)
-            if not chunk:
-                raise RuntimeError("lvhv-server closed the connection before replying")
-            chunks.append(chunk)
-            remaining -= len(chunk)
-        return b"".join(chunks)
-
-    def _read_reply(self, connection: socket.socket) -> None:
-        block_count = struct.unpack("I", self._recv_exact(connection, 4))[0]
-        for _ in range(block_count):
-            typecode = self._recv_exact(connection, 1).decode("ascii")
-            count = struct.unpack("I", self._recv_exact(connection, 4))[0]
-            payload_size = count * struct.calcsize(
-                {
-                    "C": "c",
-                    "I": "i",
-                    "U": "I",
-                    "F": "f",
-                    "D": "d",
-                }[typecode]
-            )
-            self._recv_exact(connection, payload_size)
-
     def power_off(self, reason: str) -> None:
-        message = self._encode_message()
         with socket.create_connection(
             (self.config.lvhv_host, self.config.lvhv_port),
             timeout=5.0,
         ) as connection:
-            connection.settimeout(5.0)
-            connection.sendall(message)
-            self._read_reply(connection)
+            try:
+                reply = protocol.request_reply(
+                    connection, self._command_codes["COMMAND_powerOff"],
+                    self._command_codes["TYPE_lv"], self.config.lvhv_poweroff_channel,
+                    timeout=5.0, max_blocks=8, max_elements=64,
+                )
+                protocol.require_success(reply)
+            except (EOFError, ValueError) as exc:
+                # GPIO handlers already catch RuntimeError; a bad reply must not
+                # escape the monitor loop or cause a command to be replayed.
+                raise RuntimeError("invalid or incomplete LVHV powerOff reply") from exc
         logging.warning(
             "issued powerOff to lvhv-server host=%s port=%s channel=%s reason=%s",
             self.config.lvhv_host,

@@ -17,6 +17,7 @@
     {"name": "channel", "type": "C", "count": 1},
     {"name": "numeric", "type": "F", "count": 1}
   ],
+  "command_limits": {"hv_channels": 12, "hv_dac_max": 15000},
   "max_blocks": 1024,
   "max_message_bytes": 67108864,
   "frame_timeout_ms": 10000
