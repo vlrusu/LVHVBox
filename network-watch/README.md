@@ -14,7 +14,7 @@ Default policy:
 - fall back to `NETWORK_WATCH_MASTER_HOSTS` plus `NETWORK_WATCH_REMOTE_PORT` for older env files
 - require all configured master endpoints to be reachable
 - probe `NETWORK_WATCH_GATEWAY_ENDPOINTS` in order: try gateway01 first, then gateway02 only if gateway01 fails; the gateway check fails only when both fail
-- wait `NETWORK_WATCH_GRACE_PERIOD_S=1800.0` seconds (30 minutes) of continuous detected connectivity loss before shutdown
+- wait `network.grace_period_seconds` (default1800) seconds (30 minutes) of continuous detected connectivity loss before shutdown
 - once isolated, re-send local `powerOff` on every poll until connectivity returns
 
 The grace timer starts at the first failed poll and uses monotonic elapsed time.
@@ -23,7 +23,7 @@ period and connection timeouts, shutdown happens on the first failed poll at or
 after 30 minutes; counting polls does not determine the delay. Restarting the
 watcher starts a fresh grace period. Recovery clears the shutdown latch and does
 not power the station back on. The former `NETWORK_WATCH_FAILURE_STREAK_TRIGGER`
-setting is replaced by `NETWORK_WATCH_GRACE_PERIOD_S`.
+setting is replaced by `network.grace_period_seconds` in the shared alarm policy.
 
 Endpoint entries use `host:port`, for example:
 
@@ -67,3 +67,11 @@ Under `systemd`, use:
 ```bash
 ExecStart=/usr/bin/network-watch --dry-run
 ```
+
+## Shared alarm policy
+
+Polling period, connection timeout and grace period are loaded from the `network`
+section of [`../config/alarm-policy.json`](../config/alarm-policy.json). The former
+`NETWORK_WATCH_PERIOD_S`, `NETWORK_WATCH_CONNECT_TIMEOUT_S` and
+`NETWORK_WATCH_GRACE_PERIOD_S` overrides are ignored. Endpoint groups, local LVHV
+connection settings and `--dry-run` remain separate. Restart after policy changes.

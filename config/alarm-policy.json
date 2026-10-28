@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "roc_temperature": {
+    "high_c": 36.0,
+    "consecutive_high_samples": 3,
+    "missing_seconds": 180.0,
+    "poll_seconds": 60.0,
+    "power_on_min_v": 2.0,
+    "minimum_temperature_panels": 2
+  },
+  "i2c_environment": {
+    "temperature_high_c": 28.0,
+    "humidity_high_rh": 60.0,
+    "dew_point_limit_c": 18.0,
+    "dew_point_margin_c": 5.0,
+    "consecutive_unsafe_samples": 3,
+    "missing_samples": 5,
+    "poll_seconds": 30.0,
+    "alert_cooldown_seconds": 1200.0,
+    "missing_alert_cooldown_seconds": 21600.0
+  },
+  "network": {
+    "poll_seconds": 30.0,
+    "connect_timeout_seconds": 3.0,
+    "grace_period_seconds": 1800.0
+  },
+  "ac_power": {
+    "gpio21_repeat_window_seconds": 10.0
+  }
+}

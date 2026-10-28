@@ -11,7 +11,7 @@ Every 60 seconds the monitor:
    **The PSU is OFF only if all six V6 readings are below 2 V. Any one
    reading at or above 2 V means the entire PSU is ON**, per the user's
    2026-09-26 instruction. Only the 6 V readback controls monitoring; the 48 V
-   readback is not used. The cutoff is configurable (`--power-cutoff 2`). Small
+   readback is not used. The cutoff is configured by `roc_temperature.power_on_min_v` in the shared alarm policy. Small
    negative ADC offsets near zero count as off; the server's -1 error sentinel,
    malformed replies, NaN and timeouts mean **unknown**, not off. Unknown power
    is logged and suppresses action until a fresh valid power read; retained
@@ -82,8 +82,11 @@ monitor adopts that completed result on its next cycle.
 
 ## Configuration
 
-CLI settings: `--threshold 36`, `--high-count 3`, `--missing-seconds 180`,
-`--interval 60`, `--power-cutoff 2`, `--commands`, `--state`.
+Thresholds, consecutive-reading count, missing-data timeout, polling interval,
+power cutoff and minimum panel count come from [`../config/alarm-policy.json`](../config/alarm-policy.json).
+The former numeric CLI options (`--threshold`, `--high-count`, `--missing-seconds`,
+`--interval`, `--power-cutoff`) have been removed; stale invocations fail argument
+validation before any power action. `--commands` and `--state` remain supported.
 Use a systemd ExecStart override for a different policy, with exactly one mode
 flag: `--enable-power-off` for protection or `--dry-run` for alert-only operation.
 The current unit cannot inherit live shutdown from a credentials environment

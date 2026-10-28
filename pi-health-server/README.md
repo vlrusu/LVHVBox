@@ -64,11 +64,12 @@ Offline shutdown/codec tests (fake GPIO and sockets, no hardware actions):
 
 ## Power-off action config
 
-The GPIO21 repeat-loss window is configured in `pi-health-actions.ini`:
+The GPIO21 repeat-loss window is configured in `config/alarm-policy.json`.
+Device/action settings remain in `pi-health-actions.ini`:
 
 ```ini
 [power_actions]
-gpio21_repeat_window_seconds = 10.0
+# GPIO21 repeat window: config/alarm-policy.json in LVHVBox
 lvhv_host = 127.0.0.1
 lvhv_port = 12000
 lvhv_commands_path = /etc/mu2e-tracker-lvhv-tools/commands.h
@@ -168,3 +169,12 @@ remain inactive while Pi health owns GPIO5. Removing the vendor source from this
 repository does not uninstall or change any independently installed PSU service.
 
 If the client is remote, it uses the same SSH gateway flow as the LV/HV connection, but forwards the health HTTP service on port `12002` by default.
+
+## Shared alarm policy
+
+The GPIO21 repeated-loss window is loaded from `ac_power.gpio21_repeat_window_seconds`
+in [`../config/alarm-policy.json`](../config/alarm-policy.json). The old
+`gpio21_repeat_window_seconds` INI key and corresponding environment override
+are ignored. GPIO6 still triggers its immediate AC-loss action; GPIO21 still
+requires repeated loss edges. Device wiring, GPIO polarity, LVHV endpoints and
+X728 pulse timing stay in the existing settings. Restart to load policy changes.

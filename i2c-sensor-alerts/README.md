@@ -1,6 +1,6 @@
 # I2C Sensor Alerts
 
-This service is separate from `i2c-sensor-server` and is responsible only for notifications.
+This service is separate from `i2c-sensor-server` and handles environmental notifications and fleet LV shutdown.
 
 It:
 
@@ -34,7 +34,8 @@ By default the alert service targets:
 ## Files
 
 - `i2c-sensor-alerts.py`: notifier loop
-- `i2c-sensor-alerts.env`: alert thresholds and Pushover config
+- `../config/alarm-policy.json`: thresholds, streak counts, polling and cooldowns
+- `i2c-sensor-alerts.env`: sensor endpoint, fleet targets and Pushover config
 - `../systemd/i2c-sensor-alerts.service`: systemd unit
 
 ## Pushover
@@ -69,3 +70,8 @@ Under `systemd`, use:
 ```bash
 ExecStart=/usr/bin/i2c-sensor-alerts --dry-run
 ```
+
+Numeric `I2C_SENSOR_ALERTS_*` threshold/timing overrides are no longer read.
+Edit the shared policy file, validate it and restart the monitor to apply changes.
+`LVHV_ALARM_POLICY` selects a different policy file when explicitly needed;
+credentials and target host settings remain outside the policy.

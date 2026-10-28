@@ -104,3 +104,8 @@ python3 -m unittest discover -s lvhv-server/tests -v
 [AFFECTS LV/HV OR DETECTOR HARDWARE] Starting the actual server initializes
 hardware and disables global LV. Building it and running the protocol-only tests
 do not start the server or access detector hardware.
+
+The four Python protection monitors share [`../config/alarm-policy.json`](../config/alarm-policy.json).
+See [`../config/README.md`](../config/README.md) for editing and validation.
+The LVHV C server's power-on spacing is a separate build-time hardware-control
+setting; this policy does not change LV enable modes, HV DAC limits or firmware trip settings.

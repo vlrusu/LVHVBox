@@ -27,6 +27,16 @@ from urllib.error import HTTPError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+try:
+    from alarm_policy import load_policy
+except ModuleNotFoundError as error:
+    if error.name != 'alarm_policy':
+        raise
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'common'))
+    from alarm_policy import load_policy
+
+ALARM_POLICY = load_policy()['roc_temperature']
+
 LOG = logging.getLogger('roc-temperature-monitor')
 
 
@@ -152,7 +162,13 @@ class PanelState:
 
 
 class Monitor:
-    def __init__(self, panels, threshold=36, count=3, missing_seconds=180, power_cutoff=2):
+    def __init__(self, panels, threshold=None, count=None, missing_seconds=None, power_cutoff=None,
+                 minimum_panels=None):
+        threshold = ALARM_POLICY['high_c'] if threshold is None else threshold
+        count = ALARM_POLICY['consecutive_high_samples'] if count is None else count
+        missing_seconds = ALARM_POLICY['missing_seconds'] if missing_seconds is None else missing_seconds
+        power_cutoff = ALARM_POLICY['power_on_min_v'] if power_cutoff is None else power_cutoff
+        self.minimum_panels = ALARM_POLICY['minimum_temperature_panels'] if minimum_panels is None else minimum_panels
         self.panels = tuple(sorted(panels))
         self.threshold, self.count = threshold, count
         self.missing_seconds, self.power_cutoff = missing_seconds, power_cutoff
@@ -206,7 +222,7 @@ class Monitor:
             self.delivered.pop(name + ':hot', None)
 
     def finish_cycle(self, now):
-        if len(self.cycle_good) >= 2:
+        if len(self.cycle_good) >= self.minimum_panels:
             self.last_quorum = now
             self.delivered.pop('PSU:missing', None)
 
@@ -219,7 +235,7 @@ class Monitor:
                 alarms[name + ':hot'] = f'{name}: {state.temperature:.2f} C > {self.threshold:g} C for {state.high_count} consecutive readings'
         since = self.last_quorum if self.last_quorum is not None else self.powered_since
         if since is not None and now - since > self.missing_seconds:
-            alarms['PSU:missing'] = (f'Fewer than 2 panels returned valid ROC_TEMP for '
+            alarms['PSU:missing'] = (f'Fewer than {self.minimum_panels} panels returned valid ROC_TEMP for '
                                      f'{now - since:.0f} s; latest cycle: '
                                      f'{len(self.cycle_good)}/{len(self.panels)} panels')
         # A failed sample interrupts the hot streak but does not rearm a hot
@@ -297,7 +313,7 @@ def cycle(monitor, power, temperatures, notifier, label, stop, dry_run=True,
             LOG.warning('%s ROC_TEMP failed: %s', name, exc)
         monitor.sample(name, value, clock())
     monitor.finish_cycle(clock())
-    LOG.info('Temperature coverage: %d/%d panels (minimum 2)', len(monitor.cycle_good), len(monitor.panels))
+    LOG.info('Temperature coverage: %d/%d panels (minimum %d)', len(monitor.cycle_good), len(monitor.panels), monitor.minimum_panels)
     alarms = monitor.alarms(clock())
     if not alarms or stop.is_set():
         return
@@ -332,7 +348,9 @@ def state_identity(args):
     boot = Path('/proc/sys/kernel/random/boot_id').read_text().strip()
     # Version separates discovery-derived state from the old configured roster.
     policy = ('discovery-two-temperature-v2', args.threshold, args.high_count,
-              args.missing_seconds, args.power_cutoff)
+              args.missing_seconds, args.power_cutoff,
+              getattr(args, 'minimum_panels', ALARM_POLICY['minimum_temperature_panels']),
+              getattr(args, 'interval', ALARM_POLICY['poll_seconds']))
     return boot + ':' + hashlib.sha256(json.dumps(policy, sort_keys=True).encode()).hexdigest()
 
 
@@ -395,12 +413,6 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--state', default='/var/lib/roc-temperature-monitor/state.json')
     parser.add_argument('--commands', default='/etc/mu2e-tracker-lvhv-tools/commands.h')
-    parser.add_argument('--threshold', type=float, default=36)
-    parser.add_argument('--high-count', type=int, default=3)
-    parser.add_argument('--missing-seconds', type=float, default=180)
-    parser.add_argument('--interval', type=float, default=60)
-    parser.add_argument('--power-cutoff', type=float, default=2,
-                        help='V6 below this voltage means OFF; at or above means ON')
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument('--dry-run', dest='dry_run', action='store_true', default=True,
                       help='Send real notifications, never send powerOff (default)')
@@ -408,6 +420,12 @@ def main(argv=None):
                       help='Permit local LV powerOff; hardware-affecting opt-in')
     parser.add_argument('--check-config', action='store_true')
     args = parser.parse_args(argv)
+    args.threshold = ALARM_POLICY['high_c']
+    args.high_count = ALARM_POLICY['consecutive_high_samples']
+    args.missing_seconds = ALARM_POLICY['missing_seconds']
+    args.interval = ALARM_POLICY['poll_seconds']
+    args.power_cutoff = ALARM_POLICY['power_on_min_v']
+    args.minimum_panels = ALARM_POLICY['minimum_temperature_panels']
     for value in (args.threshold, args.missing_seconds, args.interval, args.power_cutoff):
         if not finite(value):
             parser.error('Settings must be finite')
@@ -419,19 +437,19 @@ def main(argv=None):
     notifier = Pushover()
     if args.check_config:
         print(json.dumps({'hostname': label, 'panel_source': 'RS485 cached /panels discovery',
-                          'minimum_temperature_panels': 2,
+                          'minimum_temperature_panels': args.minimum_panels,
                           'dry_run': args.dry_run, 'recipients': len(notifier.users),
                           'power_cutoff': args.power_cutoff, 'power_policy': 'any V6 >= cutoff'}))
         return 0
-    monitor = Monitor((), args.threshold, args.high_count, args.missing_seconds, args.power_cutoff)
+    monitor = Monitor((), args.threshold, args.high_count, args.missing_seconds, args.power_cutoff, args.minimum_panels)
     path = Path(args.state)
     identity = state_identity(args)
     restore(path, identity, monitor, time.monotonic(), args.dry_run)
     stop = threading.Event()
     for sig in (signal.SIGINT, signal.SIGTERM):
         signal.signal(sig, lambda *_: stop.set())
-    LOG.warning('Starting %s: panels=RS485 discovery only; minimum_temperature_panels=2; threshold=%g C count=%d missing>%g s interval=%g s PSU on=any V6>=%g V powerOff=%s',
-                label, args.threshold, args.high_count, args.missing_seconds, args.interval, args.power_cutoff,
+    LOG.warning('Starting %s: panels=RS485 discovery only; minimum_temperature_panels=%d; threshold=%g C count=%d missing>%g s interval=%g s PSU on=any V6>=%g V powerOff=%s',
+                label, args.minimum_panels, args.threshold, args.high_count, args.missing_seconds, args.interval, args.power_cutoff,
                 'DISABLED (dry run); real alerts enabled' if args.dry_run else 'ENABLED')
     temperatures = TemperatureClient()
     offset = 0

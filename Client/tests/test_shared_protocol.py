@@ -289,8 +289,8 @@ for shared in ('lvhv_protocol', 'lvhv_protocol_generated'):
             ('health', 'pi-health-server/pi-health-server.py'),
             ('discovery', 'rs485-server/discovery_history.py'),
         )
-        services = tuple(path for name, path in adapters)
-        modules = ('lvhv_protocol.py', 'lvhv_protocol_generated.py')
+        services = tuple(path for name, path in adapters) + ('config/alarm-policy.json',)
+        modules = ('lvhv_protocol.py', 'lvhv_protocol_generated.py', 'alarm_policy.py')
         for module in modules:
             self.assertFalse((ROOT / 'Client' / module).exists())
         for layout, module_dir in (('source', 'common'), ('flat', 'modules')):

@@ -22,13 +22,23 @@ except ModuleNotFoundError as error:
     import lvhv_protocol as protocol
 
 
+try:
+    from alarm_policy import load_policy
+except ModuleNotFoundError as error:
+    if error.name != 'alarm_policy':
+        raise
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'common'))
+    from alarm_policy import load_policy
+
+ALARM_POLICY = load_policy()['network']
+
 DEFAULT_LOG_PATH = Path(
     os.getenv(
         "NETWORK_WATCH_LOG_PATH",
         "/var/log/mu2e-tracker-network-watch/network-watch.log",
     )
 )
-DEFAULT_PERIOD_S = float(os.getenv("NETWORK_WATCH_PERIOD_S", "30.0"))
+DEFAULT_PERIOD_S = ALARM_POLICY['poll_seconds']
 DEFAULT_LOCAL_HOSTNAME = os.getenv("NETWORK_WATCH_LOCAL_HOSTNAME") or socket.gethostname()
 DEFAULT_MASTER_HOSTS = [
     host.strip()
@@ -38,8 +48,8 @@ DEFAULT_MASTER_HOSTS = [
 DEFAULT_REMOTE_PORT = int(os.getenv("NETWORK_WATCH_REMOTE_PORT", "12000"))
 DEFAULT_MASTER_ENDPOINTS_RAW = os.getenv("NETWORK_WATCH_MASTER_ENDPOINTS", "").strip()
 DEFAULT_GATEWAY_ENDPOINTS_RAW = os.getenv("NETWORK_WATCH_GATEWAY_ENDPOINTS", "").strip()
-DEFAULT_CONNECT_TIMEOUT_S = float(os.getenv("NETWORK_WATCH_CONNECT_TIMEOUT_S", "3.0"))
-DEFAULT_GRACE_PERIOD_S = float(os.getenv("NETWORK_WATCH_GRACE_PERIOD_S", "1800.0"))
+DEFAULT_CONNECT_TIMEOUT_S = ALARM_POLICY['connect_timeout_seconds']
+DEFAULT_GRACE_PERIOD_S = ALARM_POLICY['grace_period_seconds']
 DEFAULT_LVHV_HOST = os.getenv("NETWORK_WATCH_LVHV_HOST", "127.0.0.1")
 DEFAULT_LVHV_PORT = int(os.getenv("NETWORK_WATCH_LVHV_PORT", "12000"))
 DEFAULT_LVHV_COMMANDS_PATH = Path(

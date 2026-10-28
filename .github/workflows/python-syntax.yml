@@ -18,3 +18,5 @@ jobs:
           python-version: '3.11'
       - name: Parse tracked Python files without importing applications
         run: python -m unittest discover -s Client/tests -p test_python_syntax.py -v
+      - name: Validate shared alarm policy and monitor configuration
+        run: python -m unittest discover -s Client/tests -p test_alarm_policy.py -v

@@ -31,6 +31,17 @@ except ModuleNotFoundError as error:
     import lvhv_protocol as protocol
 
 try:
+    from alarm_policy import load_policy
+except ModuleNotFoundError as error:
+    if error.name != 'alarm_policy':
+        raise
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'common'))
+    from alarm_policy import load_policy
+
+ALARM_POLICY = load_policy()['ac_power']
+
+
+try:
     import gpiod
     from gpiod.line import Bias, Direction, Edge
 except ImportError as exc:  # pragma: no cover - import failure is runtime-specific
@@ -77,7 +88,7 @@ DEFAULT_LVHV_HOST = "127.0.0.1"
 DEFAULT_LVHV_PORT = 12000
 DEFAULT_LVHV_COMMANDS_PATH = Path("/etc/mu2e-tracker-lvhv-tools/commands.h")
 DEFAULT_LVHV_POWEROFF_CHANNEL = 6
-DEFAULT_GPIO21_REPEAT_WINDOW_SECONDS = 10.0
+DEFAULT_GPIO21_REPEAT_WINDOW_SECONDS = ALARM_POLICY['gpio21_repeat_window_seconds']
 DEFAULT_X728_SOFT_SHUTDOWN_LINE = 26
 DEFAULT_X728_SOFT_SHUTDOWN_PULSE_SECONDS = 2.0
 DEFAULT_X728_REBOOT_PULSE_MINIMUM_SECONDS = 0.2
@@ -247,10 +258,7 @@ def load_action_config(config_path: Path) -> PowerActionConfig:
         return float(get_string(option, str(default)))
 
     return PowerActionConfig(
-        gpio21_repeat_window_seconds=get_float(
-            "gpio21_repeat_window_seconds",
-            DEFAULT_GPIO21_REPEAT_WINDOW_SECONDS,
-        ),
+        gpio21_repeat_window_seconds=DEFAULT_GPIO21_REPEAT_WINDOW_SECONDS,
         lvhv_host=get_string("lvhv_host", DEFAULT_LVHV_HOST),
         lvhv_port=get_int("lvhv_port", DEFAULT_LVHV_PORT),
         lvhv_commands_path=Path(

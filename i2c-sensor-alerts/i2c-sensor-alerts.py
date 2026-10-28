@@ -31,6 +31,16 @@ except ImportError as exc:  # pragma: no cover - import failure is runtime-speci
     ) from exc
 
 
+try:
+    from alarm_policy import load_policy
+except ModuleNotFoundError as error:
+    if error.name != 'alarm_policy':
+        raise
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'common'))
+    from alarm_policy import load_policy
+
+ALARM_POLICY = load_policy()['i2c_environment']
+
 DEFAULT_LOG_PATH = Path(
     os.getenv(
         "I2C_SENSOR_ALERTS_LOG_PATH",
@@ -38,25 +48,15 @@ DEFAULT_LOG_PATH = Path(
     )
 )
 DEFAULT_SENSOR_URL = os.getenv("I2C_SENSOR_ALERTS_SENSOR_URL", "http://127.0.0.1:12003/health")
-DEFAULT_PERIOD_S = float(os.getenv("I2C_SENSOR_ALERTS_PERIOD_S", "30.0"))
-DEFAULT_TEMP_HIGH_C = float(os.getenv("I2C_SENSOR_ALERTS_TEMP_HIGH_C", "28.0"))
-DEFAULT_HUMID_HIGH_RH = float(os.getenv("I2C_SENSOR_ALERTS_HUMID_HIGH_RH", "60.0"))
-DEFAULT_DEW_POINT_THRESHOLD_C = float(os.getenv("I2C_SENSOR_ALERTS_DEW_POINT_THRESHOLD_C", "18.0"))
-DEFAULT_DEWPOINT_APPROACH_MARGIN_C = float(
-    os.getenv("I2C_SENSOR_ALERTS_DEWPOINT_APPROACH_MARGIN_C", "5.0")
-)
-DEFAULT_ALERT_COOLDOWN_S = float(
-    os.getenv("I2C_SENSOR_ALERTS_ALERT_COOLDOWN_S", str(20 * 60))
-)
-DEFAULT_CONDITION_STREAK_TRIGGER = int(
-    os.getenv("I2C_SENSOR_ALERTS_CONDITION_STREAK_TRIGGER", "3")
-)
-DEFAULT_NO_DATA_STREAK_TRIGGER = int(
-    os.getenv("I2C_SENSOR_ALERTS_NO_DATA_STREAK_TRIGGER", "5")
-)
-DEFAULT_NO_DATA_ALERT_COOLDOWN_S = float(
-    os.getenv("I2C_SENSOR_ALERTS_NO_DATA_ALERT_COOLDOWN_S", str(6 * 60 * 60))
-)
+DEFAULT_PERIOD_S = ALARM_POLICY['poll_seconds']
+DEFAULT_TEMP_HIGH_C = ALARM_POLICY['temperature_high_c']
+DEFAULT_HUMID_HIGH_RH = ALARM_POLICY['humidity_high_rh']
+DEFAULT_DEW_POINT_THRESHOLD_C = ALARM_POLICY['dew_point_limit_c']
+DEFAULT_DEWPOINT_APPROACH_MARGIN_C = ALARM_POLICY['dew_point_margin_c']
+DEFAULT_ALERT_COOLDOWN_S = ALARM_POLICY['alert_cooldown_seconds']
+DEFAULT_CONDITION_STREAK_TRIGGER = ALARM_POLICY['consecutive_unsafe_samples']
+DEFAULT_NO_DATA_STREAK_TRIGGER = ALARM_POLICY['missing_samples']
+DEFAULT_NO_DATA_ALERT_COOLDOWN_S = ALARM_POLICY['missing_alert_cooldown_seconds']
 DEFAULT_PUSHOVER_USER_KEY = os.getenv("I2C_SENSOR_ALERTS_PUSHOVER_USER_KEY", "")
 DEFAULT_PUSHOVER_USER_KEYS = [
     key.strip()
