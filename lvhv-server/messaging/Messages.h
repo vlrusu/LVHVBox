@@ -54,6 +54,7 @@ extern "C"{
 
   MessageBlock_t* header_initialize();
   Message_t* message_initialize();
+  int message_is_request(const Message_t*);
 
   ssize_t block_send(MessageBlock_t*, int);
   ssize_t message_send(Message_t*, int);
@@ -66,7 +67,7 @@ extern "C"{
   Message_t* message_wrap_double(double);
   Message_t* message_wrap_chars(char*);
   Message_t* message_wrap_error(int);
-  
+
   int block_as_int(MessageBlock_t*);
   unsigned int block_as_uint(MessageBlock_t*);
   float block_as_float(MessageBlock_t*);

@@ -8,11 +8,18 @@ import logging
 import os
 import signal
 import socket
-import struct
 import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
+
+try:
+    import lvhv_protocol as protocol
+except ModuleNotFoundError as error:
+    if error.name != 'lvhv_protocol':
+        raise
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'Client'))
+    import lvhv_protocol as protocol
 
 
 DEFAULT_LOG_PATH = Path(
@@ -113,54 +120,15 @@ class LocalPowerOffClient:
             )
         return command_codes
 
-    def _encode_block(self, typecode: str, payload: bytes, count: int) -> bytes:
-        return struct.pack("=cI", typecode.encode("ascii"), count) + payload
-
     def _encode_message(self) -> bytes:
-        blocks = [
-            self._encode_block("C", b"LVHV", 4),
-            self._encode_block(
-                "U",
-                struct.pack("I", self.command_codes["COMMAND_powerOff"]),
-                1,
-            ),
-            self._encode_block(
-                "U",
-                struct.pack("I", self.command_codes["TYPE_lv"]),
-                1,
-            ),
-            self._encode_block("C", bytes((DEFAULT_LVHV_POWEROFF_CHANNEL,)), 1),
-            self._encode_block("F", struct.pack("f", 0.0), 1),
-        ]
-        return struct.pack("I", len(blocks)) + b"".join(blocks)
-
-    def _recv_exact(self, connection: socket.socket, size: int) -> bytes:
-        chunks = []
-        remaining = size
-        while remaining > 0:
-            chunk = connection.recv(remaining)
-            if not chunk:
-                raise RuntimeError("lvhv-server closed the connection before replying")
-            chunks.append(chunk)
-            remaining -= len(chunk)
-        return b"".join(chunks)
-
-    def _read_reply(self, connection: socket.socket) -> None:
-        block_count = struct.unpack("I", self._recv_exact(connection, 4))[0]
-        for _ in range(block_count):
-            typecode = self._recv_exact(connection, 1).decode("ascii")
-            count = struct.unpack("I", self._recv_exact(connection, 4))[0]
-            payload_size = count * struct.calcsize(
-                {"C": "c", "I": "i", "U": "I", "F": "f", "D": "d"}[typecode]
-            )
-            self._recv_exact(connection, payload_size)
+        return protocol.encode_request(self.command_codes['COMMAND_powerOff'],
+            self.command_codes['TYPE_lv'], DEFAULT_LVHV_POWEROFF_CHANNEL)
 
     def power_off(self, reason: str) -> None:
-        message = self._encode_message()
         with socket.create_connection((DEFAULT_LVHV_HOST, DEFAULT_LVHV_PORT), timeout=5.0) as connection:
-            connection.settimeout(5.0)
-            connection.sendall(message)
-            self._read_reply(connection)
+            reply = protocol.request_reply(connection, self.command_codes['COMMAND_powerOff'],
+                self.command_codes['TYPE_lv'], DEFAULT_LVHV_POWEROFF_CHANNEL, timeout=5.0)
+            protocol.require_success(reply)
         logging.warning(
             "issued local powerOff to lvhv-server host=%s port=%s channel=%s reason=%s",
             DEFAULT_LVHV_HOST,

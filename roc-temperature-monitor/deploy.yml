@@ -86,6 +86,18 @@
         - /etc/roc-temperature-monitor
       become: true
 
+    - name: Install shared protocol modules
+      ansible.builtin.copy:
+        src: "{{ lvhvbox_source }}/Client/{{ item }}.py"
+        dest: "/usr/local/lib/roc-temperature-monitor/{{ item }}.py"
+        owner: root
+        group: root
+        mode: '0644'
+        backup: true
+      loop: [lvhv_protocol, lvhv_protocol_generated]
+      become: true
+      register: monitor_protocol
+
     - name: Install monitor without changing existing LVHVBox checkout or services
       ansible.builtin.copy:
         src: "{{ monitor_source }}/roc_temperature_monitor.py"
@@ -165,7 +177,7 @@
         name: "{{ monitor_service }}"
         daemon_reload: true
         enabled: true
-        state: "{{ 'restarted' if monitor_script.changed or monitor_credentials.changed or monitor_unit.changed else 'started' }}"
+        state: "{{ 'restarted' if monitor_script.changed or monitor_protocol.changed or monitor_credentials.changed or monitor_unit.changed else 'started' }}"
       become: true
       when: not ansible_check_mode
 

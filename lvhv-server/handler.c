@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include "../commands.h"
 #include "handler.h"
+#include "Protocol.h"
 #include "utils.h"
 #include "pico_routines.h"
 #include "pico_registry.h"
@@ -19,14 +20,14 @@ void* client_handler(void* args){
   free(casted);
 
   char msg[128];
-  sprintf(msg, "new client session open at fd %d", addr);
+  snprintf(msg, sizeof msg, "new client session open at fd %d", addr);
   log_write(logger, msg, LOG_INFO);
 
-  char buffer[512];
-  int stop = 0;
-  int nread;
-  Message_t* message;
+  Message_t* message = NULL;
   while (0 < message_recv(&message, addr)){
+    // Reject malformed request layouts before task creation or hardware dispatch.
+    if (!message_is_request(message)) break;
+
     // generate new task
     task_t task;
     task_init(&task);
@@ -34,74 +35,23 @@ void* client_handler(void* args){
     task.complete = 0;
     task.error = 0;
 
-    // if connection closed unexpectedly, just abort
-    if (errno == EPIPE){
-      break;
-    }
-
-    // bad message, just send back error
-    if (message->valid != 1){
-      task.rv = message_wrap_chars("ERROR");
-      break;
-    }
-
-    // only accept LVHV+cmd+type+char+float
-    if (message->count != 5){
-      break;
-    }
-    if (message->blocks[1]->type != 'U'){
-      break;
-    }
-    if (message->blocks[1]->count != 1){
-      break;
-    }
-    if (message->blocks[2]->type != 'U'){
-      break;
-    }
-    if (message->blocks[2]->count != 1){
-      break;
-    }
-    if (message->blocks[3]->type != 'C'){
-      break;
-    }
-    if (message->blocks[3]->count != 1){
-      break;
-    }
-    if (message->blocks[4]->type != 'F'){
-      break;
-    }
-    if (message->blocks[4]->count != 1){
-      break;
-    }
-
     // unpack message into task, and deallocate
-    unsigned int* u;
-    as_uints(message->blocks[1], &u);
-    task.command.name = (uint32_t) (*u);
-    free(u);
+    task.command.name = block_as_uint(message->blocks[LVHV_REQUEST_COMMAND]);
+    task.command.type = block_as_uint(message->blocks[LVHV_REQUEST_SUBSYSTEM]);
+    task.command.char_parameter = message->blocks[LVHV_REQUEST_CHANNEL]->bytes[0];
+    task.command.float_parameter = block_as_float(message->blocks[LVHV_REQUEST_NUMERIC]);
     snprintf(msg, sizeof(msg), "client %d received command %s (%" PRIu32 ")",
              addr, command_name(task.command.name), task.command.name);
     log_write(logger, msg, LOG_DETAIL);
 
-    as_uints(message->blocks[2], &u);
-    task.command.type = (uint32_t) (*u);
-    free(u);
-
-    char* c;
-    as_chars(message->blocks[3], &c);
-    task.command.char_parameter = *c;
-    free(c);
-
-    float* f;
-    as_floats(message->blocks[4], &f);
-    task.command.float_parameter = *f;
-    free(f);
-
     message_destroy(message);
+    message = NULL;
 
     // submit to relevant queue
     int queued = 0;
     QueueItem_t* item = malloc(sizeof(QueueItem_t));
+    if (!item) { task_destroy(&task); break; }
+    task.rv = NULL;
     item->payload = &task;
     item->key = 0;
     // i2c commands
@@ -116,7 +66,7 @@ void* client_handler(void* args){
       size_t pico_id = (channel < 6) ? 0 : 1;
 
       if (!pico_is_connected(pico_id)) {
-        sprintf(msg, "WARNING: command issued to invalid pico %d channel %d", pico_id, channel);
+        snprintf(msg, sizeof msg, "WARNING: command issued to invalid pico %zu channel %d", pico_id, channel);
         log_write(logger, msg, LOG_INFO);
         task.rv = message_wrap_chars("ERROR");
       }
@@ -140,13 +90,13 @@ void* client_handler(void* args){
           queued = 1;
         }
         else{
-          sprintf(msg, "client %d pico command to unknown channel %d", addr, task.command.char_parameter);
+          snprintf(msg, sizeof msg, "client %d pico command to unknown channel %d", addr, task.command.char_parameter);
           log_write(logger, msg, LOG_INFO);
         }
       }
     }
     else{
-      sprintf(msg, "client %d command of unknown type %u", addr, task.command.type);
+      snprintf(msg, sizeof msg, "client %d command of unknown type %u", addr, task.command.type);
       log_write(logger, msg, LOG_INFO);
     }
 
@@ -162,15 +112,16 @@ void* client_handler(void* args){
 
     // send response back to client
     //write(task.addr, &(task.rv), sizeof(task.rv));
-    message_send(task.rv, task.addr);
+    ssize_t sent = message_send(task.rv, task.addr);
     message_destroy(task.rv);
     free(item);
     task_destroy(&task);
+    if (sent < 0) break;
   }
 
   message_destroy(message);
 
-  sprintf(msg, "closing client session for fd %d", addr);
+  snprintf(msg, sizeof msg, "closing client session for fd %d", addr);
   log_write(logger, msg, LOG_INFO);
   close(addr);
   pthread_exit(NULL);

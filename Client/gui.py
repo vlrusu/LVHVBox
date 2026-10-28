@@ -24,7 +24,7 @@ import tkinter as tk
 from tkinter import ttk
 import tkinter.font as tkfont
 
-import json, socket, ctypes, math, os
+import json, socket, math, os
 from MessagingConnection import MessagingConnection
 
 HV_CHANNELS = 12
@@ -88,22 +88,14 @@ def parse_vector6(rv) -> Optional[List[float]]:
 def send_msg_and_recv_scalar(conn: MessagingConnection, cmd_name: str, type_key: str,
                              channel: int = 0, val: float = 0.0) -> Optional[float]:
     cmap = command_map()
-    c_cmd = ctypes.c_uint(cmap["COMMAND_" + cmd_name])
-    c_typ = ctypes.c_uint(cmap["TYPE_" + type_key])
-    c_chn = ctypes.c_char(channel)
-    c_val = ctypes.c_float(float(val))
-    conn.send_message(c_cmd, c_typ, c_chn, c_val)
+    conn.send_request(cmap["COMMAND_" + cmd_name], cmap["TYPE_" + type_key], channel, float(val))
     blocks = conn.recv_message()
     try: return float(blocks[0][0])
     except Exception: return None
 
 def send_msg_and_recv_vector6(conn: MessagingConnection, cmd_name: str, type_key: str) -> Optional[List[float]]:
     cmap = command_map()
-    c_cmd = ctypes.c_uint(cmap["COMMAND_" + cmd_name])
-    c_typ = ctypes.c_uint(cmap["TYPE_" + type_key])
-    c_chn = ctypes.c_char(6)
-    c_val = ctypes.c_float(0.0)
-    conn.send_message(c_cmd, c_typ, c_chn, c_val)
+    conn.send_request(cmap["COMMAND_" + cmd_name], cmap["TYPE_" + type_key], 6)
     blocks = conn.recv_message()
     return parse_vector6(blocks)
 
@@ -348,11 +340,7 @@ class App(tk.Tk):
             conn = MessagingConnection(self.args.host, self.args.port)
 
             def send_one(channel: int, val: float = 0.0):
-                c_cmd = ctypes.c_uint(cmd_id)
-                c_typ = ctypes.c_uint(type_id)
-                c_chn = ctypes.c_char(channel)
-                c_val = ctypes.c_float(float(val))
-                conn.send_message(c_cmd, c_typ, c_chn, c_val)
+                conn.send_request(cmd_id, type_id, channel, float(val))
                 _ = conn.recv_message()
 
             if idx == -1:

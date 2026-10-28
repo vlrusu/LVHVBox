@@ -1,0 +1,23 @@
+{
+  "name": "LVHV",
+  "byte_order": "little",
+  "count_format": "I",
+  "count_bytes": 4,
+  "magic": "LVHV",
+  "types": {
+    "C": {"format": "c", "bytes": 1, "ctype": "c_char"},
+    "I": {"format": "i", "bytes": 4, "ctype": "c_int"},
+    "U": {"format": "I", "bytes": 4, "ctype": "c_uint"},
+    "F": {"format": "f", "bytes": 4, "ctype": "c_float"},
+    "D": {"format": "d", "bytes": 8, "ctype": "c_double"}
+  },
+  "request": [
+    {"name": "command", "type": "U", "count": 1},
+    {"name": "subsystem", "type": "U", "count": 1},
+    {"name": "channel", "type": "C", "count": 1},
+    {"name": "numeric", "type": "F", "count": 1}
+  ],
+  "max_blocks": 1024,
+  "max_message_bytes": 67108864,
+  "frame_timeout_ms": 10000
+}

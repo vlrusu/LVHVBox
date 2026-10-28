@@ -1,19 +1,18 @@
-# Bundled LVHV messaging protocol
+# Bundled LVHV messaging
 
-`Messages.c` and `Messages.h` originate from Ed Callaghan's
-[libmu2e-tracker-messaging](https://github.com/edcallaghan/libmu2e-tracker-messaging)
-at commit `2ae238ec79e68de1a85fbdfde57cda4e98fca8ba` (retrieved October 27, 2026).
-Original author comments are retained. The imported C code and header are
-unchanged; Git blob IDs are respectively
-`98333b071971382d2e9a87230c199bd078dca616` and
-`311ddf8543b4bd071b1590b2f76b7abce70d3df0`.
+The API originated from Ed Callaghan's `libmu2e-tracker-messaging` at commit
+`2ae238ec79e68de1a85fbdfde57cda4e98fca8ba`, imported October 27, 2026.
+The original import is preserved in LVHVBox commit `d0552d4`.
 
-CMake builds these files into a static library linked into `lvhv-server`.
-Building and running the server requires neither an installed `Messages.h`
-nor `libmu2e-tracker-messaging.so`. Existing system installations are untouched.
+This local implementation fixes the inherited magic-header heap overflow,
+unsafe string wrapping, unchecked allocation/element counts, invalid-message
+cleanup and partial socket I/O. It rejects unknown types, oversized/truncated
+frames and incorrect request shapes, uses full reads/writes with frame deadlines,
+and suppresses socket SIGPIPE. The handler validates requests before dispatch
+and closes failed transactions without replay. This is protocol hardening;
+hardware command semantics remain in their existing handlers.
 
-This is the typed binary protocol used by the server on TCP port 12000.
-Python clients use the matching implementation in `Client/MessagingConnection.py`;
-the GUI, telemetry collectors and protective shutdown clients retain their
-existing request/reply formats. No hardware behavior or protocol change is
-intended by bundling the C implementation.
+CMake statically links this source into `lvhv-server`; no site-specific messaging
+package, installed header or shared messaging library is required. Wire constants
+and request layouts come from the shared [protocol definition](../../protocol/README.md).
+That document describes compatibility, limits, generation and tests.

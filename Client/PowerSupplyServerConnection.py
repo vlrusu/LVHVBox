@@ -2,7 +2,6 @@
 # Abstract out details of communicating with lvhv server
 # October 2024
 
-import ctypes
 import os.path
 import threading
 import time
@@ -101,12 +100,7 @@ class PowerSupplyServerConnection():
         if numeric is None:
             numeric = 0.0
 
-        cmd = ctypes.c_uint(self.specials[ckey])
-        typ = ctypes.c_uint(self.specials[tkey])
-
-        chn = ctypes.c_char(channel)
-        num = ctypes.c_float(numeric)
-        self.connection.send_message(cmd, typ, chn, num)
+        self.connection.send_request(self.specials[ckey], self.specials[tkey], channel, numeric)
         rvs = self.connection.recv_message()
         return rvs
 

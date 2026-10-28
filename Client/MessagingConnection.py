@@ -5,13 +5,18 @@
 import ctypes
 import math
 import socket
-import struct
 import time
+from pathlib import Path
+import sys
+
+# Support both the installed flat modules and a direct source-file import.
+if str(Path(__file__).resolve().parent) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+import lvhv_protocol as protocol
 
 class MessagingConnection:
-    # Defensive client framing bounds, not detector/hardware limits.
-    MAX_BLOCKS = 1024
-    MAX_MESSAGE_BYTES = 64 * 1024 * 1024
+    MAX_BLOCKS = protocol.MAX_BLOCKS
+    MAX_MESSAGE_BYTES = protocol.MAX_MESSAGE_BYTES
 
     def __init__(self, host, port, timeout=10.0):
         self.host = host
@@ -21,35 +26,12 @@ class MessagingConnection:
             raise ValueError('LVHV connection timeout must be finite and positive')
         self.reestablish()
 
-        self.header = [ctypes.c_char(c) for c in 'LVHV'.encode()]
-        self.check = (b'L', b'V', b'H', b'V')
-        self.typecodes = {
-          ctypes.c_char: 'C',
-          ctypes.c_int: 'I',
-          ctypes.c_uint: 'U',
-          ctypes.c_float: 'F',
-          ctypes.c_double: 'D',
-        }
-        self.formats = {
-          ctypes.c_char: 'c',
-          ctypes.c_int: 'i',
-          ctypes.c_uint: 'I',
-          ctypes.c_float: 'f',
-          ctypes.c_double: 'd',
-
-            'C': 'c',
-            'I': 'i',
-            'F': 'f',
-            'U': 'I',
-            'D': 'd',
-        }
-        self.inverse_typecodes = {
-          'C': ctypes.c_char,
-          'I': ctypes.c_int,
-          'U': ctypes.c_uint,
-          'F': ctypes.c_float,
-          'D': ctypes.c_double,
-        }
+        self.header = [ctypes.c_char(c) for c in protocol.MAGIC]
+        self.check = tuple(bytes((c,)) for c in protocol.MAGIC)
+        self.inverse_typecodes = {key: getattr(ctypes, value['ctype']) for key, value in protocol.TYPES.items()}
+        self.typecodes = {value: key for key, value in self.inverse_typecodes.items()}
+        self.formats = {key: value['format'] for key, value in protocol.TYPES.items()}
+        self.formats.update({kind: self.formats[code] for kind, code in self.typecodes.items()})
 
     def reestablish(self):
         if getattr(self, 'client', None) is not None:
@@ -67,74 +49,34 @@ class MessagingConnection:
             self.client.close()
 
     def encode_block(self, *items):
-        _type = type(items[0])
-        typecode = self.typecodes[_type]
-        key = self.formats[_type]
-        fmt = '%d%s' % (len(items), key)
-        pfx = struct.pack('c', typecode.encode())
-        pfx += struct.pack('I', len(items))
-        packable = [x.value for x in items]
-        payload = struct.pack(fmt, *packable)
-        rv = pfx + payload
-        return rv
-
-    def encode_message(self, *items):
-        itemss = self.aggregate_types(*items)
-
-        rv = struct.pack('I', len(itemss))
-        for items in itemss:
-            rv += self.encode_block(*items)
-
-        return rv
+        if not items or type(items[0]) not in self.typecodes:
+            raise ValueError('Unknown or empty LVHV block')
+        kind = self.typecodes[type(items[0])]
+        return protocol.encode_block(kind, tuple(x.value for x in items))
 
     def aggregate_types(self, *items):
-        rvs = []
-        for item in items:
-            if type(item) == list:
-                rvs.append(item)
-            else:
-                rvs.append([item])
+        return [item if isinstance(item, list) else [item] for item in items]
 
-        return rvs
+    def encode_message(self, *items):
+        blocks = []
+        for values in self.aggregate_types(*items):
+            if not values or type(values[0]) not in self.typecodes:
+                raise ValueError('Unknown or empty LVHV block')
+            blocks.append((self.typecodes[type(values[0])], tuple(x.value for x in values)))
+        return protocol.encode_message(blocks)
 
     def decode_message(self, buff):
-        if not 4 <= len(buff) <= self.MAX_MESSAGE_BYTES:
-            raise ValueError('Invalid LVHV reply length')
-        lo = 0
-        hi = 4
-        nblocks = struct.unpack('I', buff[lo:hi])[0]
-        if not 1 <= nblocks <= self.MAX_BLOCKS:
-            raise ValueError('Invalid LVHV reply block count: %d' % nblocks)
-        lo = hi
-
-        rvs = []
-        for i in range(nblocks):
-            if lo + 5 > len(buff):
-                raise ValueError('Truncated LVHV block header')
-            typecode = chr(buff[lo])
-            if typecode not in self.inverse_typecodes:
-                raise ValueError('Unknown LVHV type code: %r' % typecode)
-            key = self.formats[typecode]
-            lo += 1
-            hi = lo + 4
-            count = struct.unpack('I', buff[lo:hi])[0]
-            if count * ctypes.sizeof(self.inverse_typecodes[typecode]) > len(buff) - hi:
-                raise ValueError('Truncated or excessive LVHV block payload')
-            fmt = '%d%s' % (count, key)
-            size = struct.calcsize(fmt)
-            lo = hi
-            hi = lo + size
-            unpacked = struct.unpack(fmt, buff[lo:hi])
-            rvs.append(unpacked)
-            lo = hi
-
-        if hi != len(buff):
-            raise ValueError('Trailing bytes in LVHV reply')
-
-        return rvs
+        return [values for kind, values in protocol.decode_message(
+            buff, self.MAX_BLOCKS, self.MAX_MESSAGE_BYTES)]
 
     def send_message(self, *items):
         encoded = self.encode_message(self.header, *items)
+        self._send_encoded(encoded)
+
+    def send_request(self, command, subsystem, channel, numeric=0.0):
+        self._send_encoded(protocol.encode_request(command, subsystem, channel, numeric))
+
+    def _send_encoded(self, encoded):
         try:
             self.client.settimeout(self.timeout)
             self.client.sendall(encoded)
@@ -150,67 +92,29 @@ class MessagingConnection:
                                   (self.host, self.port, error)) from error
 
     def safe_recv(self, chunk, deadline=None, context='reply data'):
-        """Read exactly chunk bytes, with EOF failure and one overall deadline."""
         if deadline is None:
             deadline = time.monotonic() + self.timeout
-        received = bytearray()
-        while len(received) < chunk:
-            detail = '%s from %s:%d (%d/%d bytes)' % (
-                context, self.host, self.port, len(received), chunk)
-            try:
-                remaining = deadline - time.monotonic()
-                if remaining <= 0:
-                    raise TimeoutError('LVHV reply deadline expired')
-                self.client.settimeout(remaining)
-                data = self.client.recv(min(65536, chunk - len(received)))
-            except TimeoutError as error:
-                self.close()
-                raise TimeoutError('Timed out receiving LVHV %s' % detail) from error
-            except OSError as error:
-                self.close()
-                raise ConnectionError('Failed receiving LVHV %s: %s' % (detail, error)) from error
-            if not data:
-                self.close()
-                raise EOFError('Connection closed receiving LVHV %s' % detail)
-            received.extend(data)
-        return bytes(received)
+        try:
+            return protocol.recv_exact(self.client, chunk, deadline, context)
+        except Exception:
+            self.close()
+            raise
 
     def recv_block(self, deadline=None, max_bytes=None):
         if deadline is None:
             deadline = time.monotonic() + self.timeout
-        if max_bytes is None:
-            max_bytes = self.MAX_MESSAGE_BYTES
-        typecode = self.safe_recv(1, deadline, 'block type')
-        count_bytes = self.safe_recv(4, deadline, 'block element count')
-        key = chr(typecode[0])
-        if key not in self.inverse_typecodes:
-            raise ValueError('Unknown LVHV type code: %r' % key)
-        count = struct.unpack('I', count_bytes)[0]
-        _type = self.inverse_typecodes[key]
-        size = count * ctypes.sizeof(_type)
-        if size + 5 > max_bytes:
-            raise ValueError('LVHV block exceeds reply size limit')
-        return typecode + count_bytes + self.safe_recv(size, deadline, 'block payload')
+        return protocol.recv_block(self.client, deadline,
+            self.MAX_MESSAGE_BYTES if max_bytes is None else max_bytes)
 
     def recv_message(self):
         try:
-            deadline = time.monotonic() + self.timeout
-            prefix = self.safe_recv(4, deadline, 'block count')
-            nblocks = struct.unpack('I', prefix)[0]
-            if not 1 <= nblocks <= self.MAX_BLOCKS:
-                raise ValueError('Invalid LVHV reply block count: %d' % nblocks)
-            blocks = [prefix]
-            total = len(prefix)
-            for i in range(nblocks):
-                block = self.recv_block(deadline, self.MAX_MESSAGE_BYTES - total)
-                blocks.append(block)
-                total += len(block)
-            reply = self.decode_message(b''.join(blocks))
-            if reply[0] != self.check:
-                raise ValueError('Invalid LVHV reply magic header')
-            return reply[1:]
-        except Exception:
-            # A partial frame cannot safely be reused for the next command.
-            # Never reconnect/replay automatically: a write may have executed.
+            blocks = protocol.recv_message(self.client, self.timeout,
+                max_blocks=self.MAX_BLOCKS, max_bytes=self.MAX_MESSAGE_BYTES)
+            return [values for kind, values in protocol.verify_magic(blocks)]
+        except Exception as error:
             self.close()
+            # Never reconnect/replay automatically: a command may have executed.
+            if isinstance(error, TimeoutError):
+                raise TimeoutError('Timed out receiving LVHV reply from %s:%d' %
+                                   (self.host, self.port)) from error
             raise

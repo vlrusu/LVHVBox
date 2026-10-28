@@ -7,7 +7,6 @@ import time
 import struct
 import subprocess
 from collections import namedtuple
-import ctypes
 from MessagingConnection import MessagingConnection
 from I2CSensorConnection import I2CSensorConnection
 from PiHealthConnection import PiHealthConnection
@@ -317,18 +316,17 @@ def process_response(blocks, format_str):
 # ship it. socket.send(command_string)
 def send_command(connection, command, channel=None, val=0.0):
     command_dict = command_map()
-    cmd = ctypes.c_uint(command_dict["COMMAND_" + command.name])
-    typ = ctypes.c_uint(command_dict["TYPE_" + command.type_key])
+    cmd = command_dict["COMMAND_" + command.name]
+    typ = command_dict["TYPE_" + command.type_key]
     channel = channel if channel else 0
-    channel = ctypes.c_char(channel)
     if command.in_val_type == float:
         if val is None:
             val = 0.0
-        value = ctypes.c_float(float(val))
+        value = float(val)
     else:
-        value = ctypes.c_int(int(val))
+        value = int(val)
 
-    connection.send_message(cmd, typ, channel, value)
+    connection.send_request(cmd, typ, channel, value)
 
 
 # wrap command execution in a try except to keep it clean
@@ -375,15 +373,13 @@ def current_burst(sock, keys):
 
     assert 0 <= channel <= 11
 
-    cmd = ctypes.c_uint(command_dict["COMMAND_current_burst"])
-    typ = ctypes.c_uint(command_dict["TYPE_pico"])
-    channel = ctypes.c_char(channel)
-    padding = ctypes.c_float(0.0)
+    cmd = command_dict["COMMAND_current_burst"]
+    typ = command_dict["TYPE_pico"]
 
     num_cycles = int(current_buffer_len / full_current_chunk)
     full_currents = []
 
-    sock.send_message(cmd, typ, channel, padding)
+    sock.send_request(cmd, typ, channel)
     time.sleep(1)
     full_currents = sock.recv_message()
 
