@@ -14,7 +14,8 @@ installation puts both modules on the service interpreter's Python module path
 and keeps the imports `import lvhv_protocol` / `import lvhv_protocol_generated`.
 There are no compatibility copies in `Client/`. Source deployment manifests and
 the standalone ROC/Graphite deployment paths select these files from `common/`.
-The legacy Debian package scripts are not the supported source-release workflow.
+Applications are built and deployed from source; custom Debian packaging has
+been removed from this repository.
 
 Regenerate definitions from the checkout root with `python3 protocol/generate.py`;
 validate without writing with `python3 protocol/generate.py --check`.

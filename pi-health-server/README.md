@@ -50,7 +50,8 @@ The LV power-off client uses the shared `common/lvhv_protocol.py` codec and its
 generated definitions. Running from this checkout finds the sibling `common`
 directory; installed services need `lvhv_protocol.py` and
 `lvhv_protocol_generated.py` on their Python module path. The source deployment
-role installs both. The legacy Debian package script does not bundle them.
+role provides both. Custom Debian packaging has been removed; use the source
+deployment workflow.
 
 GPIO6/GPIO21 trigger rules and the configured host, port and channel are retained.
 Each power-off attempt opens one connection and uses a five-second shared

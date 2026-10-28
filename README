@@ -1,4 +1,13 @@
-Pico Flashing:
-  - to flash pico, put into bootsel and: sudo picotool load -f SmartSwitch.elf
-NOTE: Must set pico number to either 1 or 2 in SmartSwitch.c. Currently on line 28.
-Also, must set USB_VID to either caf0 or caf1 (pico 1 or 2) on line 38 of usb_descriptors.c
+LVHVBox
+
+Applications and firmware are built from source. Custom Debian packaging
+scripts and metadata have been removed.
+
+Service source build: lvhv-server/README.md
+Shared LVHV Python codec: common/README.md and protocol/README.md
+SmartSwitch firmware direct build: SmartSwitch/README.md
+Native Pico BOOTSEL helper direct build: pico-bootsel/README.md
+
+SmartSwitch CMake targets select each Pico identity and USB VID automatically.
+Building an image/helper is separate from deploying services, flashing firmware
+or executing a hardware command; those require their own operational steps.

@@ -54,8 +54,8 @@ zero acknowledgement before reporting success.
 For a flat installation, distribute `lvhv_protocol.py` and
 `lvhv_protocol_generated.py` alongside `MessagingConnection.py` in the service
 interpreter's module path. The source deployment role and standalone ROC monitor
-playbook include these modules. The old Debian package scripts are legacy;
-use the source deployment workflow for this release.
+playbook include these modules. Applications are built and deployed from source;
+custom Debian packaging scripts and metadata have been removed.
 
 Offline tests (no daemon or detector handlers are run):
 
