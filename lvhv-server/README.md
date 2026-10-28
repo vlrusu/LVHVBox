@@ -13,6 +13,14 @@ requirements step provisions those from the OS package sources. PSU13's BME680
 driver is also bundled under `i2c-sensor-server/bme680`; database and notification
 credentials remain site configuration and are never bundled.
 
+The server accepts `-p PORT`, `-b BACKLOG` and `-l LOG_PATH`. The unused legacy
+configuration store, root `config.txt` and server `-c` option have been removed:
+loaded values were never applied to hardware settings. Supplying `-c` now fails
+during argument parsing before hardware initialization. Existing pin/channel
+assignments and control behavior remain in their source implementations.
+Python client configuration and the other services' INI/environment settings
+are separate and remain supported.
+
 HV ramping runs in the Python `SetWireVoltage` client used by the control-center
 GUI and `Client/ramp-hv.py`. The server accepts individual `set_hv_by_dac` writes
 and `query_hv_dac_cache` reads. The legacy server-side ramp and CLI commands

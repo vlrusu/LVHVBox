@@ -24,7 +24,6 @@
 #include "i2cbusses.h"
 #include "gpio.h"
 #include "utils.h"
-#include "ConfigurationStore.h"
 #include "Logging.h"
 #include "PriorityQueue.h"
 #include "Pico.h"
@@ -44,10 +43,8 @@ int main(int argc, char* argv[]){
   unsigned int port = 12000;
   int backlog = 3;
   char* lpath = NULL;
-  char* cpath = NULL;
   int c;
-  int stop = 0;
-  while ((!stop) && ((c = getopt(argc, argv, "p:b:l:c:")) != -1)){
+  while ((c = getopt(argc, argv, "p:b:l:")) != -1){
     char msg[256];
     switch(c){
       case 'p':
@@ -63,9 +60,6 @@ int main(int argc, char* argv[]){
       case 'l':
         lpath = optarg;
         break;
-      case 'c':
-        cpath = optarg;
-        break;
       default:
         sprintf(msg, "impossible parsing state");
         exit_on_error(msg);
@@ -76,21 +70,6 @@ int main(int argc, char* argv[]){
   Logger_t logger;
   log_init(&logger, lpath, 10, 1);
 
-  // initialize configuration table
-  char msg[] = "initializing configuration table";
-  log_write(&logger, (char*) &msg, LOG_INFO);
-  ConfigurationStore_t* config = malloc(sizeof(ConfigurationStore_t));
-  config_init(config);
-  if (access(cpath, R_OK) == 0){
-	  config_load_from(config, cpath);
-  }
-  else{
-    char* m = (char*) malloc(1024);
-    sprintf(m, "warning: no readable config at %s", cpath);
-    log_write(&logger, m, LOG_INFO);
-    free(m);
-  }
-
   // initialize spi driver interface
   log_write(&logger, "initializing spi interface", LOG_DETAIL);
   rv = initialize_spi();
@@ -100,7 +79,6 @@ int main(int argc, char* argv[]){
   }
 
   // initialize gpio pins and adcs
-  // TODO read from config (including globals initialized in i2c_routines)
   log_write(&logger, "initializing MCP pins for i2c interface", LOG_DETAIL);
   lv_mcp_reset = 27;
   lv_global_enable = 18;

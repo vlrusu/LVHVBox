@@ -15,10 +15,6 @@ int write_fixed_location(const char *filename, long position, int value);
 int error_log(const char *data);
 
 
-char* load_config(char* constant_name);
-char* extract_value(char* input_string);
-char* extract_name(char* input_string);
-
 // ejc
 void exit_on_error(char* msg);
 

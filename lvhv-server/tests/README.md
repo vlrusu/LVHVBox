@@ -26,3 +26,9 @@ python3 -m unittest discover -s rs485-server/tests -p test_power_on_discovery.py
 ```
 
 These tests never use the production notification socket or hardware devices.
+
+`test_startup_options.py` compiles the actual server `main()` and `utils.c` with
+real application headers and stubbed device, network and thread entry points.
+It checks default startup without a configuration file, the remaining `-p`/`-b`/
+`-l` options, and rejection of retired `-c`/missing arguments before initialization.
+It never starts the production daemon, worker threads or a listening socket.

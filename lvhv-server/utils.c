@@ -1,10 +1,6 @@
 #include "utils.h"
 #include <string.h>
 
-const char* CONFIG_PATH = "../../config.txt";
-const int CONFIG_READ_LENGTH = 200;
-
-
 int msleep(long msec)
 {
     struct timespec ts;
@@ -25,97 +21,6 @@ int msleep(long msec)
 
     return res;
 }
-
-char* extract_value(char* input_string) {
-  int reached_colon = 0;
-  int start_char = 0;
-
-  for (int index = 0; index<strlen(input_string); index++) {
-    if (input_string[index] == ':') {
-      start_char = index;
-    }
-  }
-  start_char += 0;
-
- char* output_string = malloc(CONFIG_READ_LENGTH);
- strcpy(output_string, &input_string[start_char+1]);
-
-
-
-
-
-  return &output_string[0];
-
-}
-
-char* extract_name(char* input_string) {
-
-
-  int reached_colon = 0;
-  int start_char = 0;
-
-  for (int index = 0; index<strlen(input_string); index++) {
-    if (input_string[index] == ':') {
-      start_char = index;
-    }
-  }
-  start_char += 1;
-
-
-  char* output_string = malloc(CONFIG_READ_LENGTH);
-  
-  strncpy(output_string, input_string, start_char-1);
-
-
-  return output_string;
-}
-
-
-char* load_config(char* constant_name) {
-
-  FILE* ptr;
-  char ch;
-
-  // Opening file in reading mode
-  ptr = fopen(CONFIG_PATH, "r+");
-  if (NULL == ptr) {
-      printf("file can't be opened \n");
-  }
-
-
-  char current_line[200];
-  char *tentative_value;
-  char *tentative_name;
-  
-  int correct_line = 0;
-
-  
-  while (correct_line == 0) {
-    
-    fgets(current_line, CONFIG_READ_LENGTH, ptr);
-
-    if (current_line[0] != '\n') {
-      if (current_line[0] != '/' && current_line[1] != '/') {
-
-        tentative_value = extract_value(current_line);
-        tentative_name = extract_name(current_line);
-        
-        if (strcmp(tentative_name, constant_name) == 0) {
-          correct_line = 1;
-        }
-
-      }
-    }
-  }
-  
-
-  
-
-  int close_stat = fclose(ptr);
-  
-  return tentative_value;
-}
-
 
 int write_fixed_location(const char *filename, long position, int value) {
   char error_msg[100];

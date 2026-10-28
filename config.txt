@@ -1,4 +1,0 @@
-SmartSwitch_Path:SmartSwitch
-
-lv_mcp_reset:3
-lv_global_enable:18
