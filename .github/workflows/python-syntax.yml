@@ -1,0 +1,20 @@
+name: Python syntax
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Parse tracked Python files without importing applications
+        run: python -m unittest discover -s Client/tests -p test_python_syntax.py -v

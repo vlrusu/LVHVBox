@@ -81,6 +81,19 @@ The dynamic dependency list must not contain `libmu2e-tracker-messaging.so`.
 The deployment role checks this before stopping any service. Existing system
 messaging packages are left untouched and are not used by the new server build.
 
+Python syntax validation runs offline instead of on each PSU during deployment.
+Before pushing, run this dependency-free check from the repository root:
+
+```sh
+python3 -m unittest discover -s Client/tests -p test_python_syntax.py -v
+```
+
+The `Python syntax` GitHub Actions workflow runs the same test using Python3.11
+on pushes and pull requests. It parses Git-tracked Python files, including client
+utilities and tests, without importing or executing application code or creating
+bytecode files. Local untracked logs/data are excluded. Deployment retains its
+build, import-path and service-state checks.
+
 Offline C/Python compatibility tests compile only the messaging implementation
 and exercise typed requests and error replies through local socket pairs:
 
