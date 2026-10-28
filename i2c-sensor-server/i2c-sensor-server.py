@@ -233,8 +233,8 @@ def postgres_samples(reading: SensorReading) -> tuple:
         raise ValueError("Sensor timestamp must include a timezone")
     timestamp = timestamp.astimezone(timezone.utc)
     host = str(state["hostname"])
-    prefix = (f"mu2etrk.environment.{host}.i2c{DEFAULT_I2C_BUS}."
-              f"addr{DEFAULT_I2C_ADDR:02x}.{reading.sensor_type}")
+    prefix = (f"mu2etrk.environment.{host}.channels."
+              f"i2c{DEFAULT_I2C_BUS}_addr{DEFAULT_I2C_ADDR:02x}_{reading.sensor_type}")
     samples = []
     for quantity, unit in POSTGRES_UNITS.items():
         value = reading.values.get(quantity)
@@ -327,9 +327,9 @@ class PostgresWriter:
                                 raise ValueError("Environmental metadata mismatch")
                         elif DEFAULT_POSTGRES_REGISTER_CHANNELS:
                             cursor.execute(
-                                "INSERT INTO public.trk_channel (name, psu, channel, unit, quantity) "
-                                "VALUES (%s, %s, %s, %s, %s) RETURNING id",
-                                (name, host, address, unit, quantity))
+                                "INSERT INTO public.trk_channel (name, psu, channel, unit) "
+                                "VALUES (%s, %s, %s, %s) RETURNING id",
+                                (name, host, address, unit))
                             channel_id = cursor.fetchone()[0]
                         else:
                             raise ValueError("Missing environmental channel")

@@ -63,7 +63,7 @@ The schema and INSERT permissions were checked live on October 27, 2026 via
 PSU7. No new tables, columns, or changes to HV metadata are required.
 
 Each quantity has one `trk_channel` metadata row. Example:
-`mu2etrk.environment.mu2e-trk-psu13.i2c4.addr76.bme680.temperature_c`.
+`mu2etrk.environment.mu2e-trk-psu13.channels.i2c4_addr76_bme680.temperature_c`.
 The `psu` is the collector hostname; `channel` is the I²C address (118 for
 0x76), **not an HV channel**. Bus, address, sensor type and quantity are also
 part of the name. `quantity` is the field name below. Existing metadata must
@@ -162,3 +162,10 @@ of rollback. Coordinate collector downtime with existing protection monitoring.
 ```sh
 python3 -m unittest discover -s i2c-sensor-server/tests -v
 ```
+
+Channel names use `mu2etrk.environment.<host>.channels.i2c<bus>_addr<hex>_<sensor>.<quantity>`.
+The quantity is the sixth dotted component, matching the existing archive's
+`trk_channel.quantity` generated column. Registration inserts only name, PSU,
+channel/address and unit; PostgreSQL derives quantity. No table alteration is
+required. The old seven-component environmental names were incompatible with
+this generated-column schema and are not used for new channel registration.

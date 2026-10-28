@@ -50,10 +50,11 @@ class PostgresTests(unittest.TestCase):
         samples = server.postgres_samples(reading())
         self.assertEqual(len(samples), 6)
         name, host, address, unit, quantity, timestamp, value = samples[0]
-        self.assertEqual(name, "mu2etrk.environment.mu2e-trk-psu13.i2c4.addr76.bme680.temperature_c")
+        self.assertEqual(name, "mu2etrk.environment.mu2e-trk-psu13.channels.i2c4_addr76_bme680.temperature_c")
         self.assertEqual((host, address, unit, quantity, value),
                          ("mu2e-trk-psu13", 118, "C", "temperature_c", 25.5))
         self.assertEqual(timestamp.isoformat(), "2026-10-27T21:00:00+00:00")
+        self.assertTrue(all(sample[0].split(".")[5] == sample[4] for sample in samples))
         self.assertEqual([s[3] for s in samples], ["C", "hPa", "%RH", "C", "ohm", "bool"])
         self.assertEqual(samples[-1][-1], 1.0)
         self.assertEqual(server.postgres_samples(reading(heat_stable=False))[-1][-1], 0.0)
@@ -87,8 +88,8 @@ class PostgresTests(unittest.TestCase):
         self.assertEqual(server.state["postgres_last_success_utc"], "2026-10-27T21:00:00+00:00")
         self.cursor.execute.assert_any_call("SELECT pg_advisory_xact_lock(73482901)")
         self.cursor.execute.assert_any_call(
-            "INSERT INTO public.trk_channel (name, psu, channel, unit, quantity) "
-            "VALUES (%s, %s, %s, %s, %s) RETURNING id", samples[0][:5])
+            "INSERT INTO public.trk_channel (name, psu, channel, unit) "
+            "VALUES (%s, %s, %s, %s) RETURNING id", samples[0][:4])
         inserted = self.cursor.executemany.call_args.args[1]
         self.assertEqual(inserted[0], (samples[0][5], 1, 25.5))
         self.cursor.execute.reset_mock()
