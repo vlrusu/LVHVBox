@@ -7,6 +7,9 @@ Service source build: lvhv-server/README.md
 Shared LVHV Python codec: common/README.md and protocol/README.md
 SmartSwitch firmware direct build: SmartSwitch/README.md
 Native Pico BOOTSEL helper direct build: pico-bootsel/README.md
+X728 power handling and shutdown helper: pi-health-server/README.md
+
+Pi health provides X728 power handling directly; no vendor submodule is required.
 
 SmartSwitch CMake targets select each Pico identity and USB VID automatically.
 Building an image/helper is separate from deploying services, flashing firmware

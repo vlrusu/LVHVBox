@@ -159,12 +159,12 @@ poweroff`. It also handles the onboard button's reboot and shutdown requests.
 X728 v1.2/v1.3 boards use GPIO16 instead of GPIO26, which can be selected in
 `pi-health-actions.ini`.
 
-Do not run Geekworm's `x728-pwr.service` at the same time because both services
-would attempt to claim GPIO5:
+X728 power handling is implemented in this service; the upstream vendor scripts
+are no longer bundled or required. The deployment's separate
+`pi-health-server/x728-shutdown` helper is maintained in this repository.
 
-```bash
-sudo systemctl disable --now x728-pwr.service
-sudo systemctl restart pi-health-server.service
-```
+If an older OS image still has Geekworm's `x728-pwr.service` installed, it must
+remain inactive while Pi health owns GPIO5. Removing the vendor source from this
+repository does not uninstall or change any independently installed PSU service.
 
 If the client is remote, it uses the same SSH gateway flow as the LV/HV connection, but forwards the health HTTP service on port `12002` by default.
