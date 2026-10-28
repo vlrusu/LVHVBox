@@ -31,7 +31,7 @@ except ImportError as exc:  # pragma: no cover - import failure is runtime-speci
 SERVICE_NAME = "i2c-sensor-server"
 DEFAULT_SENSOR_TYPE = os.getenv("I2C_SENSOR_SERVER_SENSOR_TYPE", "bme680").strip().lower()
 DEFAULT_SENSOR_REPO = Path(
-    os.getenv("I2C_SENSOR_SERVER_SENSOR_REPO", "/home/mu2e/vr-dev/bme680-python")
+    os.getenv("I2C_SENSOR_SERVER_SENSOR_REPO", str(Path(__file__).resolve().parent))
 )
 DEFAULT_HTTP_HOST = os.getenv("I2C_SENSOR_SERVER_HTTP_HOST", "0.0.0.0")
 DEFAULT_HTTP_PORT = int(os.getenv("I2C_SENSOR_SERVER_HTTP_PORT", "12003"))

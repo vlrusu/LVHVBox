@@ -199,6 +199,16 @@ class PostgresTests(unittest.TestCase):
             with self.assertRaisesRegex(SystemExit, "python3-psycopg2"):
                 server.PostgresWriter()
 
+    def test_bundled_sensor_driver_import_never_opens_a_bus(self):
+        bundled = Path(__file__).parents[1]
+        with patch.object(server, "DEFAULT_SENSOR_REPO", bundled), \
+                patch.object(sys, "path", list(sys.path)), patch.dict(sys.modules):
+            sys.modules.pop("bme680", None)
+            sys.modules.pop("bme680.constants", None)
+            driver = server.BME680Driver()
+            self.assertEqual(Path(driver.bme680.__file__).resolve(), bundled.resolve() / "bme680/__init__.py")
+            self.assertTrue(callable(driver.bme680.BME680))
+
     def test_libpq_settings_and_timeouts_without_exposing_password(self):
         settings = dict(PGHOST="archive", PGPORT="5434", PGDATABASE="dcs_archive",
                         PGUSER="dcs_writer", PGPASSFILE="/protected/passfile")

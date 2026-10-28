@@ -18,6 +18,7 @@ Today the implemented driver is `bme680`. Other PSU boxes can reuse the same ser
 - `i2c-sensor-server.py`: generic polling loop and HTTP server
 - `i2c-sensor.env`: sample runtime configuration
 - `../systemd/i2c-sensor-server.service`: systemd unit
+- `bme680/`: bundled upstream sensor driver, license and provenance
 
 ## HTTP API
 
@@ -44,6 +45,11 @@ I2C_SENSOR_SERVER_SENSOR_TYPE=bme680
 ```
 
 for the existing BME680 hardware. The I2C service stays the same; only the driver differs.
+When run from source, the collector finds the sibling bundled `bme680` package.
+Fleet deployment installs it under `/opt/mu2e-psu/common/i2c-sensor-server/bme680`
+and sets that parent path in new sensor environment files. Existing explicit
+`I2C_SENSOR_SERVER_SENSOR_REPO` settings remain supported. No separate sensor
+driver repository or custom Mu2e Debian package is required.
 
 ## Alerting
 

@@ -4,6 +4,6 @@ Architecture: arm64
 Section: mu2e
 Essential: no
 Priority: optional
-Depends: libmu2e-tracker-messaging,libi2c-dev,libusb-1.0-0-dev,python3-scipy
+Depends: libi2c-dev,libusb-1.0-0-dev,python3-scipy
 Maintainer: ejc3@lbl.gov
 Description: Daemon to mediate control and monitoring requests via I2C hardware and Raspberry Pico SmartSwitches, and python client interface.
