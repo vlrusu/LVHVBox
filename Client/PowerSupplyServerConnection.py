@@ -168,15 +168,20 @@ class PowerSupplyServerConnection():
         rv = rvs[0][0]
         return rv
 
+    @staticmethod
+    def _wire_block_values(reply):
+        """Keep six channel positions even when a Pico returns one error code."""
+        if (not isinstance(reply, (list, tuple)) or len(reply) != 1 or
+                not isinstance(reply[0], (list, tuple)) or len(reply[0]) != 6):
+            return [None] * 6
+        return [value if type(value) in (int, float) and math.isfinite(value)
+                else None for value in reply[0]]
+
     def BlockQueryWireVoltages(self, channel):
-        rvs = self.WriteRead('get_vhvs', channel)
-        rv = rvs[0]
-        return rv
+        return self._wire_block_values(self.WriteRead('get_vhvs', channel))
 
     def BlockQueryWireCurrents(self, channel):
-        rvs = self.WriteRead('get_ihvs', channel)
-        rv = rvs[0]
-        return rv
+        return self._wire_block_values(self.WriteRead('get_ihvs', channel))
 
     def QueryWireVoltages(self):
         rv = []
