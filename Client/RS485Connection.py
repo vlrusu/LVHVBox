@@ -55,8 +55,8 @@ class RS485Connection:
         start, end = address(start), address(end)
         if not 0 <= start <= end <= 511:
             raise ValueError('discovery range must satisfy 0 <= start <= end <= 511')
-        # Discovery yields between probes, so competing reads can extend the
-        # scan beyond its idle-bus duration. No automatic HTTP retries.
+        # Allow for any active transfer and response guard before probing.
+        # Discovery requests are never automatically retried.
         return self._get('/discover', {'start': start, 'end': end}, timeout=max(120.5, self.timeout))
 
     def direct_read(self, address, name):

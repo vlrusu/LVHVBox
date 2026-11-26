@@ -11,7 +11,7 @@ from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from fair_queue import FairQueue, QueueFull, QueueExpired, QueueCancelled, QueueClosed
+from fair_queue import DiscoveryBusy, FairQueue, QueueFull, QueueExpired, QueueCancelled, QueueClosed
 import test_rs485_server as http_fixtures
 from RS485Connection import RS485Connection
 
@@ -129,6 +129,24 @@ class QueueTests(unittest.TestCase):
         self.release.set(); active.result(2)
         with self.assertRaises(QueueClosed): self.submit('graphite', 'new').result(1)
 
+    def test_request_received_during_discovery_is_stale_after_scan(self):
+        admitted = threading.Event()
+
+        def delayed_request():
+            with self.queue.request('interactive', 5):
+                admitted.set()
+                self.assertTrue(self.release.wait(3))
+                with self.queue.turn(self.lock):
+                    self.fail('Discarded request acquired the UART')
+
+        with self.queue.discovery():
+            delayed = self.pool.submit(delayed_request)
+            self.assertTrue(admitted.wait(2))
+        self.release.set()
+        with self.assertRaises(DiscoveryBusy):
+            delayed.result(2)
+        self.submit('interactive', 'fresh').result(2)
+
     def test_callback_failure_releases_bus(self):
         with self.assertRaises(ValueError):
             with self.queue.request('interactive', 1), self.queue.turn(self.lock):
@@ -158,32 +176,67 @@ class HTTPQueueTests(unittest.TestCase):
             error.exception.close()
         self.bus.read_panel_id.assert_not_called()
 
-    def test_discovery_yields_to_waiting_temperature_and_publishes_atomically(self):
-        entered = threading.Event(); release = threading.Event(); sequence = []
+    def test_discovery_discards_uart_requests_and_publishes_atomically(self):
+        active_entered = threading.Event()
+        active_release = threading.Event()
+        scan_entered = threading.Event()
+        scan_release = threading.Event()
+        sequence = []
         self.telemetry._discovery = {'scanned': True, 'addresses': [99], 'panels': ['MN099']}
+
         def probe(address, **kwargs):
             sequence.append(f'id{address}')
             if address == 0:
-                entered.set(); self.assertTrue(release.wait(3))
+                scan_entered.set()
+                self.assertTrue(scan_release.wait(3))
             return address
-        def temperature(*args):
-            sequence.append('temperature'); return 4843
+
+        def temperature(address, command):
+            sequence.append(f'temperature{address}')
+            if address == 1:
+                active_entered.set()
+                self.assertTrue(active_release.wait(3))
+            return 4843
+
         self.bus.read_panel_id.side_effect = probe
         self.bus.read_direct.side_effect = temperature
         monitor = RS485Connection(port=self.server.server_port, client_id='temperature-monitor')
-        with ThreadPoolExecutor(2) as pool:
-            scan = pool.submit(self.client.discover, 0, 2)
+        with ThreadPoolExecutor(3) as pool:
+            active = pool.submit(monitor.direct_read, 1, 'ROC_TEMP')
             try:
-                self.assertTrue(entered.wait(2))
-                reading = pool.submit(monitor.direct_read, 1, 'ROC_TEMP')
+                self.assertTrue(active_entered.wait(2))
+                waiting = pool.submit(monitor.direct_read, 2, 'ROC_TEMP')
                 wait_for(lambda: self.telemetry.queue.status()['pending'] == 1)
-                self.assertEqual(self.telemetry.queue.status()['pending_by_client']['temperature-monitor'], 1)
+                scan = pool.submit(self.client.discover, 0, 2)
+                wait_for(lambda: self.telemetry.queue.status()['discovering'])
+                with self.assertRaisesRegex(RuntimeError, 'discarded during discovery') as error:
+                    waiting.result(2)
+                self.assertEqual(error.exception.__cause__.code, 503)
+                self.assertFalse(scan_entered.is_set())
+                active_release.set()
+                active.result(2)
+                self.assertTrue(scan_entered.wait(2))
+
+                request = Request(
+                    f'http://127.0.0.1:{self.server.server_port}/direct-read?address=3&name=ROC_TEMP',
+                    headers={'X-RS485-Client': 'discovery'},
+                )
+                with self.assertRaises(HTTPError) as error:
+                    urlopen(request, timeout=2)
+                self.assertEqual(error.exception.code, 503)
+                with error.exception as response:
+                    self.assertIn('no UART request sent', json.load(response)['error'])
+                self.assertTrue(self.client.get_health()['queue']['discovering'])
                 self.assertEqual(self.client.get_panels()['addresses'], [99])
+                self.assertTrue(self.client.get_parameters()['parameters'])
             finally:
-                release.set()
-            self.assertEqual(scan.result(3)['addresses'], [0,1,2])
-            reading.result(3)
-        self.assertEqual(sequence, ['id0','temperature','id1','id2'])
+                active_release.set()
+                scan_release.set()
+            self.assertEqual(scan.result(3)['addresses'], [0, 1, 2])
+        self.assertEqual(self.client.get_panels()['addresses'], [0, 1, 2])
+        self.assertFalse(self.client.get_health()['queue']['discovering'])
+        monitor.direct_read(4, 'ROC_TEMP')
+        self.assertEqual(sequence, ['temperature1', 'id0', 'id1', 'id2', 'temperature4'])
 
     def test_disconnected_http_request_removed_before_execution(self):
         entered = threading.Event(); release = threading.Event()

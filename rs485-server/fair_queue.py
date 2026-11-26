@@ -26,6 +26,10 @@ class QueueClosed(RuntimeError):
     pass
 
 
+class DiscoveryBusy(RuntimeError):
+    pass
+
+
 class FairQueue:
     CLIENTS = ('temperature-monitor', 'graphite', 'interactive', 'discovery')
 
@@ -37,6 +41,8 @@ class FairQueue:
         self.active = None
         self.last = len(self.CLIENTS) - 1
         self.closed = False
+        self.discovery_owner = None
+        self.discovery_generation = 0
         self.counts = dict(completed=0, expired=0, cancelled=0, rejected=0)
 
     @contextmanager
@@ -46,7 +52,9 @@ class FairQueue:
         if not math.isfinite(timeout) or timeout <= 0:
             raise ValueError('RS485 request timeout must be positive and finite')
         previous = getattr(self.local, 'request', None)
-        self.local.request = (client, time.monotonic() + timeout, disconnected)
+        with self.condition:
+            self.local.request = (client, time.monotonic() + timeout, disconnected,
+                                  self.discovery_generation)
         try:
             yield
         finally:
@@ -73,7 +81,8 @@ class FairQueue:
             return dict(active_client=self.active, pending=sum(map(len, self.waiting.values())),
                         pending_by_client={k: len(v) for k, v in self.waiting.items()},
                         capacity=self.capacity, per_client_limit=self.per_client,
-                        closed=self.closed, **self.counts)
+                        closed=self.closed, discovering=self.discovery_owner is not None,
+                        **self.counts)
 
     def close(self):
         with self.condition:
@@ -81,24 +90,55 @@ class FairQueue:
             self.condition.notify_all()
 
     @contextmanager
+    def discovery(self):
+        with self.condition:
+            if self.closed:
+                raise QueueClosed('RS485 queue is stopping; scan was not started')
+            if self.discovery_owner is not None:
+                raise BusyError('RS485 discovery is already running; scan was not started')
+            self.discovery_generation += 1
+            self.discovery_owner = threading.get_ident()
+            for tickets in self.waiting.values():
+                tickets.clear()
+            self.condition.notify_all()
+        try:
+            yield
+        finally:
+            with self.condition:
+                self.discovery_owner = None
+                self.discovery_generation += 1
+                self.condition.notify_all()
+
+    def _check_discovery(self, generation):
+        # Requests received before or during a scan stay discarded even when
+        # their worker next reaches UART admission after the scan has finished.
+        if (self.discovery_owner != threading.get_ident() and
+                (self.discovery_owner is not None or generation != self.discovery_generation)):
+            self.counts['rejected'] += 1
+            raise DiscoveryBusy('RS485 request discarded during discovery; no UART request sent')
+
+    @contextmanager
     def turn(self, device_lock, reserve=0):
         request = getattr(self.local, 'request', None)
         if request is None:
             # Keep the direct, in-process API's nonblocking behavior. Production
             # HTTP and automatic discovery always supply a request context.
-            if not device_lock.acquire(blocking=False):
-                raise BusyError('RS485 bus is busy; request was not sent')
+            with self.condition:
+                self._check_discovery(self.discovery_generation)
+                if not device_lock.acquire(blocking=False):
+                    raise BusyError('RS485 bus is busy; request was not sent')
             try:
                 yield
             finally:
                 device_lock.release()
             return
 
-        client, deadline, disconnected = request
+        client, deadline, disconnected, generation = request
         ticket = object()
         with self.condition:
             if self.closed:
                 raise QueueClosed('RS485 queue is stopping; request was not sent')
+            self._check_discovery(generation)
             if self.active is None and device_lock.locked():
                 raise BusyError('RS485 bus is busy outside queue; request was not sent')
             if (len(self.waiting[client]) >= self.per_client or
@@ -110,6 +150,7 @@ class FairQueue:
                 while True:
                     if self.closed:
                         raise QueueClosed('RS485 queue is stopping; request was not sent')
+                    self._check_discovery(generation)
                     allowance = reserve() if callable(reserve) else reserve
                     remaining = deadline - allowance - time.monotonic()
                     if remaining <= 0:
@@ -126,7 +167,8 @@ class FairQueue:
                         break
                     self.condition.wait(min(0.05, remaining))
             except BaseException:
-                self.waiting[client].remove(ticket)
+                if ticket in self.waiting[client]:
+                    self.waiting[client].remove(ticket)
                 self.condition.notify_all()
                 raise
         try:

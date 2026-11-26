@@ -15,7 +15,7 @@ from urllib.parse import parse_qs, urlsplit
 from rs485 import RS485, BusyError, ROCError
 from discovery_history import DiscoveryHistory, DiscoveryNotifier, PowerReader
 from power_on_discovery import PowerOnDiscovery
-from fair_queue import QueueFull, QueueExpired, QueueCancelled, QueueClosed
+from fair_queue import DiscoveryBusy, QueueFull, QueueExpired, QueueCancelled, QueueClosed
 
 
 def run_discovery(telemetry, history=None, power_reader=None, start=0, end=300, *, startup=False, power_on=False):
@@ -103,7 +103,7 @@ def make_handler(telemetry, history=None, power_reader=None):
                 self.send_json(429, {'error': str(exc)})
             except (QueueExpired, QueueCancelled) as exc:
                 self.send_json(408, {'error': str(exc)})
-            except QueueClosed as exc:
+            except (DiscoveryBusy, QueueClosed) as exc:
                 self.send_json(503, {'error': str(exc)})
             except BusyError as exc:
                 self.send_json(409, {'error': str(exc)})
@@ -164,7 +164,7 @@ def make_handler(telemetry, history=None, power_reader=None):
                 self.send_json(429, {'error': str(exc)})
             except (QueueExpired, QueueCancelled) as exc:
                 self.send_json(408, {'error': str(exc)})
-            except QueueClosed as exc:
+            except (DiscoveryBusy, QueueClosed) as exc:
                 self.send_json(503, {'error': str(exc)})
             except BusyError as exc:
                 self.send_json(409, {'error': str(exc)})

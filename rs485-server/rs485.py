@@ -525,7 +525,7 @@ class RS485:
         return holdoff + (3.5 if discovery else self.transaction_budget * words)
 
     def discover(self, start=0, end=300):
-        """Probe each address once, yielding the UART between discovery probes."""
+        """Probe each address once while reserving UART access for discovery."""
         if (type(start) is not int or type(end) is not int or
                 not 0 <= start <= end <= 511):
             raise ValueError('discovery range must satisfy 0 <= start <= end <= 511')
@@ -534,31 +534,32 @@ class RS485:
         try:
             if self._bus is None:
                 raise RuntimeError('RS485 device is not open')
-            began = time.monotonic()
-            found, no_response, errors = [], [], []
-            for address in range(start, end + 1):
-                try:
-                    with self.queue.as_client('discovery'), self.queue.turn(
-                            self.lock, reserve=lambda: self.transaction_allowance(discovery=True)):
-                        value = self._bus.read_panel_id(address, discovery=True)
-                    if value != address:
-                        raise ROCError('FPGA panel ID does not match addressed panel')
-                    found.append(address)
-                except ResponseTimeout:
-                    no_response.append(address)
-                except ROCError as exc:
-                    errors.append({'address': address, 'error': str(exc)})
-                # UART write/drain errors abort; never label these as absent
-                # panels or continue transmitting on an unhealthy transport.
-            result = dict(scanned=True, start=start, end=end, count=len(found),
-                          addresses=found, panels=[f'MN{a:03d}' for a in found],
-                          no_response=no_response, errors=errors,
-                          response_timeout_ms=DISCOVERY_TIMEOUT * 1000,
-                          guard_ms=DISCOVERY_GUARD * 1000,
-                          elapsed_s=round(time.monotonic() - began, 3),
-                          timestamp_utc=datetime.now(timezone.utc).isoformat())
-            self._discovery = result
-            return self.panels()
+            with self.queue.discovery(), self.queue.as_client('discovery'):
+                began = time.monotonic()
+                found, no_response, errors = [], [], []
+                for address in range(start, end + 1):
+                    try:
+                        with self.queue.turn(
+                                self.lock, reserve=lambda: self.transaction_allowance(discovery=True)):
+                            value = self._bus.read_panel_id(address, discovery=True)
+                        if value != address:
+                            raise ROCError('FPGA panel ID does not match addressed panel')
+                        found.append(address)
+                    except ResponseTimeout:
+                        no_response.append(address)
+                    except ROCError as exc:
+                        errors.append({'address': address, 'error': str(exc)})
+                    # UART write/drain errors abort; never label these as absent
+                    # panels or continue transmitting on an unhealthy transport.
+                result = dict(scanned=True, start=start, end=end, count=len(found),
+                              addresses=found, panels=[f'MN{a:03d}' for a in found],
+                              no_response=no_response, errors=errors,
+                              response_timeout_ms=DISCOVERY_TIMEOUT * 1000,
+                              guard_ms=DISCOVERY_GUARD * 1000,
+                              elapsed_s=round(time.monotonic() - began, 3),
+                              timestamp_utc=datetime.now(timezone.utc).isoformat())
+                self._discovery = result
+                return self.panels()
         finally:
             self._scan_lock.release()
 

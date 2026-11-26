@@ -199,9 +199,10 @@ never automatically retried. Shutdown cancels waiting work and drains the active
 transaction before releasing the UART. No new reads accumulate after expiry.
 
 HTTP429 means queue full, HTTP408 means deadline/cancellation before the next
-transaction, HTTP503 means stopping, and HTTP409 covers a concurrent discovery
-or access outside the queue. `GET /health` bypasses the UART queue and exposes
-`queue.active_client`, pending counts/limits, completed turns, expired/cancelled
+transaction, and HTTP503 means the service is shutting down or a scan
+discarded the request. HTTP409 covers a second discovery or access outside
+the queue. `GET /health` exposes
+`queue.discovering`, the active client, pending counts, completed turns, expired/cancelled
 requests, and rejected admissions. Cached inventory and parameter reads also
 bypass the UART queue.
 
@@ -348,7 +349,10 @@ existing timeout/holdoff. There is no CPU fallback and no automatic retry.
 A mostly empty 0..300 range should take roughly 17–20 seconds on PSU0, including
 transmission and guard time; OS scheduling and any prior pending request add
 latency; approximately17s was observed during the September26 deployments.
-Discovery yields the bus between addresses, so competing reads can lengthen it.
+Once discovery reserves the bus, the active UART request can finish and its
+response guard is honored. Other waiting or newly submitted UART requests are
+discarded with HTTP 503 and send no bytes. Cached /health, /parameters and
+/panels remain available. Normal polling can send fresh requests after the scan.
 Only one discovery runs at a time. Cached inventory is replaced only when every
 probe completes; deadline/cancellation or a UART write/drain failure aborts instead of treating remaining panels
 as absent; the previous completed inventory remains available with its timestamp.
